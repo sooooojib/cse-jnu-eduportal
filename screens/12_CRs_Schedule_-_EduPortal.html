@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+
+<html lang="en" style=""><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>CR's Schedule - EduPortal</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "secondary-fixed-dim": "#c4c7c9",
+                    "cr-border": "#fed7aa",
+                    "on-secondary-fixed-variant": "#444749",
+                    "error": "#ba1a1a",
+                    "surface": "#f8f9ff",
+                    "teacher-border": "#bfdbfe",
+                    "error-container": "#ffdad6",
+                    "secondary-fixed": "#e0e3e5",
+                    "admin-bg": "#faf5ff",
+                    "secondary-container": "#e0e3e5",
+                    "surface-variant": "#d3e4fe",
+                    "on-tertiary": "#ffffff",
+                    "on-secondary-fixed": "#191c1e",
+                    "tertiary": "#5c5b5f",
+                    "primary-container": "#00855d",
+                    "on-primary-container": "#f5fff7",
+                    "outline": "#6d7a72",
+                    "cr-text": "#c2410c",
+                    "surface-dim": "#cbdbf5",
+                    "surface-bright": "#f8f9ff",
+                    "on-tertiary-fixed": "#1b1b1e",
+                    "primary-fixed": "#85f8c4",
+                    "surface-container-lowest": "#ffffff",
+                    "surface-container-high": "#dce9ff",
+                    "canvas-gray": "#A4ADB4",
+                    "outline-variant": "#bccac0",
+                    "terminal-glow": "#34d399",
+                    "tertiary-fixed": "#e4e1e6",
+                    "background": "#f8f9ff",
+                    "cr-bg": "#fff7ed",
+                    "on-secondary": "#ffffff",
+                    "surface-tint": "#006c4a",
+                    "inverse-primary": "#68dba9",
+                    "admin-text": "#7e22ce",
+                    "inverse-surface": "#213145",
+                    "secondary": "#5c5f61",
+                    "student-bg": "#ecfdf5",
+                    "on-surface-variant": "#3d4a42",
+                    "auth-gradient": "linear-gradient(135deg, #f1f2f1 0%, #f6f5ea 50%, #f0dfa1 100%)",
+                    "student-text": "#047857",
+                    "on-secondary-container": "#626567",
+                    "tertiary-fixed-dim": "#c8c5ca",
+                    "tertiary-container": "#757478",
+                    "surface-container-low": "#eff4ff",
+                    "on-tertiary-fixed-variant": "#47464a",
+                    "inverse-on-surface": "#eaf1ff",
+                    "on-error-container": "#93000a",
+                    "on-primary-fixed": "#002114",
+                    "on-tertiary-container": "#fffbff",
+                    "primary": "#006948",
+                    "student-border": "#a7f3d0",
+                    "teacher-bg": "#eff6ff",
+                    "surface-container": "#e5eeff",
+                    "teacher-text": "#1d4ed8",
+                    "admin-border": "#e9d5ff",
+                    "on-background": "#0b1c30",
+                    "surface-container-highest": "#d3e4fe",
+                    "primary-fixed-dim": "#68dba9",
+                    "on-error": "#ffffff",
+                    "on-primary": "#ffffff",
+                    "on-primary-fixed-variant": "#005137",
+                    "on-surface": "#0b1c30"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "input-height": "52px",
+                    "auth-card-max-width": "900px",
+                    "margin-desktop": "2.5rem",
+                    "gutter": "1.5rem",
+                    "margin-mobile": "1rem"
+            },
+            "fontFamily": {
+                    "headline-lg": [
+                            "Plus Jakarta Sans"
+                    ],
+                    "display-terminal": [
+                            "JetBrains Mono"
+                    ],
+                    "label-sm": [
+                            "Plus Jakarta Sans"
+                    ],
+                    "body-sm": [
+                            "Plus Jakarta Sans"
+                    ],
+                    "headline-md": [
+                            "Plus Jakarta Sans"
+                    ],
+                    "label-md": [
+                            "Plus Jakarta Sans"
+                    ],
+                    "body-lg": [
+                            "Plus Jakarta Sans"
+                    ],
+                    "auth-input": [
+                            "Plus Jakarta Sans"
+                    ]
+            },
+            "fontSize": {
+                    "headline-lg": [
+                            "30px",
+                            {
+                                    "lineHeight": "38px",
+                                    "fontWeight": "700"
+                            }
+                    ],
+                    "display-terminal": [
+                            "72px",
+                            {
+                                    "lineHeight": "80px",
+                                    "letterSpacing": "0.25em",
+                                    "fontWeight": "700"
+                            }
+                    ],
+                    "label-sm": [
+                            "12px",
+                            {
+                                    "lineHeight": "16px",
+                                    "fontWeight": "500"
+                            }
+                    ],
+                    "body-sm": [
+                            "14px",
+                            {
+                                    "lineHeight": "20px",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "headline-md": [
+                            "24px",
+                            {
+                                    "lineHeight": "32px",
+                                    "fontWeight": "600"
+                            }
+                    ],
+                    "label-md": [
+                            "14px",
+                            {
+                                    "lineHeight": "20px",
+                                    "fontWeight": "600"
+                            }
+                    ],
+                    "body-lg": [
+                            "16px",
+                            {
+                                    "lineHeight": "24px",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "auth-input": [
+                            "16px",
+                            {
+                                    "lineHeight": "24px",
+                                    "letterSpacing": "0.05em",
+                                    "fontWeight": "400"
+                            }
+                    ]
+            }
+    },
+        },
+      }
+    </script>
+<style>
+        .glow-emerald {
+            box-shadow: 0 4px 20px -2px rgba(16, 185, 129, 0.3);
+        }
+        .glow-orange {
+            box-shadow: 0 4px 20px -2px rgba(249, 115, 22, 0.3);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style type="text/css"></style><style type="text/css"></style><style type="text/css"></style></head>
+<body class="bg-surface text-on-surface font-body-lg flex flex-col min-h-screen">
+<!-- TopAppBar -->
+<header class="bg-surface border-b border-outline-variant flex justify-between items-center px-margin-mobile md:px-margin-desktop h-16 w-full z-50 fixed top-0"><div class="flex-1 flex items-center">
+<div class="w-8 h-8 rounded-full bg-cr-border overflow-hidden">
+<img alt="Profile" class="object-cover w-full h-full" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD8LoceAjqsqX_xfji9EpQ80mRfR12NykjaRd6JvF3hzKAtK2Qg_-xIaCmaWUwqkaVtOfxzVXy0SKXurao-k2y2V7jKOShmza23oLhS2QsYhoHlQ2or2AvBIHu4JcYq8QHuWUUjodpm7b4aTudjYOlOgS1kyb97J0_kko3SB3K8S2g3tErQ78AmPE_FZphfekG1uwJLNks8-tGZ4cztiYRVoqZiOlxYJh6psYl86ZRhc3gi0jVx5UyaSA"/>
+</div>
+</div>
+<div class="absolute left-1/2 -translate-x-1/2">
+<h1 class="font-headline-md text-primary font-bold whitespace-nowrap">JnU EduPortal</h1>
+</div>
+<div class="flex-1 flex justify-end">
+<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-primary/10 transition-colors text-on-surface-variant">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+</div></header>
+<main class="flex-grow pt-24 pb-24 px-margin-mobile md:px-margin-desktop max-w-7xl mx-auto w-full">
+<!-- Header Actions & Tabs -->
+<div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-gutter gap-4">
+<div>
+<h2 class="font-headline-lg text-headline-lg text-on-surface mb-2">Schedule &amp; Routine</h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant">Manage classes, broadcast updates, and view exams.</p>
+</div>
+<div class="flex gap-3 w-full md:w-auto">
+<button class="flex-1 md:flex-none flex items-center justify-center gap-2 bg-cr-text text-white px-6 py-3 rounded-full font-label-md text-label-md hover:bg-cr-text/90 transition-colors glow-orange">
+<span class="material-symbols-outlined" data-icon="forum">forum</span>
+                    Broadcast on WhatsApp
+                </button>
+</div>
+</div>
+<!-- Navigation Tabs -->
+<div class="flex overflow-x-auto gap-2 border-b border-outline-variant mb-gutter hide-scrollbar">
+<button class="px-4 py-3 font-label-md text-label-md text-primary border-b-2 border-primary whitespace-nowrap">Weekly Routine Grid</button>
+<button class="px-4 py-3 font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors whitespace-nowrap">Upcoming Exams</button>
+<button class="px-4 py-3 font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors whitespace-nowrap">Past Exams</button>
+</div>
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-1 md:grid-cols-12 gap-gutter">
+<!-- Main Content Area: Today's & Tomorrow's Overview -->
+<div class="md:col-span-8 flex flex-col gap-gutter">
+<!-- Today's Classes -->
+<section class="bg-surface-container-lowest rounded-xl border border-outline-variant p-6 shadow-sm">
+<div class="flex justify-between items-center mb-6">
+<h3 class="font-headline-md text-headline-md text-on-surface">Today's Classes</h3>
+<span class="bg-student-bg text-student-text border border-student-border px-3 py-1 rounded-full font-label-sm text-label-sm">4 Sessions</span>
+</div>
+<div class="flex flex-col gap-4">
+<!-- Class Item -->
+<div class="flex items-center justify-between p-4 bg-surface rounded-lg border border-outline-variant/50 hover:border-primary/30 transition-colors">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center font-headline-md text-headline-md font-bold">
+                                    OS
+                                </div>
+<div>
+<h4 class="font-label-md text-label-md text-on-surface">Operating Systems</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Prof. Alan Turing • Room 304</p>
+</div>
+</div>
+<div class="text-right">
+<span class="font-label-md text-label-md text-primary block">09:00 AM</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">1.5 hrs</span>
+</div>
+</div>
+<!-- Class Item -->
+<div class="flex items-center justify-between p-4 bg-surface rounded-lg border border-outline-variant/50 hover:border-primary/30 transition-colors relative overflow-hidden">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-primary"></div>
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-surface-container-high text-on-surface flex items-center justify-center font-headline-md text-headline-md font-bold">
+                                    DB
+                                </div>
+<div>
+<h4 class="font-label-md text-label-md text-on-surface">Database Management</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Prof. Edgar Codd • Room 210</p>
+</div>
+</div>
+<div class="text-right">
+<span class="font-label-md text-label-md text-primary block">11:00 AM</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Live Now</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Tomorrow's Preview & Scheduling -->
+<section class="bg-surface-container-lowest rounded-xl border border-outline-variant p-6 shadow-sm">
+<div class="flex justify-between items-center mb-6">
+<h3 class="font-headline-md text-headline-md text-on-surface">Tomorrow's Preview</h3>
+<div class="bg-cr-bg text-cr-text px-3 py-1 rounded-full font-label-sm text-label-sm flex items-center gap-1 border border-cr-border">
+<span class="material-symbols-outlined text-[16px]" data-icon="info">info</span>
+                            Booking open for tomorrow only
+                        </div>
+</div>
+<div class="mb-6">
+<p class="font-body-lg text-body-lg text-on-surface-variant mb-4">You have 2 empty slots available for tomorrow. Would you like to schedule an extra class or lab session?</p>
+<button class="w-full md:w-auto flex items-center justify-center gap-2 bg-primary text-on-primary h-input-height px-6 rounded-full font-label-md text-label-md hover:bg-primary/90 transition-colors glow-emerald">
+<span class="material-symbols-outlined" data-icon="add_circle">add_circle</span>
+                            Schedule Class for Tomorrow
+                        </button>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+<div class="p-4 bg-surface rounded-lg border border-outline-variant/50">
+<div class="font-label-md text-label-md text-on-surface mb-1">09:00 AM - 10:30 AM</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">Computer Networks (Scheduled)</div>
+</div>
+<div class="p-4 bg-surface-container-high rounded-lg border border-dashed border-outline-variant flex items-center justify-center text-on-surface-variant font-label-md text-label-md">
+                            11:00 AM Slot Available
+                        </div>
+</div>
+</section>
+</div>
+<!-- Sidebar / Floating Island -->
+<div class="md:col-span-4 flex flex-col gap-gutter">
+<!-- Quick Actions -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant p-6 shadow-sm">
+<h3 class="font-headline-md text-headline-md text-on-surface mb-4">CR Dashboard</h3>
+<div class="flex flex-col gap-3">
+<div class="flex items-center gap-3 p-3 bg-cr-bg/50 rounded-lg border border-cr-border/50">
+<div class="w-10 h-10 rounded-full bg-cr-border flex items-center justify-center text-cr-text">
+<span class="material-symbols-outlined" data-icon="assignment_ind">assignment_ind</span>
+</div>
+<div>
+<div class="font-label-md text-label-md text-on-surface">Your Role</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">Class Representative (CSE A)</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Glassmorphic Stats Card -->
+<div class="rounded-xl p-6 relative overflow-hidden bg-primary-container text-on-primary-container">
+<div class="absolute inset-0 opacity-20" style="background-image: radial-gradient(circle at top right, #ffffff, transparent);"></div>
+<h3 class="font-headline-md text-headline-md mb-2 relative z-10">Attendance Overview</h3>
+<p class="font-body-sm text-body-sm opacity-80 mb-6 relative z-10">Average for the week across all scheduled classes.</p>
+<div class="flex items-end gap-2 relative z-10">
+<span class="font-display-terminal text-[48px] leading-none font-bold">84</span>
+<span class="font-headline-md text-headline-md mb-1">%</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 w-full z-50 flex justify-around items-center px-2 py-3 bg-surface border-t border-outline-variant shadow-lg rounded-t-xl md:hidden"><button class="flex-1 flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">home</span>
+<span class="font-label-sm">Home</span>
+</button>
+<button class="flex-1 flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">fingerprint</span>
+<span class="font-label-sm">Attendance</span>
+</button>
+<div class="flex-1 flex justify-center">
+<button class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-full px-4 py-1 transition-transform duration-200">
+<span class="material-symbols-outlined">calendar_month</span>
+<span class="font-label-sm">Schedule</span>
+</button>
+</div>
+<button class="flex-1 flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">psychology</span>
+<span class="font-label-sm">Counseling</span>
+</button>
+<button class="flex-1 flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">rate_review</span>
+<span class="font-label-sm">Feedback</span>
+</button></nav>
+<style>
+        /* Hide scrollbar for clean horizontal scrolling */
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</body></html>

@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en" style=""><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Professor's Attendance Terminal - EduPortal</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-secondary-fixed-variant": "#444749",
+                        "tertiary": "#5c5b5f",
+                        "on-secondary-container": "#626567",
+                        "error-container": "#ffdad6",
+                        "admin-bg": "#faf5ff",
+                        "error": "#ba1a1a",
+                        "admin-text": "#7e22ce",
+                        "student-text": "#047857",
+                        "inverse-on-surface": "#eaf1ff",
+                        "tertiary-fixed-dim": "#c8c5ca",
+                        "surface-tint": "#006c4a",
+                        "tertiary-container": "#757478",
+                        "teacher-border": "#bfdbfe",
+                        "canvas-gray": "#A4ADB4",
+                        "on-error-container": "#93000a",
+                        "teacher-text": "#1d4ed8",
+                        "auth-gradient": "linear-gradient(135deg, #f1f2f1 0%, #f6f5ea 50%, #f0dfa1 100%)",
+                        "secondary-fixed": "#e0e3e5",
+                        "surface-container": "#e5eeff",
+                        "on-primary": "#ffffff",
+                        "on-secondary": "#ffffff",
+                        "surface-container-low": "#eff4ff",
+                        "terminal-glow": "#34d399",
+                        "surface-bright": "#f8f9ff",
+                        "teacher-bg": "#eff6ff",
+                        "on-tertiary-fixed": "#1b1b1e",
+                        "surface": "#f8f9ff",
+                        "on-surface": "#0b1c30",
+                        "surface-variant": "#d3e4fe",
+                        "on-tertiary-fixed-variant": "#47464a",
+                        "primary": "#006948",
+                        "on-error": "#ffffff",
+                        "secondary": "#5c5f61",
+                        "cr-border": "#fed7aa",
+                        "tertiary-fixed": "#e4e1e6",
+                        "cr-text": "#c2410c",
+                        "on-secondary-fixed": "#191c1e",
+                        "surface-dim": "#cbdbf5",
+                        "admin-border": "#e9d5ff",
+                        "outline-variant": "#bccac0",
+                        "on-primary-container": "#f5fff7",
+                        "inverse-surface": "#213145",
+                        "cr-bg": "#fff7ed",
+                        "on-primary-fixed": "#002114",
+                        "outline": "#6d7a72",
+                        "primary-container": "#00855d",
+                        "background": "#f8f9ff",
+                        "student-border": "#a7f3d0",
+                        "inverse-primary": "#68dba9",
+                        "secondary-fixed-dim": "#c4c7c9",
+                        "primary-fixed": "#85f8c4",
+                        "on-primary-fixed-variant": "#005137",
+                        "on-surface-variant": "#3d4a42",
+                        "secondary-container": "#e0e3e5",
+                        "surface-container-lowest": "#ffffff",
+                        "on-tertiary-container": "#fffbff",
+                        "on-tertiary": "#ffffff",
+                        "on-background": "#0b1c30",
+                        "primary-fixed-dim": "#68dba9",
+                        "surface-container-high": "#dce9ff",
+                        "surface-container-highest": "#d3e4fe",
+                        "student-bg": "#ecfdf5"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "input-height": "52px",
+                        "gutter": "1.5rem",
+                        "margin-desktop": "2.5rem",
+                        "margin-mobile": "1rem",
+                        "auth-card-max-width": "900px",
+                        "safe": "env(safe-area-inset-bottom)"
+                    },
+                    "fontFamily": {
+                        "body-sm": ["Plus Jakarta Sans"],
+                        "label-sm": ["Plus Jakarta Sans"],
+                        "body-lg": ["Plus Jakarta Sans"],
+                        "label-md": ["Plus Jakarta Sans"],
+                        "auth-input": ["Plus Jakarta Sans"],
+                        "display-terminal": ["JetBrains Mono"],
+                        "headline-lg": ["Plus Jakarta Sans"],
+                        "headline-md": ["Plus Jakarta Sans"]
+                    },
+                    "fontSize": {
+                        "body-sm": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "label-sm": ["12px", { "lineHeight": "16px", "fontWeight": "500" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "label-md": ["14px", { "lineHeight": "20px", "fontWeight": "600" }],
+                        "auth-input": ["16px", { "lineHeight": "24px", "letterSpacing": "0.05em", "fontWeight": "400" }],
+                        "display-terminal": ["72px", { "lineHeight": "80px", "letterSpacing": "0.25em", "fontWeight": "700" }],
+                        "headline-lg": ["30px", { "lineHeight": "38px", "fontWeight": "700" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script><style type="text/css"></style><style type="text/css"></style><style type="text/css"></style><style type="text/css"></style><style type="text/css"></style>
+<style>
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+        .emerald-glow {
+            box-shadow: 0 0 20px rgba(4, 120, 87, 0.3);
+        }
+        .terminal-pod-bg {
+            background-color: #18181b; /* Zinc-900 */
+        }
+        .terminal-overlay {
+            background-color: rgba(2, 44, 43, 0.5);
+        }
+        
+        /* Pulse animation for the live dot */
+        @keyframes pulse-red {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+        .animate-pulse-red {
+            animation: pulse-red 2s infinite;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style type="text/css"></style><style type="text/css"></style><style type="text/css"></style><style type="text/css"></style></head>
+<body class="bg-background text-on-background min-h-screen flex flex-col font-body-sm relative pb-20 md:pb-0">
+<!-- TopAppBar -->
+<header class="bg-surface-container-lowest sticky top-0 z-50 border-b border-teacher-border shadow-sm"><div class="flex items-center justify-between px-4 py-3 h-[60px] relative max-w-7xl mx-auto">
+<div class="flex-1 flex items-center">
+<div class="w-[40px] h-[40px] rounded-full overflow-hidden border border-teacher-border shrink-0">
+<img alt="User profile" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAxGOTQ2L8FoZMvtwwcN9Lrtf-5DiCsou2BvbqPKz9vsX0fYpphZH3hBdU0hyYdIw3CKY7kV4Fhor3JFYFXKR963qfA20fLWbRB7hc9Z8ROHmxYSfxIhLE-LHMGsdTAviPBOSO-UtIjVa7VdLEF3Qbtplyk2nx5CsxDJq9lyMckXKPX4ConlRGOPHXmAVbpnsv8QdAyAR2KWFK4FnGh6YPg6dFfUOJ5nmkgC78IOe3p28HILIL_zSH1kQ"/>
+</div>
+</div>
+<div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center">
+<h1 class="font-headline-md text-primary font-bold leading-tight">JnU EduPortal</h1>
+</div>
+<div class="flex-1 flex items-center justify-end">
+<button aria-label="Notifications" class="w-10 h-10 flex items-center justify-center text-on-surface-variant shrink-0">
+<span class="material-symbols-outlined text-[24px]">notifications</span>
+</button>
+</div>
+</div></header>
+<!-- Main Layout -->
+<div class="flex-1 w-full max-w-7xl mx-auto px-margin-mobile md:px-margin-desktop py-8 grid grid-cols-1 lg:grid-cols-12 gap-gutter">
+<!-- Left Column: Terminal & Controls -->
+<div class="lg:col-span-7 flex flex-col gap-6">
+<!-- Course Selector -->
+<div class="bg-surface-container-lowest p-6 rounded-xl border border-teacher-border/30 shadow-sm">
+<label class="block font-label-md text-label-md text-on-surface-variant mb-2">Active Class Session</label>
+<div class="relative">
+<select class="w-full h-input-height rounded-full bg-surface border border-teacher-border/50 text-on-background font-body-lg text-body-lg px-6 appearance-none focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container">
+<option value="CSE-3101">CSE-3101 : Data Structures &amp; Algorithms</option>
+<option value="CSE-4202">CSE-4202 : Operating Systems</option>
+<option value="CSE-1100">CSE-1100 : Intro to Programming</option>
+</select>
+<span class="material-symbols-outlined absolute right-6 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none">expand_more</span>
+</div>
+<div class="flex items-center gap-2 mt-3 text-student-text">
+<div class="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse-red"></div>
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-red-600 font-bold">Session Active</span>
+<span class="text-tertiary font-body-sm text-body-sm ml-auto">Started 14 mins ago</span>
+</div>
+</div>
+<!-- Terminal Pod -->
+<div class="terminal-pod-bg rounded-xl border border-outline/30 overflow-hidden relative shadow-lg">
+<div class="terminal-overlay absolute inset-0 z-0"></div>
+<div class="relative z-10 p-8 flex flex-col items-center justify-center min-h-[300px]"><div class="flex flex-col items-center justify-center w-full h-full gap-8">
+<div class="text-center">
+<div class="text-terminal-glow/60 font-display-terminal text-sm mb-6 tracking-widest uppercase">Verification Code</div>
+<div class="font-display-terminal text-display-terminal text-terminal-glow drop-shadow-[0_0_20px_rgba(52,211,153,0.6)] tracking-[0.25em] flex items-center justify-center gap-4">
+<span class="">7</span><span class="">X</span><span class="">9</span><span class="">2</span><span class="">M</span>
+</div>
+</div>
+<div class="flex items-center gap-3 text-terminal-glow/80 bg-terminal-glow/10 px-6 py-2.5 rounded-full border border-terminal-glow/20 backdrop-blur-md">
+<span class="material-symbols-outlined text-[20px]">timer</span>
+<span class="font-display-terminal text-sm tracking-wider">Regenerates in 02:45</span>
+</div>
+</div></div>
+</div>
+<!-- Controls -->
+<div class="grid grid-cols-2 gap-4">
+<button class="h-input-height rounded-full bg-primary-container text-on-primary-container font-label-md text-label-md flex items-center justify-center gap-2 emerald-glow hover:bg-primary transition-colors">
+<span class="material-symbols-outlined">refresh</span>
+                    Regenerate Code
+                </button>
+<button class="h-input-height rounded-full bg-error-container text-on-error-container font-label-md text-label-md flex items-center justify-center gap-2 border border-error/20 hover:bg-error/20 transition-colors">
+<span class="material-symbols-outlined">stop_circle</span>
+                    Deactivate Session
+                </button>
+</div>
+</div>
+<!-- Right Column: Live Roster -->
+<div class="lg:col-span-5 flex flex-col h-[calc(100vh-180px)] min-h-[600px]">
+<div class="bg-surface-container-lowest rounded-xl border border-teacher-border/30 shadow-sm flex flex-col h-full overflow-hidden">
+<!-- Roster Header -->
+<div class="p-6 border-b border-teacher-border/30 bg-surface-container-low/50 flex justify-between items-center">
+<div>
+<h2 class="font-headline-md text-[20px] font-bold text-on-background">Live Roster</h2>
+<p class="font-body-sm text-body-sm text-tertiary mt-1">42 / 60 Verified</p>
+</div>
+<div class="flex gap-2">
+<button class="w-10 h-10 rounded-full border border-teacher-border/50 flex items-center justify-center text-on-surface-variant hover:bg-surface-variant transition-colors" title="Export Excel">
+<span class="material-symbols-outlined">download</span>
+</button>
+<button class="w-10 h-10 rounded-full bg-teacher-bg text-teacher-text border border-teacher-border/50 flex items-center justify-center hover:bg-teacher-border transition-colors" title="Mark All Present">
+<span class="material-symbols-outlined">done_all</span>
+</button>
+</div>
+</div>
+<!-- Search/Filter -->
+<div class="p-4 border-b border-teacher-border/20">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
+<input class="w-full h-10 pl-12 pr-4 rounded-full bg-surface border border-teacher-border/40 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary font-body-sm text-body-sm" placeholder="Search student name or ID..." type="text"/>
+</div>
+</div>
+<!-- Roster List -->
+<div class="flex-1 overflow-y-auto p-2">
+<!-- Student Item Verified -->
+<div class="flex items-center justify-between p-3 rounded-lg hover:bg-surface-variant/30 transition-colors mb-1">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-student-bg text-student-text flex items-center justify-center font-label-md text-label-md border border-student-border">
+                                JD
+                            </div>
+<div>
+<p class="font-label-md text-label-md text-on-background">Jane Doe</p>
+<p class="font-body-sm text-[12px] text-tertiary">STD-2023-001</p>
+</div>
+</div>
+<div class="flex items-center gap-2 text-student-text bg-student-bg px-3 py-1 rounded-full border border-student-border">
+<span class="material-symbols-outlined" style="font-size: 16px;">check_circle</span>
+<span class="font-label-sm text-label-sm">Verified 09:02</span>
+</div>
+</div>
+<!-- Student Item Verified -->
+<div class="flex items-center justify-between p-3 rounded-lg hover:bg-surface-variant/30 transition-colors mb-1">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-student-bg text-student-text flex items-center justify-center font-label-md text-label-md border border-student-border">
+                                AS
+                            </div>
+<div>
+<p class="font-label-md text-label-md text-on-background">Alex Smith</p>
+<p class="font-body-sm text-[12px] text-tertiary">STD-2023-042</p>
+</div>
+</div>
+<div class="flex items-center gap-2 text-student-text bg-student-bg px-3 py-1 rounded-full border border-student-border">
+<span class="material-symbols-outlined" style="font-size: 16px;">check_circle</span>
+<span class="font-label-sm text-label-sm">Verified 09:05</span>
+</div>
+</div>
+<!-- Student Item Manual -->
+<div class="flex items-center justify-between p-3 rounded-lg hover:bg-surface-variant/30 transition-colors mb-1">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-surface-container-high text-on-surface-variant flex items-center justify-center font-label-md text-label-md border border-outline-variant">
+                                EW
+                            </div>
+<div>
+<p class="font-label-md text-label-md text-on-background">Emily Wong</p>
+<p class="font-body-sm text-[12px] text-tertiary">STD-2023-088</p>
+</div>
+</div>
+<button class="text-tertiary hover:text-primary transition-colors text-label-sm font-label-sm border border-outline-variant hover:border-primary px-3 py-1 rounded-full">
+                            Mark Manual
+                        </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- BottomNavBar (Mobile Only) -->
+<nav class="bg-surface dark:bg-inverse-surface text-primary font-label-sm text-label-sm fixed bottom-0 w-full z-50 md:hidden bg-surface/80 backdrop-blur-md border-t border-outline-variant shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] left-0 flex justify-around items-center py-3 pb-safe max-w-full overflow-hidden px-2">
+<a class="flex flex-col items-center justify-center text-on-surface-variant py-1 active:bg-surface-container-high duration-200 flex-1 px-1" href="#">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="mt-1">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-2xl py-1 active:bg-surface-container-high duration-200 flex-1 px-1" href="#">
+<span class="material-symbols-outlined icon-fill" data-icon="apps">apps</span>
+<span class="mt-1">Attendance</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant py-1 active:bg-surface-container-high duration-200 flex-1 px-1" href="#">
+<span class="material-symbols-outlined" data-icon="event_note">event_note</span>
+<span class="mt-1">Schedule</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant py-1 active:bg-surface-container-high duration-200 flex-1 px-1" href="#">
+<span class="material-symbols-outlined" data-icon="support_agent">support_agent</span>
+<span class="mt-1">Counsel</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant py-1 active:bg-surface-container-high duration-200 flex-1 px-1" href="#">
+<span class="material-symbols-outlined" data-icon="chat_bubble">chat_bubble</span>
+<span class="mt-1">Feedback</span>
+</a>
+</nav>
+</body></html>

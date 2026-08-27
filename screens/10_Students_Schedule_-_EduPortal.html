@@ -1,0 +1,395 @@
+<!DOCTYPE html><html class="light" lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Academic Schedule - CSE JNU PORTAL</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "surface-container": "#e5eeff",
+                      "background": "#f8f9ff",
+                      "error": "#ba1a1a",
+                      "on-tertiary-fixed": "#1b1b1e",
+                      "on-secondary-container": "#626567",
+                      "on-tertiary-container": "#fffbff",
+                      "tertiary-container": "#757478",
+                      "inverse-on-surface": "#eaf1ff",
+                      "primary": "#006948",
+                      "tertiary": "#5c5b5f",
+                      "on-surface-variant": "#3d4a42",
+                      "on-primary-fixed-variant": "#005137",
+                      "on-background": "#0b1c30",
+                      "secondary-container": "#e0e3e5",
+                      "admin-bg": "#faf5ff",
+                      "student-border": "#a7f3d0",
+                      "inverse-surface": "#213145",
+                      "on-secondary": "#ffffff",
+                      "on-primary-fixed": "#002114",
+                      "primary-container": "#00855d",
+                      "surface-dim": "#cbdbf5",
+                      "tertiary-fixed-dim": "#c8c5ca",
+                      "tertiary-fixed": "#e4e1e6",
+                      "primary-fixed-dim": "#68dba9",
+                      "on-secondary-fixed": "#191c1e",
+                      "student-bg": "#ecfdf5",
+                      "secondary": "#5c5f61",
+                      "outline-variant": "#bccac0",
+                      "on-tertiary": "#ffffff",
+                      "on-error-container": "#93000a",
+                      "on-tertiary-fixed-variant": "#47464a",
+                      "on-primary": "#ffffff",
+                      "secondary-fixed": "#e0e3e5",
+                      "surface-container-high": "#dce9ff",
+                      "surface": "#f8f9ff",
+                      "surface-bright": "#f8f9ff",
+                      "inverse-primary": "#68dba9",
+                      "primary-fixed": "#85f8c4",
+                      "surface-container-highest": "#d3e4fe",
+                      "on-surface": "#0b1c30",
+                      "auth-gradient": "linear-gradient(135deg, #f1f2f1 0%, #f6f5ea 50%, #f0dfa1 100%)",
+                      "cr-text": "#c2410c",
+                      "cr-border": "#fed7aa",
+                      "teacher-text": "#1d4ed8",
+                      "cr-bg": "#fff7ed",
+                      "error-container": "#ffdad6",
+                      "admin-border": "#e9d5ff",
+                      "surface-tint": "#006c4a",
+                      "on-primary-container": "#f5fff7",
+                      "secondary-fixed-dim": "#c4c7c9",
+                      "surface-variant": "#d3e4fe",
+                      "admin-text": "#7e22ce",
+                      "surface-container-lowest": "#ffffff",
+                      "on-error": "#ffffff",
+                      "surface-container-low": "#eff4ff",
+                      "outline": "#6d7a72",
+                      "terminal-glow": "#34d399",
+                      "canvas-gray": "#A4ADB4",
+                      "on-secondary-fixed-variant": "#444749",
+                      "teacher-bg": "#eff6ff",
+                      "teacher-border": "#bfdbfe",
+                      "student-text": "#047857"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "gutter": "1.5rem",
+                      "margin-mobile": "1rem",
+                      "margin-desktop": "2.5rem",
+                      "input-height": "52px",
+                      "auth-card-max-width": "900px"
+              },
+              "fontFamily": {
+                      "headline-lg": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "headline-md": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "label-md": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "auth-input": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "body-lg": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "body-sm": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "display-terminal": [
+                              "JetBrains Mono"
+                      ],
+                      "label-sm": [
+                              "Plus Jakarta Sans"
+                      ]
+              },
+              "fontSize": {
+                      "headline-lg": [
+                              "30px",
+                              {
+                                      "lineHeight": "38px",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "headline-md": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "label-md": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "auth-input": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "letterSpacing": "0.05em",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "body-lg": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "body-sm": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "display-terminal": [
+                              "72px",
+                              {
+                                      "lineHeight": "80px",
+                                      "letterSpacing": "0.25em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "label-sm": [
+                              "12px",
+                              {
+                                      "lineHeight": "16px",
+                                      "fontWeight": "500"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+    </script><style type="text/css"></style><style type="text/css"></style><style type="text/css"></style>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.filled {
+            font-variation-settings: 'FILL' 1;
+        }
+        .emerald-glow {
+            box-shadow: 0 4px 20px -2px rgba(5, 150, 105, 0.3);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style type="text/css"></style><style type="text/css"></style></head>
+<body class="bg-background text-on-background font-body-lg antialiased overflow-x-hidden">
+<!-- NavigationDrawer (Desktop) -->
+<nav class="fixed left-0 top-0 w-80 hidden lg:flex flex-col p-4 bg-surface-container-lowest shadow-md rounded-xl m-4 h-[calc(100vh-2rem)] z-40 transition-all duration-200 ease-in-out">
+<div class="flex items-center gap-4 mb-8 p-2">
+<img class="w-12 h-12 rounded-full object-cover border-2 border-student-border" data-alt="A professional headshot of a computer science university student. The student is smiling slightly, wearing casual academic attire. The background is a blurred modern university campus or library, creating a bright, optimistic light-mode aesthetic with soft lighting. The image has a clean, high-resolution quality suitable for a modern educational platform." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDGg8C2qvyfQ0g58JetVMo2Y1H_fr_PvNP7iNAtdqtaFFKGayVjZ0gRfah8uAdHki7HmyQNOc3WS2ASzVSyxBBouhNpLYA3W1lSbURjSAZSDAL4dW1IBp3TRZlo_sjvlyzuo3vCNbcBxEJSyr7Jmg-lD2k5auG-6tHWd9DwZqKb5kRTHO1Ln05oEDscjdJPPupIqF10HV74BIBy41Bs1WLr3nvx36Thoe7QiDivz9-XFHTKig2k7rfZYw">
+<div class="flex flex-col left_align">
+<span class="font-headline-md text-headline-md text-primary font-bold text-lg leading-tight">CSE Student</span>
+<span class="font-label-md text-label-md text-secondary">Jagannath University</span>
+<span class="font-body-sm text-body-sm text-tertiary">2024 Session</span>
+</div>
+</div>
+<div class="flex flex-col gap-2 flex-grow">
+<a class="flex items-center gap-3 px-4 py-3 text-secondary hover:bg-secondary-container rounded-full font-label-md text-label-md hover:bg-secondary-container/50 transition-colors" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-secondary hover:bg-secondary-container rounded-full font-label-md text-label-md hover:bg-secondary-container/50 transition-colors" href="#">
+<span class="material-symbols-outlined">terminal</span>
+<span class="">Attendance Terminal</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 bg-student-bg text-student-text rounded-full font-bold font-label-md text-label-md transition-colors" href="#">
+<span class="material-symbols-outlined filled" style="font-variation-settings: &quot;FILL&quot; 1;">calendar_month</span>
+<span class="">Academic Schedule</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-secondary hover:bg-secondary-container rounded-full font-label-md text-label-md hover:bg-secondary-container/50 transition-colors" href="#">
+<span class="material-symbols-outlined">psychology</span>
+<span class="">Counseling</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-secondary hover:bg-secondary-container rounded-full font-label-md text-label-md hover:bg-secondary-container/50 transition-colors" href="#">
+<span class="material-symbols-outlined">rate_review</span>
+<span class="">Faculty Feedback</span>
+</a>
+</div>
+</nav>
+<!-- Main Content Wrapper -->
+<div class="lg:ml-[350px] min-h-screen flex flex-col pb-24 lg:pb-0 max-w-full">
+<!-- TopAppBar -->
+<header class="w-full top-0 sticky bg-surface flex items-center justify-between px-margin-mobile md:px-margin-desktop h-16 z-30 border-b border-outline-variant max-w-full"><div class="flex items-center w-12">
+<img class="w-10 h-10 rounded-full object-cover border border-student-border" data-alt="User profile avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB02hOI7S5bqUGdRiwqcTO-IQ7Q9gqhExrBo-piKDNrq6rkFZgwfp-gukvRfv41k3HbjkiYguNcW60LSs4boUQQYuzTSYSEhYDate0MBjwmG1dWtbfYKDJi_bHBJ0Yh4UdEINf0STYZkvMJaeeK-xfPqdZo_8_rlMd0_NQKptvkQtgFMbNdob2IZXNLUnjuLoX5_QEX4oHf5NsOAPsxl4SzNjEjJtJBjNuuZ5lXJGHcXTqdH0_JpXvUfA">
+</div>
+<div class="flex-1 text-center">
+<h1 class="font-headline-md text-headline-md font-bold text-primary tracking-tight">JnU EduPortal</h1>
+</div>
+<div class="flex items-center justify-end w-12">
+<button class="p-2 text-on-surface-variant hover:bg-surface-container-low rounded-full transition-colors active:scale-95 duration-150 relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full"></span>
+</button>
+</div></header>
+<!-- Main Canvas -->
+<main class="flex-1 p-margin-mobile md:p-margin-desktop flex flex-col gap-8 max-w-7xl mx-auto w-full">
+<!-- Page Header -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+<div>
+<h2 class="font-headline-lg text-headline-lg text-on-surface mb-2">Academic Schedule</h2>
+
+</div>
+<div class="flex bg-surface-container p-1 rounded-full w-full md:w-auto">
+<button class="flex-1 md:flex-none px-6 py-2 rounded-full bg-white text-primary shadow-sm font-label-md text-label-md">Routine</button>
+<button class="flex-1 md:flex-none px-6 py-2 rounded-full text-secondary hover:bg-white/50 font-label-md text-label-md transition-colors">Upcoming Exams</button>
+<button class="flex-1 md:flex-none px-6 py-2 rounded-full text-secondary hover:bg-white/50 font-label-md text-label-md transition-colors">Past Exams</button>
+</div>
+</div>
+<!-- Content Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+<!-- Main Schedule Area (Span 8) -->
+<div class="lg:col-span-8 flex flex-col gap-6">
+<!-- Today's Overview (Glassmorphism Card) -->
+<div class="relative overflow-hidden rounded-xl bg-white border border-student-border shadow-sm p-6 max-w-full">
+<div class="absolute top-0 right-0 w-32 h-32 bg-student-bg rounded-bl-full -z-10 opacity-50"></div>
+<h3 class="font-headline-md text-headline-md text-on-surface mb-4 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">today</span>
+                            Today's Classes
+                        </h3>
+<div class="flex flex-col gap-3">
+<!-- Class Item -->
+<div class="flex items-center gap-4 p-4 rounded-lg bg-surface-container-low border border-outline-variant/30 hover:border-primary/30 transition-colors">
+<div class="flex flex-col items-center justify-center w-16 h-16 rounded-lg bg-student-bg text-student-text border border-student-border">
+<span class="font-label-md text-label-md font-bold">10:00</span>
+<span class="text-xs">AM</span>
+</div>
+<div class="flex-1">
+<h4 class="font-label-md text-label-md text-on-surface font-bold">Data Structures &amp; Algorithms</h4>
+<p class="font-body-sm text-body-sm text-secondary">Room 401 • Prof. Rahman</p>
+</div>
+<span class="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full font-label-sm text-label-sm flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">check_circle</span> Attended
+                                </span>
+</div>
+<!-- Class Item -->
+<div class="flex items-center gap-4 p-4 rounded-lg bg-white border border-outline-variant/50 hover:border-primary/50 transition-colors emerald-glow relative">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-l-lg"></div>
+<div class="flex flex-col items-center justify-center w-16 h-16 rounded-lg bg-surface-container text-primary">
+<span class="font-label-md text-label-md font-bold">01:30</span>
+<span class="text-xs">PM</span>
+</div>
+<div class="flex-1">
+<h4 class="font-label-md text-label-md text-on-surface font-bold">Operating Systems Lab</h4>
+<p class="font-body-sm text-body-sm text-secondary">Computer Lab 2 • Prof. Islam</p>
+</div>
+<span class="px-3 py-1 bg-surface-container text-primary rounded-full font-label-sm text-label-sm flex items-center gap-1 animate-pulse">
+<span class="material-symbols-outlined text-[14px]">sensors</span> Live Now
+                                </span>
+</div>
+</div>
+</div>
+<!-- Weekly Matrix Placeholder -->
+<div class="bg-white rounded-xl border border-outline-variant/50 p-6 flex flex-col items-center justify-center min-h-[400px] text-center max-w-full">
+<span class="material-symbols-outlined text-4xl text-tertiary mb-4">calendar_view_week</span>
+<h3 class="font-headline-md text-headline-md text-on-surface mb-2">Weekly Matrix View</h3>
+<p class="font-body-sm text-body-sm text-secondary max-w-md">The detailed grid view for the weekly schedule is accessible here on larger screens. On mobile, the list view is prioritized.</p>
+<button class="mt-6 px-6 py-2 rounded-full bg-primary-container text-on-primary-container font-label-md text-label-md hover:bg-primary-container/90 transition-colors">View Full Matrix</button>
+</div>
+</div>
+<!-- Side Panel (Span 4) -->
+<div class="lg:col-span-4 flex flex-col gap-6">
+<!-- Upcoming Exams Highlight -->
+<div class="bg-teacher-bg rounded-xl border border-teacher-border p-6 relative overflow-hidden max-w-full">
+<div class="absolute top-0 right-0 -mt-4 -mr-4 text-teacher-border opacity-20">
+<span class="material-symbols-outlined text-9xl">menu_book</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-teacher-text mb-4 relative z-10 flex items-center gap-2">
+<span class="material-symbols-outlined">event_upcoming</span>
+                            Upcoming Exams
+                        </h3>
+<div class="bg-white rounded-lg p-4 shadow-sm relative z-10 border border-outline-variant/20">
+<div class="flex justify-between items-start mb-2">
+<span class="px-2 py-1 bg-error-container text-on-error-container rounded font-label-sm text-label-sm font-bold uppercase tracking-wider">Midterm</span>
+<span class="font-label-sm text-label-sm text-secondary flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">schedule</span> in 3 days
+                                </span>
+</div>
+<h4 class="font-headline-md text-headline-md text-on-surface mb-1">Operating Systems</h4>
+<p class="font-body-sm text-body-sm text-secondary flex items-center gap-2 mb-4">
+<span class="material-symbols-outlined text-[16px]">calendar_today</span> Dec 12, 2024 • 10:00 AM
+                            </p>
+<button class="w-full py-2 rounded-lg border border-dashed border-teacher-text text-teacher-text font-label-md text-label-md hover:bg-teacher-bg transition-colors flex items-center justify-center gap-2">
+<span class="material-symbols-outlined">menu_book</span> View Syllabus
+                            </button>
+</div>
+</div>
+<!-- Tomorrow's Classes (List View for clarity) -->
+<div class="bg-white rounded-xl border border-outline-variant/50 p-6 max-w-full">
+<h3 class="font-label-md text-label-md text-on-surface mb-4 uppercase tracking-wider text-secondary">Tomorrow's Classes</h3>
+<ul class="flex flex-col gap-4">
+<li class="flex items-start gap-3 pb-4 border-b border-outline-variant/30 last:border-0 last:pb-0">
+<div class="w-2 h-2 mt-2 rounded-full bg-primary flex-shrink-0"></div>
+<div>
+<h4 class="font-label-md text-label-md text-on-surface">Database Management Systems</h4>
+<p class="font-body-sm text-body-sm text-secondary">08:30 AM - Room 302</p>
+</div>
+</li>
+<li class="flex items-start gap-3 pb-4 border-b border-outline-variant/30 last:border-0 last:pb-0">
+<div class="w-2 h-2 mt-2 rounded-full bg-primary flex-shrink-0"></div>
+<div>
+<h4 class="font-label-md text-label-md text-on-surface">Software Engineering</h4>
+<p class="font-body-sm text-body-sm text-secondary">11:00 AM - Room 305</p>
+</div>
+</li>
+<li class="flex items-start gap-3 pb-4 border-b border-outline-variant/30 last:border-0 last:pb-0">
+<div class="w-2 h-2 mt-2 rounded-full bg-tertiary flex-shrink-0"></div>
+<div>
+<h4 class="font-label-md text-label-md text-tertiary">Free Period</h4>
+<p class="font-body-sm text-body-sm text-secondary">01:00 PM - 02:30 PM</p>
+</div>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</main>
+</div>
+<!-- BottomNavBar (Mobile) -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center py-3 pb-safe z-50 lg:hidden bg-surface/80 backdrop-blur-md border-t border-outline-variant shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] max-w-full overflow-hidden px-1">
+<a class="flex flex-col items-center justify-center text-on-surface-variant py-1 active:bg-surface-container-high rounded-2xl duration-200 flex-1 px-1" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="font-label-sm text-label-sm mt-1">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant py-1 active:bg-surface-container-high rounded-2xl duration-200 flex-1 px-1" href="#">
+<span class="material-symbols-outlined">apps</span>
+<span class="font-label-sm text-label-sm mt-1">Attendance</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-2xl py-1 duration-200 flex-1 px-1" href="#">
+<span class="material-symbols-outlined filled" style="font-variation-settings: &quot;FILL&quot; 1;">event_note</span>
+<span class="font-label-sm text-label-sm mt-1 font-bold">Schedule</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant py-1 active:bg-surface-container-high rounded-2xl duration-200 flex-1 px-1" href="#">
+<span class="material-symbols-outlined">support_agent</span>
+<span class="font-label-sm text-label-sm mt-1">Counsel</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant py-1 active:bg-surface-container-high rounded-2xl duration-200 flex-1 px-1" href="#">
+<span class="material-symbols-outlined">chat_bubble</span>
+<span class="font-label-sm text-label-sm mt-1">Feedback</span>
+</a>
+</nav>
+
+
+</body></html>

@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en" style=""><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Professor's Inbox - EduPortal</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-secondary-fixed-variant": "#444749",
+                      "tertiary": "#5c5b5f",
+                      "on-secondary-container": "#626567",
+                      "error-container": "#ffdad6",
+                      "admin-bg": "#faf5ff",
+                      "error": "#ba1a1a",
+                      "admin-text": "#7e22ce",
+                      "student-text": "#047857",
+                      "inverse-on-surface": "#eaf1ff",
+                      "tertiary-fixed-dim": "#c8c5ca",
+                      "surface-tint": "#006c4a",
+                      "tertiary-container": "#757478",
+                      "teacher-border": "#bfdbfe",
+                      "canvas-gray": "#A4ADB4",
+                      "on-error-container": "#93000a",
+                      "teacher-text": "#1d4ed8",
+                      "auth-gradient": "linear-gradient(135deg, #f1f2f1 0%, #f6f5ea 50%, #f0dfa1 100%)",
+                      "secondary-fixed": "#e0e3e5",
+                      "surface-container": "#e5eeff",
+                      "on-primary": "#ffffff",
+                      "on-secondary": "#ffffff",
+                      "surface-container-low": "#eff4ff",
+                      "terminal-glow": "#34d399",
+                      "surface-bright": "#f8f9ff",
+                      "teacher-bg": "#eff6ff",
+                      "on-tertiary-fixed": "#1b1b1e",
+                      "surface": "#f8f9ff",
+                      "on-surface": "#0b1c30",
+                      "surface-variant": "#d3e4fe",
+                      "on-tertiary-fixed-variant": "#47464a",
+                      "primary": "#006948",
+                      "on-error": "#ffffff",
+                      "secondary": "#5c5f61",
+                      "cr-border": "#fed7aa",
+                      "tertiary-fixed": "#e4e1e6",
+                      "cr-text": "#c2410c",
+                      "on-secondary-fixed": "#191c1e",
+                      "surface-dim": "#cbdbf5",
+                      "admin-border": "#e9d5ff",
+                      "outline-variant": "#bccac0",
+                      "on-primary-container": "#f5fff7",
+                      "inverse-surface": "#213145",
+                      "cr-bg": "#fff7ed",
+                      "on-primary-fixed": "#002114",
+                      "outline": "#6d7a72",
+                      "primary-container": "#00855d",
+                      "background": "#f8f9ff",
+                      "student-border": "#a7f3d0",
+                      "inverse-primary": "#68dba9",
+                      "secondary-fixed-dim": "#c4c7c9",
+                      "primary-fixed": "#85f8c4",
+                      "on-primary-fixed-variant": "#005137",
+                      "on-surface-variant": "#3d4a42",
+                      "secondary-container": "#e0e3e5",
+                      "surface-container-lowest": "#ffffff",
+                      "on-tertiary-container": "#fffbff",
+                      "on-tertiary": "#ffffff",
+                      "on-background": "#0b1c30",
+                      "primary-fixed-dim": "#68dba9",
+                      "surface-container-high": "#dce9ff",
+                      "surface-container-highest": "#d3e4fe",
+                      "student-bg": "#ecfdf5"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "input-height": "52px",
+                      "gutter": "1.5rem",
+                      "margin-desktop": "2.5rem",
+                      "margin-mobile": "1rem",
+                      "auth-card-max-width": "900px"
+              },
+              "fontFamily": {
+                      "body-sm": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "label-sm": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "body-lg": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "label-md": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "auth-input": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "display-terminal": [
+                              "JetBrains Mono"
+                      ],
+                      "headline-lg": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "headline-md": [
+                              "Plus Jakarta Sans"
+                      ]
+              },
+              "fontSize": {
+                      "body-sm": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "label-sm": [
+                              "12px",
+                              {
+                                      "lineHeight": "16px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "body-lg": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "label-md": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "auth-input": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "letterSpacing": "0.05em",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "display-terminal": [
+                              "72px",
+                              {
+                                      "lineHeight": "80px",
+                                      "letterSpacing": "0.25em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "headline-lg": [
+                              "30px",
+                              {
+                                      "lineHeight": "38px",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "headline-md": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "fontWeight": "600"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+    </script><style type="text/css"></style><style type="text/css"></style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style type="text/css"></style><style type="text/css"></style><style type="text/css"></style></head>
+<body class="bg-background text-on-background font-body-lg min-h-screen pb-24 md:pb-0">
+<!-- TopAppBar -->
+<header class="bg-surface-container-lowest sticky top-0 z-50 border-b border-outline-variant/30 shadow-sm"><div class="max-w-7xl mx-auto px-4 h-[60px] flex items-center justify-between relative">
+<!-- Left: Profile -->
+<div class="flex items-center z-10">
+<div class="w-10 h-10 rounded-full overflow-hidden border border-teacher-border">
+<img alt="User profile" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCVsq9PRU7TXGo1cBeWrbEnQUFA3aQM0qZMIhgk12EAqaJDnIg1aSPF1GRJSiVTkMy8acIIFY8pp19GcAHABpDaFsCWD4kUwhWMN8dchib2XGaQwJ2yP5PPufXtlq7Usn1N65P8Yqi0gMSATXWZjVCltuhlLrxjciaoTqJ-8OgzlYlz7c4i1RXkk9PCWWab2gt16YkMlGcH-7lMfmURfrR4jJ0csITw9_BjLaXDGyGRov1aFxx3Wg4Lvg"/>
+</div>
+</div>
+<!-- Center: Brand Title -->
+<div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+<h1 class="font-headline-md font-bold text-primary">JnU EduPortal</h1>
+</div>
+<!-- Right: Notifications -->
+<div class="flex items-center z-10">
+<button aria-label="Notifications" class="w-10 h-10 flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low rounded-full transition-colors">
+<span class="material-symbols-outlined text-[24px]">notifications</span>
+</button>
+</div>
+</div></header>
+<main class="w-full max-w-7xl mx-auto px-margin-mobile md:px-margin-desktop py-8 grid grid-cols-1 lg:grid-cols-12 gap-gutter">
+<!-- Filter Sidebar / Top Bar -->
+<div class="lg:col-span-3">
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant/30 shadow-sm p-4 sticky top-24">
+<h2 class="font-headline-md text-body-lg font-bold text-on-surface mb-4">Inbox Views</h2>
+<div class="flex flex-col gap-2">
+<button class="w-full text-left px-4 py-3 rounded-lg bg-teacher-bg text-teacher-text font-label-md flex items-center gap-3 transition-colors">
+<span class="material-symbols-outlined text-lg">inbox</span>
+                        All Feedback
+                        <span class="ml-auto bg-teacher-text text-on-primary text-xs py-0.5 px-2 rounded-full">12</span>
+</button>
+<button class="w-full text-left px-4 py-3 rounded-lg text-on-surface-variant hover:bg-surface-container-low font-label-md flex items-center gap-3 transition-colors">
+<span class="material-symbols-outlined text-lg">mark_chat_unread</span>
+                        Unreplied
+                        <span class="ml-auto bg-error text-on-error text-xs py-0.5 px-2 rounded-full">3</span>
+</button>
+<button class="w-full text-left px-4 py-3 rounded-lg text-on-surface-variant hover:bg-surface-container-low font-label-md flex items-center gap-3 transition-colors">
+<span class="material-symbols-outlined text-lg">event_available</span>
+                        Counseling Requests
+                        <span class="ml-auto bg-surface-variant text-on-surface text-xs py-0.5 px-2 rounded-full">5</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Main Content Area -->
+<div class="lg:col-span-9 flex flex-col gap-gutter">
+<!-- Feedback Item 1 -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant/30 shadow-sm p-6 relative overflow-hidden group">
+<div class="absolute top-0 left-0 w-1 h-full bg-teacher-text"></div>
+<div class="flex justify-between items-start mb-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-surface-variant flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined">person</span>
+</div>
+<div>
+<h3 class="font-label-md text-on-surface">Anonymous Student</h3>
+<p class="font-body-sm text-on-surface-variant">Data Structures &amp; Algorithms • 2 hours ago</p>
+</div>
+</div>
+<div class="flex text-terminal-glow gap-1">
+<span class="material-symbols-outlined" style='font-variation-settings: "FILL" 1;'>star</span>
+<span class="material-symbols-outlined" style='font-variation-settings: "FILL" 1;'>star</span>
+<span class="material-symbols-outlined" style='font-variation-settings: "FILL" 1;'>star</span>
+<span class="material-symbols-outlined" style='font-variation-settings: "FILL" 1;'>star</span>
+<span class="material-symbols-outlined">star</span>
+</div>
+</div>
+<p class="font-body-lg text-on-surface mb-6">
+                    The pace of the lectures this week was perfect, but I'm still struggling slightly with the concepts around Red-Black trees. Could we maybe have a dedicated tutorial session or some extra practice problems on this topic before the mid-term?
+                </p>
+<!-- Reply Action -->
+<div class="bg-surface p-4 rounded-lg border border-teacher-border/50">
+<label class="sr-only" for="reply-1">Reply to feedback</label>
+<textarea class="w-full bg-surface-container-lowest border border-outline-variant rounded-lg p-3 font-body-sm text-on-surface focus:border-primary-container focus:ring-1 focus:ring-primary-container resize-none h-24 mb-3" id="reply-1" placeholder="Write a reply..."></textarea>
+<div class="flex justify-end">
+<button class="bg-primary-container text-on-primary-container font-label-md px-6 py-2 rounded-full hover:bg-primary transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">send</span>
+                            Send Reply
+                        </button>
+</div>
+</div>
+</div>
+<!-- Counseling Request -->
+<div class="bg-student-bg/30 rounded-xl border border-student-border shadow-sm p-6 relative overflow-hidden">
+<div class="absolute top-0 left-0 w-1 h-full bg-student-text"></div>
+<div class="flex justify-between items-start mb-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-surface-variant overflow-hidden border border-student-border">
+<img alt="Student Profile" class="w-full h-full object-cover" data-alt="A portrait of a college student, looking slightly stressed but determined, studying in a bright, modern library setting. The lighting should be soft and clear." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB2iytIKYuZ9ORbZl9Brl0F3DZTItkpJnl6C8xsKPvbnqbRikN2JJ32TmI5Pf8SKBfBBK7qxyH5snXF9g9516nxCiiqgiF690LrgQ1CfIVPYnj34lqd0Y7lVx5a39Nt-Fwgp_KvSL4gMkp18pyrB03QmPrUGsLtRL_tyI2BPdVkphgjup12CFbgqx9v-vSSpBane4SwORZWqvT-P85t8vvMTdWRK58VFfMttvVy6109sNMZ9JN_86nKJw"/>
+</div>
+<div>
+<h3 class="font-label-md text-on-surface">Alex Mercer (CS-202)</h3>
+<div class="flex items-center gap-2 font-body-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-sm text-student-text">event</span>
+<span class="">Requested: Thursday, 3:30 PM</span>
+</div>
+</div>
+</div>
+<span class="bg-surface-variant text-on-surface-variant font-label-sm px-2 py-1 rounded-md">Counseling</span>
+</div>
+<p class="font-body-lg text-on-surface mb-6">
+                    Requesting a 1-on-1 session to discuss my career path and final year project options. I'm torn between specializing in AI or Systems.
+                </p>
+<div class="flex gap-3">
+<button class="bg-primary-container text-on-primary-container font-label-md px-6 py-2 rounded-full hover:bg-primary transition-colors flex items-center gap-2 flex-1 justify-center">
+<span class="material-symbols-outlined text-sm">check</span>
+                        Approve
+                    </button>
+<button class="bg-surface-container border border-outline-variant text-on-surface font-label-md px-6 py-2 rounded-full hover:bg-surface-variant transition-colors flex items-center gap-2 flex-1 justify-center">
+<span class="material-symbols-outlined text-sm">close</span>
+                        Decline
+                    </button>
+</div>
+</div>
+<!-- Feedback Item 2 (Already replied) -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant/30 shadow-sm p-6 relative overflow-hidden opacity-80">
+<div class="absolute top-0 left-0 w-1 h-full bg-canvas-gray"></div>
+<div class="flex justify-between items-start mb-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-surface-variant flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined">person</span>
+</div>
+<div>
+<h3 class="font-label-md text-on-surface">Anonymous Student</h3>
+<p class="font-body-sm text-on-surface-variant">Database Systems • Yesterday</p>
+</div>
+</div>
+<div class="flex text-terminal-glow gap-1">
+<span class="material-symbols-outlined" style='font-variation-settings: "FILL" 1;'>star</span>
+<span class="material-symbols-outlined" style='font-variation-settings: "FILL" 1;'>star</span>
+<span class="material-symbols-outlined" style='font-variation-settings: "FILL" 1;'>star</span>
+<span class="material-symbols-outlined" style='font-variation-settings: "FILL" 1;'>star</span>
+<span class="material-symbols-outlined" style='font-variation-settings: "FILL" 1;'>star</span>
+</div>
+</div>
+<p class="font-body-lg text-on-surface mb-4">
+                    The practical lab session yesterday was fantastic. Really helped solidify the SQL injection concepts.
+                </p>
+<div class="bg-teacher-bg/50 p-4 rounded-lg border border-teacher-border/30 ml-8 relative">
+<span class="material-symbols-outlined absolute -left-3 top-4 text-teacher-text rotate-180 bg-surface-container-lowest rounded-full">reply</span>
+<p class="font-label-sm text-teacher-text mb-1">Your Reply:</p>
+<p class="font-body-sm text-on-surface">Glad to hear that! We'll be doing more hands-on labs next week focusing on mitigation strategies.</p>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="bg-surface dark:bg-inverse-surface text-primary font-label-sm text-label-sm fixed bottom-0 w-full z-50 lg:hidden bg-surface/80 backdrop-blur-md border-t border-outline-variant shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] left-0 flex justify-around items-center py-3 pb-safe max-w-full overflow-hidden px-2">
+<a class="flex flex-col items-center justify-center text-on-surface-variant py-1 active:bg-surface-container-high duration-200 flex-1 px-2" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="dashboard">dashboard</span>
+<span class="mt-1">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant py-1 active:bg-surface-container-high duration-200 flex-1 px-2" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="qr_code">qr_code</span>
+<span class="mt-1">Attendance</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant py-1 active:bg-surface-container-high duration-200 flex-1 px-2" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="calendar_today">calendar_today</span>
+<span class="mt-1">Schedule</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant py-1 active:bg-surface-container-high duration-200 flex-1 px-2" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="groups">groups</span>
+<span class="mt-1">Counseling</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-2xl py-1 active:bg-surface-container-high duration-200 flex-1 px-2" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="forum" style='font-variation-settings: "FILL" 1;'>forum</span>
+<span class="mt-1">Feedback</span>
+</a>
+</nav>
+</body></html>

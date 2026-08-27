@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Admin's Directory - EduPortal</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "surface-container-low": "#eff4ff",
+                      "on-background": "#0b1c30",
+                      "student-text": "#047857",
+                      "canvas-gray": "#A4ADB4",
+                      "surface-container": "#e5eeff",
+                      "on-primary-fixed-variant": "#005137",
+                      "error-container": "#ffdad6",
+                      "on-tertiary-container": "#fffbff",
+                      "teacher-bg": "#eff6ff",
+                      "surface-variant": "#d3e4fe",
+                      "on-tertiary-fixed-variant": "#47464a",
+                      "tertiary": "#5c5b5f",
+                      "error": "#ba1a1a",
+                      "tertiary-fixed-dim": "#c8c5ca",
+                      "primary": "#006948",
+                      "on-primary-fixed": "#002114",
+                      "outline": "#6d7a72",
+                      "tertiary-container": "#757478",
+                      "surface-container-high": "#dce9ff",
+                      "outline-variant": "#bccac0",
+                      "cr-bg": "#fff7ed",
+                      "inverse-surface": "#213145",
+                      "cr-text": "#c2410c",
+                      "teacher-text": "#1d4ed8",
+                      "on-primary-container": "#f5fff7",
+                      "primary-fixed": "#85f8c4",
+                      "secondary-fixed": "#e0e3e5",
+                      "primary-fixed-dim": "#68dba9",
+                      "on-secondary-container": "#626567",
+                      "surface-tint": "#006c4a",
+                      "tertiary-fixed": "#e4e1e6",
+                      "on-error": "#ffffff",
+                      "inverse-on-surface": "#eaf1ff",
+                      "student-bg": "#ecfdf5",
+                      "secondary-container": "#e0e3e5",
+                      "cr-border": "#fed7aa",
+                      "on-tertiary-fixed": "#1b1b1e",
+                      "surface-container-highest": "#d3e4fe",
+                      "on-surface": "#0b1c30",
+                      "surface": "#f8f9ff",
+                      "secondary": "#5c5f61",
+                      "on-primary": "#ffffff",
+                      "teacher-border": "#bfdbfe",
+                      "secondary-fixed-dim": "#c4c7c9",
+                      "on-tertiary": "#ffffff",
+                      "student-border": "#a7f3d0",
+                      "inverse-primary": "#68dba9",
+                      "admin-bg": "#faf5ff",
+                      "surface-container-lowest": "#ffffff",
+                      "surface-dim": "#cbdbf5",
+                      "on-secondary-fixed": "#191c1e",
+                      "admin-border": "#e9d5ff",
+                      "auth-gradient": "linear-gradient(135deg, #f1f2f1 0%, #f6f5ea 50%, #f0dfa1 100%)",
+                      "primary-container": "#00855d",
+                      "background": "#f8f9ff",
+                      "terminal-glow": "#34d399",
+                      "on-surface-variant": "#3d4a42",
+                      "on-secondary-fixed-variant": "#444749",
+                      "on-secondary": "#ffffff",
+                      "on-error-container": "#93000a",
+                      "surface-bright": "#f8f9ff",
+                      "admin-text": "#7e22ce"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "input-height": "52px",
+                      "margin-mobile": "1rem",
+                      "auth-card-max-width": "900px",
+                      "gutter": "1.5rem",
+                      "margin-desktop": "2.5rem"
+              },
+              "fontFamily": {
+                      "body-lg": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "body-sm": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "label-md": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "headline-md": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "headline-lg": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "label-sm": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "display-terminal": [
+                              "JetBrains Mono"
+                      ],
+                      "auth-input": [
+                              "Plus Jakarta Sans"
+                      ]
+              },
+              "fontSize": {
+                      "body-lg": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "body-sm": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "label-md": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-md": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-lg": [
+                              "30px",
+                              {
+                                      "lineHeight": "38px",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "label-sm": [
+                              "12px",
+                              {
+                                      "lineHeight": "16px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "display-terminal": [
+                              "72px",
+                              {
+                                      "lineHeight": "80px",
+                                      "letterSpacing": "0.25em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "auth-input": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "letterSpacing": "0.05em",
+                                      "fontWeight": "400"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+      </script>
+<style>
+          .material-symbols-outlined {
+            font-variation-settings:
+            'FILL' 0,
+            'wght' 400,
+            'GRAD' 0,
+            'opsz' 24
+          }
+      </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style type="text/css"></style><style type="text/css"></style></head>
+<body class="bg-background text-on-background font-body-lg min-h-screen flex flex-col pb-24 md:pb-0 md:flex-row">
+<!-- TopAppBar -->
+<header class="bg-white border-b border-outline-variant shadow-sm top-0 sticky z-50 md:hidden flex justify-between items-center w-full px-margin-mobile h-[60px] relative">
+<div class="flex items-center w-10 h-10">
+<div class="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center shrink-0 border border-admin-border bg-admin-bg">
+<span class="material-symbols-outlined text-admin-text">admin_panel_settings</span>
+</div>
+</div>
+<h1 class="text-headline-md font-bold text-primary tracking-tight text-xl absolute left-1/2 -translate-x-1/2">JnU EduPortal</h1>
+<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-low transition-colors active:scale-95 duration-150 text-primary">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+</header>
+<!-- SideNav (Desktop) -->
+<aside class="hidden md:flex bg-surface dark:bg-on-background border-r border-admin-border shadow-sm rounded-xl h-[calc(100vh-2rem)] my-4 ml-4 flex-col w-72 py-6 px-4 shrink-0">
+<div class="flex flex-col items-start mb-8 px-4">
+<div class="w-16 h-16 rounded-full bg-admin-border flex items-center justify-center text-admin-text font-bold text-xl mb-3">
+                A
+            </div>
+<h2 class="font-body-lg text-body-lg text-admin-text font-bold">Dept. Administrator</h2>
+<p class="font-body-sm text-body-sm text-secondary">CSE Jagannath University</p>
+<p class="font-label-sm text-label-sm text-canvas-gray mt-1">Admin Control Center</p>
+</div>
+<nav class="flex flex-col gap-2 flex-grow overflow-y-auto">
+<a class="flex items-center gap-3 px-4 py-3 rounded-full text-secondary hover:text-admin-text hover:bg-admin-bg/50 transition-colors font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+                System Metrics
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-full text-secondary hover:text-admin-text hover:bg-admin-bg/50 transition-colors font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined" data-icon="how_to_reg">how_to_reg</span>
+                Pending Signups
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-full text-secondary hover:text-admin-text hover:bg-admin-bg/50 transition-colors font-label-md text-label-md" href="#">
+<span class="material-symbols-outlined" data-icon="upgrade">upgrade</span>
+                Semester Promotion
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-full bg-admin-bg text-admin-text font-bold hover:bg-admin-bg/50 transition-colors font-label-md text-label-md translate-x-1 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="group" style="font-variation-settings: 'FILL' 1;">group</span>
+                User Directory
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-full text-secondary hover:text-admin-text hover:bg-admin-bg/50 transition-colors font-label-md text-label-md mt-auto" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+                System Settings
+            </a>
+</nav>
+</aside>
+<!-- Main Content -->
+<main class="flex-grow flex flex-col p-margin-mobile md:p-gutter max-w-5xl mx-auto w-full">
+<div class="mb-6">
+<h2 class="font-headline-md text-headline-md text-on-background mb-2">Admin's Directory - EduPortal</h2>
+<p class="font-body-sm text-body-sm text-secondary">Manage department faculty, students, and representatives.</p>
+</div>
+<!-- Controls -->
+<div class="flex flex-col gap-4 mb-6">
+<!-- Search -->
+<div class="relative w-full">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline" data-icon="search">search</span>
+<input class="w-full h-input-height pl-12 pr-4 rounded-full bg-surface-container border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary text-on-background font-body-sm text-body-sm placeholder:text-outline transition-all" placeholder="Search by name, ID, or phone..." type="text"/>
+</div>
+<!-- Filters -->
+<div class="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+<button class="px-4 py-2 rounded-full bg-primary-container text-on-primary-container font-label-md text-label-md whitespace-nowrap">All Roles</button>
+<button class="px-4 py-2 rounded-full bg-surface-container border border-outline-variant text-on-surface-variant font-label-md text-label-md whitespace-nowrap hover:bg-surface-variant transition-colors">Teachers</button>
+<button class="px-4 py-2 rounded-full bg-surface-container border border-outline-variant text-on-surface-variant font-label-md text-label-md whitespace-nowrap hover:bg-surface-variant transition-colors">Students</button>
+<button class="px-4 py-2 rounded-full bg-surface-container border border-outline-variant text-on-surface-variant font-label-md text-label-md whitespace-nowrap hover:bg-surface-variant transition-colors">CRs</button>
+</div>
+</div>
+<!-- User List -->
+<div class="flex flex-col gap-3">
+<!-- Card 1: Teacher -->
+<div class="bg-surface-container-lowest rounded-xl p-4 border border-outline-variant flex items-center justify-between shadow-sm">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-teacher-bg text-teacher-text flex items-center justify-center font-bold text-lg">
+                        R
+                    </div>
+<div>
+<h3 class="font-label-md text-label-md text-on-background">Prof. Dr. Rahman</h3>
+<p class="font-body-sm text-body-sm text-secondary">ID: FAC-2023-01</p>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<span class="px-3 py-1 rounded-full bg-teacher-bg text-teacher-text border border-teacher-border font-label-sm text-label-sm">Teacher</span>
+<button class="text-secondary hover:text-primary transition-colors p-2 rounded-full hover:bg-surface-variant">
+<span class="material-symbols-outlined" data-icon="more_vert">more_vert</span>
+</button>
+</div>
+</div>
+<!-- Card 2: CR -->
+<div class="bg-surface-container-lowest rounded-xl p-4 border border-outline-variant flex items-center justify-between shadow-sm">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-cr-bg text-cr-text flex items-center justify-center font-bold text-lg">
+                        S
+                    </div>
+<div>
+<h3 class="font-label-md text-label-md text-on-background">Sajib Ahmed</h3>
+<p class="font-body-sm text-body-sm text-secondary">ID: B1903050XX</p>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<span class="px-3 py-1 rounded-full bg-cr-bg text-cr-text border border-cr-border font-label-sm text-label-sm">CR</span>
+<button class="text-secondary hover:text-primary transition-colors p-2 rounded-full hover:bg-surface-variant">
+<span class="material-symbols-outlined" data-icon="more_vert">more_vert</span>
+</button>
+</div>
+</div>
+<!-- Card 3: Student -->
+<div class="bg-surface-container-lowest rounded-xl p-4 border border-outline-variant flex items-center justify-between shadow-sm">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-student-bg text-student-text flex items-center justify-center font-bold text-lg">
+                        A
+                    </div>
+<div>
+<h3 class="font-label-md text-label-md text-on-background">Ayesha Siddiqua</h3>
+<p class="font-body-sm text-body-sm text-secondary">ID: B2003050YY</p>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<span class="px-3 py-1 rounded-full bg-student-bg text-student-text border border-student-border font-label-sm text-label-sm">Student</span>
+<button class="text-secondary hover:text-primary transition-colors p-2 rounded-full hover:bg-surface-variant">
+<span class="material-symbols-outlined" data-icon="more_vert">more_vert</span>
+</button>
+</div>
+</div>
+<!-- Card 4: Admin -->
+<div class="bg-surface-container-lowest rounded-xl p-4 border border-outline-variant flex items-center justify-between shadow-sm">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-admin-bg text-admin-text flex items-center justify-center font-bold text-lg">
+                        M
+                    </div>
+<div>
+<h3 class="font-label-md text-label-md text-on-background">Mr. Admin</h3>
+<p class="font-body-sm text-body-sm text-secondary">ID: ADM-001</p>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<span class="px-3 py-1 rounded-full bg-admin-bg text-admin-text border border-admin-border font-label-sm text-label-sm">Admin</span>
+<button class="text-secondary hover:text-primary transition-colors p-2 rounded-full hover:bg-surface-variant">
+<span class="material-symbols-outlined" data-icon="more_vert">more_vert</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+<!-- FAB -->
+<button class="fixed bottom-20 md:bottom-8 right-4 md:right-8 w-14 h-14 bg-primary-container text-on-primary-container rounded-2xl flex items-center justify-center shadow-lg hover:shadow-xl hover:bg-primary transition-all md:hidden z-40">
+<span class="material-symbols-outlined" data-icon="add">add</span>
+</button>
+<button class="fixed bottom-8 right-8 px-6 py-4 bg-primary-container text-on-primary-container rounded-full hidden md:flex items-center gap-2 shadow-lg hover:shadow-xl hover:bg-primary transition-all z-40 font-label-md text-label-md">
+<span class="material-symbols-outlined" data-icon="add">add</span>
+        Add User
+    </button>
+<!-- BottomNavBar (Mobile) -->
+<nav class="bg-white/80 backdrop-blur-md border-t border-outline-variant shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] text-primary font-label-sm text-label-sm fixed bottom-0 left-0 w-full z-50 flex justify-around items-center py-3 pb-safe md:hidden max-w-full overflow-hidden px-1">
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-2 py-1 active:bg-surface-container-high duration-200 flex-1 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="mt-1 text-xs">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-2 py-1 active:bg-surface-container-high duration-200 flex-1 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">apps</span>
+<span class="mt-1 text-xs">Attendance</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-2 py-1 active:bg-surface-container-high duration-200 flex-1 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">event_note</span>
+<span class="mt-1 text-xs">Schedule</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-2 py-1 active:bg-surface-container-high duration-200 flex-1 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">support_agent</span>
+<span class="mt-1 text-xs">Counsel</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-2 py-1 active:bg-surface-container-high duration-200 flex-1 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">chat_bubble</span>
+<span class="mt-1 text-xs">Feedback</span>
+</a>
+</nav>
+</body></html>

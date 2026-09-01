@@ -1,0 +1,50 @@
+# Version Control
+.git/
+.gitignore
+
+# Environment & Secrets
+.env
+.env.*
+*.env
+*.pem
+*.key
+*.keystore
+*.jks
+credentials.json
+google-services.json
+GoogleService-Info.plist
+
+# Operating System & IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+
+# Flutter & Dart Build Artifacts
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+*.lock
+
+# Backend / Node / Python / Binary Artifacts
+node_modules/
+dist/
+out/
+target/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.cache/
+
+# Test Coverage & Logs
+coverage/
+*.log
+*.tmp
+tmp/
+scratch/

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "685171866402",
+    "project_id": "sajib-73b14",
+    "storage_bucket": "sajib-73b14.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:685171866402:android:2bf560d9bc8b3d582d037b",
+        "android_client_info": {
+          "package_name": "bd.ac.jnu.cse.cse_jnu_eduportal"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBLIjwgv-TBkSghNH7wwBXq72G_gk-dvj0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

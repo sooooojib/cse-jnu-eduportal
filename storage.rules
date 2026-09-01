@@ -1,0 +1,51 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.role == 'ADMIN';
+    }
+
+    function isValidImage() {
+      return request.resource.contentType.matches('image/(jpeg|png|webp)') &&
+             request.resource.size < 5 * 1024 * 1024;
+    }
+
+    function isValidDocument() {
+      return (
+        request.resource.contentType.matches('image/(jpeg|png|webp)') ||
+        request.resource.contentType == 'application/pdf' ||
+        request.resource.contentType == 'text/plain'
+      ) && request.resource.size < 10 * 1024 * 1024;
+    }
+
+    // Profile Avatars
+    match /avatars/{userId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if (isOwner(userId) || isAdmin()) && isValidImage();
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // Feedback Attachments
+    match /feedback/{userId}/{attachmentId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId) && isValidDocument();
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // Counseling Attachments
+    match /counseling/{userId}/{attachmentId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId) && isValidDocument();
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+  }
+}

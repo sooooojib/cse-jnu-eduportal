@@ -35,7 +35,6 @@ mobile/lib/
 │   │   ├── env_config.dart
 │   │   └── firebase_options.dart
 │   ├── constants/
-│   │   ├── api_endpoints.dart
 │   │   ├── app_constants.dart
 │   │   └── role_constants.dart
 │   ├── di/
@@ -46,10 +45,6 @@ mobile/lib/
 │   │   └── failures.dart
 │   ├── logging/
 │   │   └── app_logger.dart
-│   ├── network/
-│   │   ├── api_client.dart
-│   │   ├── auth_interceptor.dart
-│   │   └── network_info.dart
 │   ├── storage/
 │   │   ├── local_storage_service.dart
 │   │   └── secure_storage_service.dart
@@ -142,20 +137,15 @@ Contains foundational utilities completely decoupled from specific UI features.
 
 * **`di/` (`injection_container.dart`)**:
   * Uses `GetIt` (`sl` = Service Locator).
-  * Registers singletons and factories for: DataSources, Repositories, Use Cases, Controllers, Network Client, and Storage.
-* **`network/`**:
-  * **`api_client.dart`**: Centralized HTTP client abstraction.
-  * **`auth_interceptor.dart`**: Automatically extracts the JWT token from Secure Storage and injects `Authorization: Bearer <token>` into outgoing requests; intercepts `401` errors to trigger token refresh or logout.
-  * **`network_info.dart`**: Checks device internet connectivity.
+  * Registers singletons and factories for: DataSources, Repositories, Use Cases, Controllers, and Storage.
 * **`storage/`**:
-  * **`secure_storage_service.dart`**: Uses `FlutterSecureStorage` (iOS Keychain / Android Keystore) to store auth tokens and secrets safely.
+  * **`secure_storage_service.dart`**: Uses `FlutterSecureStorage` (iOS Keychain / Android Keystore) to store auth credentials and secrets safely.
   * **`local_storage_service.dart`**: Uses `SharedPreferences` for non-sensitive cached items (theme mode, offline routine cache).
 * **`error/`**:
   * **`failures.dart`**: Pure domain failure representations (`ServerFailure`, `AuthFailure`, `NetworkFailure`, `ValidationFailure`).
   * **`exceptions.dart`**: Data-layer exceptions (`ServerException`, `UnauthorizedException`).
-  * **`error_handler.dart`**: Translates raw exceptions into typed user-facing failures.
+  * **`error_handler.dart`**: Translates raw exceptions (including `FirebaseException`) into typed user-facing failures.
 * **`constants/`**:
-  * **`api_endpoints.dart`**: URLs for backend REST endpoints.
   * **`app_constants.dart`**: App name, timeout durations, pagination defaults.
   * **`role_constants.dart`**: Enums for `UserRole` (`student`, `cr`, `teacher`, `admin`).
 * **`logging/` (`app_logger.dart`)**: Structured log formatting with log levels (debug, info, warning, error).
@@ -163,6 +153,7 @@ Contains foundational utilities completely decoupled from specific UI features.
   * **`validators.dart`**: Email, password, student roll, and phone validation regexes.
   * **`formatters.dart`**: Date/time formatting, currency, and academic semester labels.
   * **`context_extensions.dart`**: BuildContext helpers (`context.theme`, `context.colors`, `context.showSnackBar`).
+*(Note: Legacy REST `network/` stubs and `api_endpoints.dart` were removed following the complete migration to native Firebase SDK operations.)*
 
 ---
 
@@ -199,7 +190,7 @@ Every feature is encapsulated inside its own folder under `mobile/lib/features/`
 ```text
 features/<feature_name>/
 ├── data/
-│   ├── datasources/       # Direct calls to Firestore / HTTP Backend
+│   ├── datasources/       # Direct calls to Cloud Firestore / Firebase Services
 │   ├── models/            # DTOs that serialize JSON <-> Dart
 │   └── repositories/      # Concrete repository implementations
 ├── domain/

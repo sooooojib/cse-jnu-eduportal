@@ -25,26 +25,26 @@ The new CSE JnU EduPortal is designed **100% from ground zero** under a strict m
 | (Presentation Layer • Domain Use Cases • Data Repositories) |
 +-------------------------------------------------------------+
                               │
-                    HTTPS / REST API (JSON)
-                      JWT Bearer Tokens
+                    Native Firebase SDK
+                  Declarative Security Rules
                               ▼
 +-------------------------------------------------------------+
-|                    Dedicated Backend API                    |
-| (Controllers • Service Business Logic • Auth & RBAC Guards) |
+|                  Firebase Serverless Engine                 |
+| (Cloud Firestore • Firebase Auth • Cloud Functions Gen 2)   |
 +-------------------------------------------------------------+
                               │
-                    Database Driver / ORM
+                    Cloud Storage & Triggers
                               ▼
 +-------------------------------------------------------------+
-|                     Relational Database                     |
-|  (Clean ground-zero schema, strict foreign keys & indexes)  |
+|                     Cloud Infrastructure                    |
+|      (FCM Push Alerts • Cloud Storage • Offline Disk)       |
 +-------------------------------------------------------------+
 ```
 
 ### Architectural Principles:
-- **Clean Architecture & Separation of Concerns**: Strict boundary between presentation, domain logic, data sources, and network layers.
-- **Backend as Single Source of Truth**: Flutter *never* communicates directly with the database. The backend enforces authentication, authorization, validation, state machines, and relational integrity.
-- **Predictable State Management**: Immutable states, reactive streams, and structured dependency injection.
+- **Clean Architecture & Separation of Concerns**: Strict boundary between presentation, domain logic, and data layers.
+- **Declarative Security & Cloud Functions Authority**: Direct, fast client SDK operations protected by declarative sub-millisecond `firestore.rules` and `storage.rules`. Privileged operations (account provisioning, custom claims injection) run inside trusted Firebase Cloud Functions.
+- **Predictable State Management**: Immutable states, reactive streams, and structured dependency injection (`GetIt`).
 - **Emerald Scholar Design System**: Premium academic styling, light/dark themes, custom tokens, and obsidian dynamic terminals.
 
 ---
@@ -56,7 +56,7 @@ Navigate through the architectural and implementation guides below:
 | Directory | Topic | Description |
 | :--- | :--- | :--- |
 | [`docs/requirements/`](requirements/README.md) | **Requirements & Business Rules** | Core functional scope, role constraints, and domain state machines. |
-| [`docs/architecture/`](architecture/README.md) | **System Architecture** | Flutter mobile architecture, backend layers, security, and communication. |
+| [`docs/architecture/`](architecture/README.md) | **System Architecture** | Flutter mobile architecture, Firebase serverless architecture, security rules, and service mapping. |
 | [`docs/database/`](database/README.md) | **Database Design** | Ground-zero entity models, relational mappings, and indexing strategies. |
 | [`docs/api/`](api/README.md) | **API Specifications** | RESTful endpoint catalog, payload structures, auth headers, and status codes. |
 | [`docs/features/`](features/README.md) | **Feature Matrix** | Detailed feature specifications and role-based permissions matrix. |

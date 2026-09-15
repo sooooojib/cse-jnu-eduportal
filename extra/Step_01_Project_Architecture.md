@@ -2,7 +2,7 @@
 
 The **CSE JnU EduPortal** is an academic mobile platform designed for the Department of Computer Science & Engineering at Jagannath University (JnU). It unites four key academic roles: **Students**, **Class Representatives (CRs)**, **Professors / Faculty**, and **Department Administrators**.
 
-The repository is organized as a monorepo adhering strictly to **Feature-Driven Clean Architecture** on the frontend, a **Modular Layered Architecture** on the backend, and **Firebase Cloud Infrastructure** for serverless operations, security rules, and live data.
+The repository is organized as a monorepo adhering strictly to **Feature-Driven Clean Architecture** on the Flutter mobile client and **Firebase Cloud Infrastructure** (Cloud Firestore, Firebase Authentication, Cloud Functions, and Storage) for serverless operations, security rules, and live data.
 
 ---
 
@@ -11,11 +11,11 @@ The repository is organized as a monorepo adhering strictly to **Feature-Driven 
 ```text
 CSE_DEPT/
 ├── mobile/             # Flutter Mobile Client (Clean Architecture)
-├── backend/            # Express.js + TypeScript Authoritative REST API
 ├── functions/          # Firebase Cloud Functions (Gen 2 Serverless Engine)
 ├── screens/            # 17 High-Fidelity HTML/CSS UI Screen Prototypes
 ├── docs/               # System documentation, specifications & blueprints
-├── extra/              # Local / scratch files (Git-ignored)
+├── basic/              # Foundational learning guides (Widgets, Firebase, etc.)
+├── extra/              # Step-by-step master architecture roadmap
 ├── firestore.rules     # Declarative sub-millisecond database security rules
 ├── storage.rules       # Cloud Storage security policies (avatars, attachments)
 ├── DESIGN.md           # "Emerald Scholar" Design System token specifications
@@ -47,12 +47,11 @@ mobile/lib/
   * `theme/`: The **Emerald Scholar** design theme (Material 3, light/dark mode color tokens, custom typography).
 * **`mobile/lib/core/`**: Cross-cutting utilities:
   * `di/`: Service locator configuration using `GetIt` for dependency injection.
-  * `network/`: HTTP client wrappers, token injection interceptors, refresh token lifecycle handlers.
   * `storage/`: Secure hardware keystore storage (iOS Keychain / Android Keystore) for JWTs and local cache.
   * `error/`: Domain `Failure` and `Exception` types.
-  * `constants/`: App endpoints, asset paths, and Firestore collection names.
+  * `constants/`: University academic roles, asset paths, and Firestore collection names.
 * **`mobile/lib/features/`**: Every feature contains three isolated sub-layers:
-  * `data/`: Remote datasources (Firebase SDK / REST), local cache, DTOs (`*Model`), and repository implementations.
+  * `data/`: Remote datasources (Cloud Firestore), local cache, DTOs (`*Model`), and repository implementations.
   * `domain/`: Pure Dart entities, abstract repository contracts (`*Repository`), and single-responsibility use cases.
   * `presentation/`: State management controllers / Notifiers, screens, and feature-specific widgets.
   * **Feature Modules**:
@@ -68,46 +67,7 @@ mobile/lib/
 
 ---
 
-## 2. ⚙️ Backend: `backend/` (Express & TypeScript API)
-
-The backend provides authoritative business rules, atomic state transitions, and relational database persistence.
-
-```text
-backend/src/
-├── app.ts              # Express application configuration & middleware stack
-├── server.ts           # HTTP server startup & process lifecycle management
-├── config/             # Environment variables & DB connection pool
-├── common/             # Middlewares, RBAC guards, error handlers & shared utilities
-├── modules/            # Feature modules (routes -> controllers -> services -> schemas)
-└── storage/            # Database entities, migrations & seeds
-```
-
-### Key Folders & Responsibilities:
-
-* **`backend/src/app.ts`**: Express app assembly, security headers (Helmet), CORS, JSON body parsers, and centralized error handling.
-* **`backend/src/server.ts`**: Server listener and graceful shutdown handlers.
-* **`backend/src/config/`**:
-  * `env.ts`: Strongly typed environment variable validation.
-  * `database.ts`: Database connection pool and configuration.
-* **`backend/src/common/`**:
-  * `middlewares/`: JWT token verification and Role-Based Access Control (`authorize(['ADMIN'])`).
-  * `errors/`: Standardized `AppError` classes with HTTP status codes.
-  * `constants/`: Academic enums (`Role`, `Semester`, `AttendanceStatus`).
-* **`backend/src/modules/`**:
-  Each business domain follows a 4-tier pattern:
-  1. `*.routes.ts`: Maps URLs to controllers and injects auth/RBAC guards.
-  2. `*.controller.ts`: Extracts input, invokes services, and sends structured JSON.
-  3. `*.service.ts`: Implements core business logic and transactional integrity.
-  4. `*.schemas.ts`: Validation schemas for incoming payloads.
-  * Modules: `attendance/`, `auth/`, `counseling/`, `curriculum/`, `feedback/`, `notifications/`, `semester/`.
-* **`backend/src/storage/database/`**:
-  * `entities/`: Database models and relationship definitions.
-  * `migrations/`: Sequential database schema migration scripts.
-  * `seeds/`: Initial academic data (professors, courses, batches).
-
----
-
-## 3. ⚡ Cloud Functions: `functions/` (Firebase Serverless Engine)
+## 2. ⚡ Cloud Functions: `functions/` (Firebase Serverless Engine)
 
 Provides server-side trusted operations that require the Firebase Admin SDK and cannot be entrusted to client devices.
 
@@ -117,9 +77,10 @@ Provides server-side trusted operations that require the Firebase Admin SDK and 
   * Firestore Event Triggers: Dispatches FCM push notifications when class routines or attendance sessions are scheduled.
 * **`functions/src/seed.ts`**: Database seeding utilities for Firestore.
 
+
 ---
 
-## 4. 🎨 Design & UI Prototypes: `screens/` & Root Design Specs
+## 3. 🎨 Design & UI Prototypes: `screens/` & Root Design Specs
 
 As defined in the project rules (`.agents/rules/ui.md`), all mobile screen implementations must directly mirror the HTML/CSS prototypes in `screens/`:
 
@@ -140,7 +101,7 @@ As defined in the project rules (`.agents/rules/ui.md`), all mobile screen imple
 
 ---
 
-## 5. 🔒 Security & Rules: Root Files
+## 4. 🔒 Security & Rules: Root Files
 
 * **`firestore.rules`**: Declarative database security rules inspecting token custom claims (`request.auth.token.role`) to strictly control read/write access per role.
 * **`storage.rules`**: File upload access policies for feedback attachments and profile avatars.
@@ -148,13 +109,13 @@ As defined in the project rules (`.agents/rules/ui.md`), all mobile screen imple
 
 ---
 
-## 6. 📖 Documentation: `docs/`
+## 5. 📖 Documentation: `docs/`
 
 Comprehensive system specifications located in `docs/`:
-* **`docs/architecture/`**: In-depth blueprints for Flutter Architecture, Backend Architecture, Firebase Architecture, and Security Policies.
+* **`docs/architecture/`**: In-depth blueprints for Flutter Architecture, Firebase Architecture, and Security Policies.
 * **`docs/requirements/`**: Academic rules, semester transition state machines, and role privileges.
-* **`docs/database/`**: Entity Relationship Diagrams (ERDs) and Firestore collection schemas.
-* **`docs/api/`**: REST API endpoint schemas and payload specifications.
+* **`docs/database/`**: Firestore collection schemas and entity data dictionary.
+* **`docs/api/`**: Firebase operation mapping and specification catalogs.
 * **`docs/features/`**: Functional requirement breakdown per role.
 * **`docs/ui/`**: Screen specifications and component design patterns.
 
@@ -176,15 +137,13 @@ Repository Contract (mobile/lib/features/<feat>/domain/repositories)
        │  Invoked
        ▼
 Repository Implementation (mobile/lib/features/<feat>/data/repositories)
-       │  Maps Entities <-> DTOs
+       │  Maps Entities <-> DTO Models
        ▼
 Data Source (mobile/lib/features/<feat>/data/datasources)
-       ├───► HTTPS REST API ───► backend/src/modules/<feat>/
-       │                               ├── routes.ts
-       │                               ├── controller.ts
-       │                               ├── service.ts
-       │                               └── database/entities
        │
-       └───► Firebase SDK ─────► Firestore / Cloud Functions (functions/src/index.ts)
-                                       └── Enforced by firestore.rules
+       ├───► Official Firebase SDK ─────► Cloud Firestore & Firebase Auth
+       │                                     └── Enforced sub-ms by firestore.rules
+       │
+       └───► Firebase Functions SDK ───► Cloud Functions (functions/src/index.ts)
+                                             └── Privileged Admin tasks (e.g. approveSignup)
 ```

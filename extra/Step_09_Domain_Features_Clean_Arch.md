@@ -164,7 +164,7 @@ When a student submits a 6-digit attendance code:
              │
              ▼
 5. [data/datasources/attendance_remote_datasource.dart]
-   Calls Firestore / Backend API. Returns raw JSON response.
+   Calls Cloud Firestore document / Cloud Function. Returns raw data Map.
              │
              ▼
 6. [data/models/attendance_models.dart]

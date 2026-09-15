@@ -1,13 +1,16 @@
-# CSE JnU EduPortal — REST API Specifications
+# CSE JnU EduPortal — API & Operations Index
 
-This directory contains the complete API specifications, protocol conventions, error handling architectures, and resource endpoint catalogs for the new **CSE JnU EduPortal** backend.
+> [!NOTE]
+> **Firebase API Paradigm**: Traditional HTTP REST endpoints in this folder have been superseded by **Direct Firestore SDK Operations** and **Firebase Cloud Functions (Gen 2)**.
+> See **[`firebase_operation_mapping.md`](firebase_operation_mapping.md)** for the definitive mapping of each endpoint to its client-side SDK or Cloud Function equivalent.
 
 ---
 
-## 📚 API Specifications Index
+## 📚 API Specifications & Mapping Index
 
 | Document | Topic | Description |
 | :--- | :--- | :--- |
+| **[`firebase_operation_mapping.md`](firebase_operation_mapping.md)** | **🔥 Firebase Operation Mapping** | Direct mapping from REST endpoints to Firestore SDK calls and Cloud Functions. |
 | [`api_overview.md`](api_overview.md) | **API Architecture & Overview** | Base URL, security layers, JWT authentication headers, and Flutter client guidelines. |
 | [`api_conventions.md`](api_conventions.md) | **Conventions & Standards** | RESTful URI conventions, standard success/paginated response envelopes, query parameters. |
 | [`error_handling.md`](error_handling.md) | **Error Handling & Codes** | Standard error envelopes, validation errors, HTTP status code mappings, and error code catalog. |

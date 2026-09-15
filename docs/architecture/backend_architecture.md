@@ -1,6 +1,10 @@
-# Backend Application Architecture
+# Backend Application Architecture (Legacy Reference)
 
-## 1. Architectural Model
+> [!NOTE]
+> **Archived Specification**: This document details the initial Node.js / Express / TypeScript REST API and PostgreSQL architecture. The backend has been completely migrated to **Firebase Serverless Infrastructure** (Cloud Firestore, Firebase Authentication, Cloud Functions, and Cloud Storage).
+> For current backend and cloud specifications, refer to [Firebase Architecture](firebase_architecture.md), [Firebase Security](firebase_security.md), and [Firebase Service Mapping](firebase_service_mapping.md).
+
+## 1. Architectural Model (Archived Prototype)
 
 The **CSE JnU EduPortal Backend** serves as the authoritative core of the system. It handles business logic, security policies, role-based authorization, state transitions, and persistent storage.
 

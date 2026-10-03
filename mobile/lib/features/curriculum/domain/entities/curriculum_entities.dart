@@ -11,6 +11,8 @@ class Course extends Equatable {
   final String? description;
   final String? teacherId;
   final String? teacherName;
+  final String? coordinatorId;
+  final String? createdAt;
 
   const Course({
     required this.id,
@@ -23,10 +25,25 @@ class Course extends Equatable {
     this.description,
     this.teacherId,
     this.teacherName,
+    this.coordinatorId,
+    this.createdAt,
   });
 
   @override
-  List<Object?> get props => [id, code, title, credit, year, semester, courseType, description, teacherId, teacherName];
+  List<Object?> get props => [
+        id,
+        code,
+        title,
+        credit,
+        year,
+        semester,
+        courseType,
+        description,
+        teacherId,
+        teacherName,
+        coordinatorId,
+        createdAt,
+      ];
 }
 
 class CourseAssignment extends Equatable {

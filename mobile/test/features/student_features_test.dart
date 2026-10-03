@@ -87,6 +87,12 @@ class MockCurriculumRepository implements CurriculumRepository {
       ),
     ];
   }
+
+  @override
+  Future<List<CourseAssignment>> getCourseAssignments({String? courseId, String? teacherId}) async => const [];
+
+  @override
+  Future<List<Enrollment>> getEnrollments({int? year, int? semester, String? studentId}) async => const [];
 }
 
 class MockAttendanceRepository implements AttendanceRepository {
@@ -120,9 +126,13 @@ class MockAttendanceRepository implements AttendanceRepository {
   }
 
   @override
-  Future<Map<String, dynamic>> verifyCode(String code, {String? courseId}) async {
+  Future<AttendanceVerificationResult> verifyCode(String code, {String? courseId}) async {
     if (code == '849201') {
-      return {'success': true, 'courseTitle': 'Database Systems'};
+      return const AttendanceVerificationResult(
+        success: true,
+        message: 'Attendance marked successfully',
+        courseTitle: 'Database Systems',
+      );
     }
     throw Exception('Invalid verification code');
   }
@@ -190,9 +200,12 @@ class MockFeedbackRepository implements FeedbackRepository {
   Future<FeedbackItem> submitFeedback({
     required String teacherId,
     String? courseId,
+    String? courseCode,
+    String? courseTitle,
     required int rating,
     required String comments,
     required bool isAnonymous,
+    List<Attachment> attachments = const [],
   }) async {
     return FeedbackItem(
       id: 'fb-1',
@@ -253,6 +266,9 @@ class MockSemesterRepository implements SemesterRepository {
       status: 'PENDING',
     );
   }
+
+  @override
+  Future<List<SemesterUpgradeRequest>> getMyUpgradeRequests() async => const [];
 }
 
 class MockNotificationRepository implements NotificationRepository {

@@ -30,6 +30,8 @@ class CounselingSlot extends Equatable {
 class CounselingBooking extends Equatable {
   final String id;
   final String slotId;
+  final String? studentId;
+  final String? studentName;
   final String teacherId;
   final String teacherName;
   final String slotDate;
@@ -44,6 +46,8 @@ class CounselingBooking extends Equatable {
   const CounselingBooking({
     required this.id,
     required this.slotId,
+    this.studentId,
+    this.studentName,
     required this.teacherId,
     required this.teacherName,
     required this.slotDate,
@@ -57,5 +61,20 @@ class CounselingBooking extends Equatable {
   });
 
   @override
-  List<Object?> get props => [id, slotId, teacherId, teacherName, slotDate, startTime, endTime, category, notes, status, reviewedAt, createdAt];
+  List<Object?> get props => [
+        id,
+        slotId,
+        studentId,
+        studentName,
+        teacherId,
+        teacherName,
+        slotDate,
+        startTime,
+        endTime,
+        category,
+        notes,
+        status,
+        reviewedAt,
+        createdAt,
+      ];
 }

@@ -75,7 +75,11 @@ class TeacherDashboardShell extends StatelessWidget {
                     ? const Color(0xFF1E3A8A).withValues(alpha: 0.3)
                     : const Color(0xFFEFF6FF),
                 borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: const Color(0xFFBFDBFE)),
+                border: Border.all(
+                  color: isDark
+                      ? const Color(0xFF1E3A8A).withValues(alpha: 0.5)
+                      : const Color(0xFFBFDBFE),
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

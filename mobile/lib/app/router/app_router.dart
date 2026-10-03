@@ -7,6 +7,7 @@ import '../../features/auth/domain/usecases/signup_request_usecase.dart';
 import '../../features/auth/presentation/controllers/auth_controller.dart';
 import '../../features/auth/presentation/controllers/auth_state.dart';
 import '../../features/auth/presentation/screens/splash_screen.dart';
+import '../../features/auth/presentation/screens/welcome_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/signup_request_screen.dart';
 import '../../features/dashboard/presentation/screens/student_main_scaffold.dart';
@@ -15,6 +16,8 @@ import '../../features/dashboard/presentation/screens/cr_dashboard_shell.dart';
 import '../../features/dashboard/presentation/screens/admin_dashboard_shell.dart';
 import '../../features/profile/presentation/screens/student_profile_screen.dart';
 import '../../features/notifications/presentation/screens/notification_list_screen.dart';
+import '../../features/admin/presentation/screens/admin_management_screens.dart';
+import '../../features/admin/presentation/screens/admin_notification_hub_screen.dart';
 import '../../shared/presentation/foundation_preview_screen.dart';
 
 class AppRouter {
@@ -33,27 +36,29 @@ class AppRouter {
         final authState = auth.state;
         final isLoggingIn = state.matchedLocation == RouteNames.login;
         final isSigningUp = state.matchedLocation == RouteNames.signupRequest;
+        final isWelcome = state.matchedLocation == RouteNames.welcome;
         final isSplash = state.matchedLocation == RouteNames.initial;
         final isPreview = state.matchedLocation == RouteNames.foundationPreview;
 
-        // Allow splash, preview, and signup requests without auth
-        if (isSplash || isPreview || isSigningUp) return null;
+        // Allow splash, preview, welcome, login, and signup requests without auth
+        if (isSplash || isPreview || isWelcome || isLoggingIn || isSigningUp) return null;
 
         // If unauthenticated or disabled, redirect all protected paths to login
         if (authState is! Authenticated) {
-          return isLoggingIn ? null : RouteNames.login;
+          return RouteNames.login;
         }
 
         // Authenticated user role protection
         final user = authState.user;
         final currentPath = state.matchedLocation;
 
-        if (isLoggingIn) {
+        if (isLoggingIn || isWelcome) {
           return _getDashboardRouteForRole(user.role);
         }
 
         // Role-based route authorization guards
-        if (currentPath == RouteNames.adminDashboard && user.role != UserRole.admin) {
+        if ((currentPath == RouteNames.adminDashboard || currentPath.startsWith('/admin')) &&
+            user.role != UserRole.admin) {
           return _getDashboardRouteForRole(user.role);
         }
         if (currentPath == RouteNames.teacherDashboard &&
@@ -76,6 +81,12 @@ class AppRouter {
           builder: (context, state) => SplashScreen(
             authController: auth,
           ),
+        ),
+
+        // Public Welcome & Discovery Gateway
+        GoRoute(
+          path: RouteNames.welcome,
+          builder: (context, state) => const WelcomeScreen(),
         ),
 
         // Authentication Flow
@@ -142,6 +153,50 @@ class AppRouter {
             authController: auth,
             themeModeNotifier: themeModeNotifier,
           ),
+        ),
+        GoRoute(
+          path: RouteNames.adminUsers,
+          builder: (context, state) {
+            final roleParam = state.uri.queryParameters['role']?.toLowerCase();
+            int initialIndex = 0;
+            if (roleParam == 'faculty' || roleParam == 'teacher' || roleParam == 'teachers') initialIndex = 1;
+            if (roleParam == 'student' || roleParam == 'students') initialIndex = 2;
+            if (roleParam == 'cr' || roleParam == 'crs') initialIndex = 3;
+            if (roleParam == 'admin' || roleParam == 'admins') initialIndex = 4;
+            return AdminUserDirectoryScreen(initialRoleIndex: initialIndex);
+          },
+        ),
+        GoRoute(
+          path: RouteNames.adminSignupRequests,
+          builder: (context, state) => const AdminSignupRequestsScreen(),
+        ),
+        GoRoute(
+          path: RouteNames.adminSemesterRequests,
+          builder: (context, state) => const AdminSemesterRequestsScreen(),
+        ),
+        GoRoute(
+          path: RouteNames.adminCourses,
+          builder: (context, state) => const AdminCourseManagementScreen(),
+        ),
+        GoRoute(
+          path: RouteNames.adminAssignCourses,
+          builder: (context, state) => const AdminTeacherAssignmentScreen(),
+        ),
+        GoRoute(
+          path: RouteNames.adminAttendance,
+          builder: (context, state) => const AdminAttendanceOverviewScreen(),
+        ),
+        GoRoute(
+          path: RouteNames.adminFeedback,
+          builder: (context, state) => const AdminFeedbackModerationScreen(),
+        ),
+        GoRoute(
+          path: RouteNames.adminSettings,
+          builder: (context, state) => const AdminSettingsScreen(),
+        ),
+        GoRoute(
+          path: RouteNames.adminNotifications,
+          builder: (context, state) => const AdminNotificationHubScreen(),
         ),
 
         // Design System Foundation Showcase

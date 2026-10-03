@@ -67,8 +67,17 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         );
       }
 
-      final userModel = UserModel.fromFirestore(doc);
-      final idToken = await fbUser.getIdToken() ?? '';
+      String? authoritativeRole;
+      String idToken = '';
+      try {
+        final tokenResult = await fbUser.getIdTokenResult(true);
+        authoritativeRole = tokenResult.claims?['role'] as String?;
+        idToken = tokenResult.token ?? '';
+      } catch (_) {
+        idToken = await fbUser.getIdToken() ?? '';
+      }
+
+      final userModel = UserModel.fromFirestore(doc, authoritativeRole: authoritativeRole);
 
       return AuthResponseModel(
         accessToken: idToken,
@@ -103,7 +112,13 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         throw const ServerException(message: 'Account has been deactivated.');
       }
 
-      return UserModel.fromFirestore(doc);
+      String? authoritativeRole;
+      try {
+        final tokenResult = await fbUser.getIdTokenResult();
+        authoritativeRole = tokenResult.claims?['role'] as String?;
+      } catch (_) {}
+
+      return UserModel.fromFirestore(doc, authoritativeRole: authoritativeRole);
     } on fb.FirebaseAuthException catch (e) {
       throw ServerException(message: _mapFirebaseError(e.code));
     } catch (e) {

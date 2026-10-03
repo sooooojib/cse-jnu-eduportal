@@ -12,7 +12,11 @@ service cloud.firestore {
     }
 
     function getUserRole() {
-      return request.auth.token.role;
+      return request.auth.token.role != null
+        ? request.auth.token.role
+        : (exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+            : null);
     }
 
     function hasRole(role) {
@@ -62,6 +66,18 @@ service cloud.firestore {
 
     // ─── COLLECTION: courses ─────────────────────────────────────────────────
     match /courses/{courseId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // ─── COLLECTION: courseAssignments ───────────────────────────────────────
+    match /courseAssignments/{assignmentId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // ─── COLLECTION: enrollments ─────────────────────────────────────────────
+    match /enrollments/{enrollmentId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
@@ -149,9 +165,28 @@ service cloud.firestore {
 
     // ─── COLLECTION: notifications ───────────────────────────────────────────
     match /notifications/{notificationId} {
-      allow read, update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow read, update: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.userId == 'ALL' ||
+        isAdmin()
+      );
       allow create: if isAuthenticated();
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        isAdmin()
+      );
+    }
+
+    // ─── COLLECTION: notices ─────────────────────────────────────────────────
+    match /notices/{noticeId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ─── COLLECTION: public_routines ─────────────────────────────────────────
+    match /public_routines/{routineId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
   }
 }

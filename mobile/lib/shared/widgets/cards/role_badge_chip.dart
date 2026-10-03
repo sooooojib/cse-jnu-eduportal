@@ -14,7 +14,8 @@ class RoleBadgeChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = RoleColors.forRole(role);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = RoleColors.forRole(role, isDark: isDark);
 
     return Container(
       padding: EdgeInsets.symmetric(
@@ -22,9 +23,12 @@ class RoleBadgeChip extends StatelessWidget {
         vertical: isCompact ? 3 : 5,
       ),
       decoration: BoxDecoration(
-        color: colors.background,
+        color: isDark ? colors.background.withValues(alpha: 0.35) : colors.background,
         borderRadius: BorderRadius.circular(9999),
-        border: Border.all(color: colors.border, width: 1),
+        border: Border.all(
+          color: isDark ? colors.border.withValues(alpha: 0.45) : colors.border,
+          width: 1,
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

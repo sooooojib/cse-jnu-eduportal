@@ -75,7 +75,11 @@ class StudentDashboardShell extends StatelessWidget {
                     ? AppColors.primaryDark.withValues(alpha: 0.3)
                     : const Color(0xFFECFDF5),
                 borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: const Color(0xFFA7F3D0)),
+                border: Border.all(
+                  color: isDark
+                      ? AppColors.primaryDark.withValues(alpha: 0.4)
+                      : const Color(0xFFA7F3D0),
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

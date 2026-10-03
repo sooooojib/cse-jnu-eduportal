@@ -10,7 +10,7 @@ import '../../domain/repositories/attendance_repository.dart';
 
 abstract class AttendanceRemoteDataSource {
   Future<AttendanceSummaryModel> getMySummary();
-  Future<Map<String, dynamic>> verifyCode(String code, {String? courseId});
+  Future<AttendanceVerificationResult> verifyCode(String code, {String? courseId});
 }
 
 class AttendanceRemoteDataSourceImpl implements AttendanceRemoteDataSource {
@@ -77,7 +77,7 @@ class AttendanceRemoteDataSourceImpl implements AttendanceRemoteDataSource {
   }
 
   @override
-  Future<Map<String, dynamic>> verifyCode(String code, {String? courseId}) async {
+  Future<AttendanceVerificationResult> verifyCode(String code, {String? courseId}) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw const ServerException(message: "Not authenticated.");
 
@@ -101,24 +101,36 @@ class AttendanceRemoteDataSourceImpl implements AttendanceRemoteDataSource {
       throw const ServerException(message: "Code does not match the selected course.");
     }
 
-    // Mark student as present
-    final recordRef = _firestore.collection("attendance").doc();
+    // Fetch user profile for denormalized student name and roll
+    final userDoc = await _firestore.collection("users").doc(uid).get();
+    final userData = userDoc.data() ?? {};
+    final studentName = userData["fullName"] as String? ?? "";
+    final studentRoll = userData["studentId"] as String? ?? "";
+
+    // Composite Document ID: ${sessionId}_${studentId} (enforces uniqueness invariant)
+    final docId = "${session.id}_$uid";
+    final recordRef = _firestore.collection("attendance").doc(docId);
     await recordRef.set({
-      "studentId": uid,
       "sessionId": session.id,
+      "studentId": uid,
+      "studentName": studentName,
+      "studentRoll": studentRoll,
       "courseId": sessionCourseId,
       "courseCode": sessionData["courseCode"] ?? "",
       "courseTitle": sessionData["courseTitle"] ?? "",
       "status": "PRESENT",
-      "date": sessionData["date"] ?? DateTime.now().toIso8601String(),
+      "isManualOverride": false,
+      "date": sessionData["sessionDate"] ?? sessionData["date"] ?? DateTime.now().toIso8601String().substring(0, 10),
       "verifiedAt": FieldValue.serverTimestamp(),
     });
 
-    return {
-      "success": true,
-      "message": "Attendance marked successfully.",
-      "courseCode": sessionData["courseCode"],
-    };
+    return AttendanceVerificationResult(
+      success: true,
+      message: "Attendance marked successfully.",
+      courseCode: sessionData["courseCode"] as String?,
+      courseTitle: sessionData["courseTitle"] as String?,
+      recordId: docId,
+    );
   }
 }
 
@@ -139,7 +151,7 @@ class AttendanceRepositoryImpl implements AttendanceRepository {
   }
 
   @override
-  Future<Map<String, dynamic>> verifyCode(String code, {String? courseId}) async {
+  Future<AttendanceVerificationResult> verifyCode(String code, {String? courseId}) async {
     try {
       return await remoteDataSource.verifyCode(code, courseId: courseId);
     } catch (e) {

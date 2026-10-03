@@ -49,6 +49,8 @@ class SemesterUpgradeRequest extends Equatable {
   final String? rejectionReason;
   final String createdAt;
 
+  final String? updatedAt;
+
   const SemesterUpgradeRequest({
     required this.id,
     required this.studentId,
@@ -61,6 +63,7 @@ class SemesterUpgradeRequest extends Equatable {
     required this.status,
     this.rejectionReason,
     required this.createdAt,
+    this.updatedAt,
   });
 
   @override
@@ -76,5 +79,6 @@ class SemesterUpgradeRequest extends Equatable {
         status,
         rejectionReason,
         createdAt,
+        updatedAt,
       ];
 }

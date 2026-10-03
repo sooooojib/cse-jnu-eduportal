@@ -262,3 +262,143 @@ export const onNotificationCreated = onDocumentCreated(
     }
   }
 );
+
+// ─── STAGE 16: ADMIN USER MANAGEMENT ──────────────────────────────────────────
+
+export const createAdminUser = onCall(async (request) => {
+  if (!request.auth || request.auth.token.role !== "ADMIN") {
+    throw new HttpsError("permission-denied", "Only administrators can provision new accounts.");
+  }
+
+  const { email, password, fullName, role, studentId, phone, year, semester } = request.data;
+  if (!email || !fullName || !role) {
+    throw new HttpsError("invalid-argument", "Missing required fields (email, fullName, role).");
+  }
+
+  const validRoles = ["STUDENT", "TEACHER", "CR", "ADMIN"];
+  if (!validRoles.includes(role)) {
+    throw new HttpsError("invalid-argument", `Invalid role: ${role}`);
+  }
+
+  if ((role === "STUDENT" || role === "CR") && !studentId) {
+    throw new HttpsError("invalid-argument", "Student ID is required for Students and CRs.");
+  }
+
+  // Check duplicate email
+  try {
+    const existing = await auth.getUserByEmail(email);
+    if (existing) {
+      throw new HttpsError("already-exists", "A user account with this email address already exists.");
+    }
+  } catch (err: any) {
+    if (err.code !== "auth/user-not-found" && err.code !== 5) {
+      if (err instanceof HttpsError) throw err;
+    }
+  }
+
+  // Check duplicate studentId
+  if (studentId) {
+    const dupCheck = await db.collection("users").where("studentId", "==", studentId).get();
+    if (!dupCheck.empty) {
+      throw new HttpsError("already-exists", `A student account with ID ${studentId} already exists.`);
+    }
+  }
+
+  // Create Firebase Auth user
+  let userRecord: admin.auth.UserRecord;
+  try {
+    userRecord = await auth.createUser({
+      email,
+      password: password || Math.random().toString(36).slice(-8) + "Aa1!",
+      displayName: fullName,
+      emailVerified: true,
+    });
+  } catch (err: any) {
+    throw new HttpsError("internal", `Failed to create auth user: ${err.message}`);
+  }
+
+  // Inject custom claims
+  await auth.setCustomUserClaims(userRecord.uid, {
+    role,
+    year: (role === "STUDENT" || role === "CR") ? (year || 1) : null,
+    semester: (role === "STUDENT" || role === "CR") ? (semester || 1) : null,
+  });
+
+  // Create user document in Firestore
+  const now = admin.firestore.FieldValue.serverTimestamp();
+  const userData = {
+    id: userRecord.uid,
+    email,
+    fullName,
+    role,
+    studentId: studentId || null,
+    phone: phone || null,
+    year: (role === "STUDENT" || role === "CR") ? (year || 1) : null,
+    semester: (role === "STUDENT" || role === "CR") ? (semester || 1) : null,
+    assignedCourseIds: [],
+    isActive: true,
+    createdAt: now,
+    updatedAt: now,
+  };
+  await db.collection("users").doc(userRecord.uid).set(userData);
+
+  return {
+    success: true,
+    userId: userRecord.uid,
+    user: userData,
+    message: `Account for ${fullName} (${role}) provisioned successfully.`,
+  };
+});
+
+export const deleteUserByAdmin = onCall(async (request) => {
+  if (!request.auth || request.auth.token.role !== "ADMIN") {
+    throw new HttpsError("permission-denied", "Only administrators can delete accounts.");
+  }
+
+  const { userId } = request.data;
+  if (!userId) {
+    throw new HttpsError("invalid-argument", "Missing userId parameter.");
+  }
+
+  if (userId === request.auth.uid) {
+    throw new HttpsError("failed-precondition", "Administrators cannot delete their own active account.");
+  }
+
+  // 1. Delete from Firebase Auth
+  try {
+    await auth.deleteUser(userId);
+  } catch (err: any) {
+    console.warn(`Auth user ${userId} deletion notice: ${err.message}`);
+  }
+
+  // 2. Clean up course assignments if this user was a teacher
+  const userDoc = await db.collection("users").doc(userId).get();
+  if (userDoc.exists) {
+    const role = userDoc.data()?.role;
+    if (role === "TEACHER") {
+      const assignedQuery = await db.collection("courseAssignments").where("teacherId", "==", userId).get();
+      const batch = db.batch();
+      assignedQuery.docs.forEach((doc) => batch.delete(doc.ref));
+      await batch.commit();
+
+      const coursesQuery = await db.collection("courses").where("teacherId", "==", userId).get();
+      const courseBatch = db.batch();
+      coursesQuery.docs.forEach((doc) => {
+        courseBatch.update(doc.ref, {
+          teacherId: null,
+          teacherName: null,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      });
+      await courseBatch.commit();
+    }
+  }
+
+  // 3. Delete user document from Firestore
+  await db.collection("users").doc(userId).delete();
+
+  return {
+    success: true,
+    message: "User deleted and references unassigned successfully.",
+  };
+});

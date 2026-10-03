@@ -5,6 +5,7 @@ import '../../domain/usecases/login_usecase.dart';
 import '../../domain/usecases/get_current_user_usecase.dart';
 import '../../domain/usecases/logout_usecase.dart';
 import '../../domain/usecases/reset_password_usecase.dart';
+import '../../domain/repositories/auth_repository.dart';
 import '../../../../core/error/failures.dart';
 import 'auth_state.dart';
 
@@ -13,6 +14,7 @@ class AuthController extends ChangeNotifier {
   final GetCurrentUserUseCase getCurrentUserUseCase;
   final LogoutUseCase logoutUseCase;
   final ResetPasswordUseCase? resetPasswordUseCase;
+  final AuthRepository? authRepository;
 
   AuthState _state = const AuthInitial();
   StreamSubscription<User?>? _authSubscription;
@@ -22,7 +24,33 @@ class AuthController extends ChangeNotifier {
     required this.getCurrentUserUseCase,
     required this.logoutUseCase,
     this.resetPasswordUseCase,
+    this.authRepository,
   });
+
+  void startAuthListener() {
+    if (authRepository == null) return;
+    _authSubscription?.cancel();
+    _authSubscription = authRepository!.authStateChanges().listen(
+      (user) {
+        if (user != null) {
+          if (!user.isActive) {
+            _setState(const AuthAccountDisabled(
+              message: 'Your account has been deactivated. Please contact CSE administration.',
+            ));
+          } else {
+            _setState(Authenticated(user: user));
+          }
+        } else {
+          if (_state is Authenticated) {
+            _setState(const Unauthenticated(reason: 'Session ended or user profile removed.'));
+          }
+        }
+      },
+      onError: (e) {
+        _setState(AuthError(message: e.toString()));
+      },
+    );
+  }
 
   AuthState get state => _state;
 

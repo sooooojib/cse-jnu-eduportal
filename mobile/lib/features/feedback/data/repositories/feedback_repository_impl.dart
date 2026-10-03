@@ -12,9 +12,12 @@ abstract class FeedbackRemoteDataSource {
   Future<FeedbackItemModel> submitFeedback({
     required String teacherId,
     String? courseId,
+    String? courseCode,
+    String? courseTitle,
     required int rating,
     required String comments,
     required bool isAnonymous,
+    List<Attachment> attachments = const [],
   });
   Future<List<FeedbackItemModel>> getMySubmissions();
 }
@@ -33,9 +36,12 @@ class FeedbackRemoteDataSourceImpl implements FeedbackRemoteDataSource {
   Future<FeedbackItemModel> submitFeedback({
     required String teacherId,
     String? courseId,
+    String? courseCode,
+    String? courseTitle,
     required int rating,
     required String comments,
     required bool isAnonymous,
+    List<Attachment> attachments = const [],
   }) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw const ServerException(message: "Not authenticated.");
@@ -49,21 +55,51 @@ class FeedbackRemoteDataSourceImpl implements FeedbackRemoteDataSource {
       }
     } catch (_) {}
 
-    final now = DateTime.now().toIso8601String();
+    // Fetch course details if courseId is provided and code/title not passed
+    String? resolvedCode = courseCode;
+    String? resolvedTitle = courseTitle;
+    if (courseId != null && (resolvedCode == null || resolvedTitle == null)) {
+      try {
+        final courseDoc = await _firestore.collection("courses").doc(courseId).get();
+        if (courseDoc.exists) {
+          final cData = courseDoc.data()!;
+          resolvedCode ??= cData["code"] as String?;
+          resolvedTitle ??= cData["title"] as String?;
+        }
+      } catch (_) {}
+    }
+
+    final mappedAttachments = attachments
+        .map((a) => {
+              "id": a.id,
+              "fileName": a.fileName,
+              "fileUrl": a.fileUrl,
+              "mimeType": a.mimeType,
+              "fileSize": a.fileSize,
+            })
+        .toList();
+
     final payload = <String, dynamic>{
       "studentId": isAnonymous ? "ANONYMOUS" : uid,
       "teacherId": teacherId,
       "teacherName": teacherName,
       if (courseId != null) "courseId": courseId,
+      if (resolvedCode != null) "courseCode": resolvedCode,
+      if (resolvedTitle != null) "courseTitle": resolvedTitle,
       "rating": rating,
       "comments": comments,
       "isAnonymous": isAnonymous,
+      "attachments": mappedAttachments,
       "replies": <dynamic>[],
-      "createdAt": now,
+      "createdAt": FieldValue.serverTimestamp(),
     };
 
     final docRef = await _firestore.collection("feedback").add(payload);
-    return FeedbackItemModel.fromJson({"id": docRef.id, ...payload});
+    return FeedbackItemModel.fromJson({
+      "id": docRef.id,
+      ...payload,
+      "createdAt": DateTime.now().toIso8601String(),
+    });
   }
 
   @override
@@ -94,17 +130,23 @@ class FeedbackRepositoryImpl implements FeedbackRepository {
   Future<FeedbackItem> submitFeedback({
     required String teacherId,
     String? courseId,
+    String? courseCode,
+    String? courseTitle,
     required int rating,
     required String comments,
     required bool isAnonymous,
+    List<Attachment> attachments = const [],
   }) async {
     try {
       return await remoteDataSource.submitFeedback(
         teacherId: teacherId,
         courseId: courseId,
+        courseCode: courseCode,
+        courseTitle: courseTitle,
         rating: rating,
         comments: comments,
         isAnonymous: isAnonymous,
+        attachments: attachments,
       );
     } catch (e) {
       throw ErrorHandler.handleException(e);

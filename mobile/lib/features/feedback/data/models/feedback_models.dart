@@ -120,8 +120,23 @@ class FeedbackItemModel extends FeedbackItem {
       'rating': rating,
       'comments': comments,
       'isAnonymous': isAnonymous,
-      'attachments': attachments.map((a) => (a as AttachmentModel).toJson()).toList(),
-      'replies': replies.map((r) => (r as FeedbackReplyModel).toJson()).toList(),
+      'attachments': attachments
+          .map((a) => {
+                'id': a.id,
+                'fileName': a.fileName,
+                'fileUrl': a.fileUrl,
+                'mimeType': a.mimeType,
+                'fileSize': a.fileSize,
+              })
+          .toList(),
+      'replies': replies
+          .map((r) => {
+                'id': r.id,
+                'teacherName': r.teacherName,
+                'replyText': r.replyText,
+                'createdAt': r.createdAt,
+              })
+          .toList(),
       'createdAt': createdAt,
     };
   }
@@ -137,8 +152,23 @@ class FeedbackItemModel extends FeedbackItem {
       'comments': comments,
       'isAnonymous': isAnonymous,
       'studentId': isAnonymous ? 'ANONYMOUS' : null,
-      'attachments': attachments.map((a) => (a as AttachmentModel).toJson()).toList(),
-      'replies': replies.map((r) => (r as FeedbackReplyModel).toJson()).toList(),
+      'attachments': attachments
+          .map((a) => {
+                'id': a.id,
+                'fileName': a.fileName,
+                'fileUrl': a.fileUrl,
+                'mimeType': a.mimeType,
+                'fileSize': a.fileSize,
+              })
+          .toList(),
+      'replies': replies
+          .map((r) => {
+                'id': r.id,
+                'teacherName': r.teacherName,
+                'replyText': r.replyText,
+                'createdAt': r.createdAt,
+              })
+          .toList(),
       'createdAt': FieldValue.serverTimestamp(),
     };
   }

@@ -37,7 +37,7 @@ class _SplashScreenState extends State<SplashScreen> {
     if (state is Authenticated) {
       _routeForRole(state.user.role);
     } else {
-      context.go(RouteNames.login);
+      context.go(RouteNames.welcome);
     }
   }
 

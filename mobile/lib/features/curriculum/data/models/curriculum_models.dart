@@ -1,6 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../domain/entities/curriculum_entities.dart';
 
+String _tsToString(dynamic value) {
+  if (value == null) return DateTime.now().toIso8601String();
+  if (value is Timestamp) return value.toDate().toIso8601String();
+  return value.toString();
+}
+
 class CourseModel extends Course {
   const CourseModel({
     required super.id,
@@ -13,11 +19,13 @@ class CourseModel extends Course {
     super.description,
     super.teacherId,
     super.teacherName,
+    super.coordinatorId,
+    super.createdAt,
   });
 
   factory CourseModel.fromJson(Map<String, dynamic> json) {
     return CourseModel(
-      id: json['id'] as String? ?? '',
+      id: json['id'] as String? ?? json['code'] as String? ?? '',
       code: json['code'] as String? ?? '',
       title: json['title'] as String? ?? '',
       credit: (json['credit'] as num?)?.toDouble() ?? 0.0,
@@ -27,6 +35,8 @@ class CourseModel extends Course {
       description: json['description'] as String?,
       teacherId: json['teacherId'] as String?,
       teacherName: json['teacherName'] as String?,
+      coordinatorId: json['coordinatorId'] as String?,
+      createdAt: json['createdAt'] != null ? _tsToString(json['createdAt']) : null,
     );
   }
 
@@ -47,6 +57,8 @@ class CourseModel extends Course {
       if (description != null) 'description': description,
       if (teacherId != null) 'teacherId': teacherId,
       if (teacherName != null) 'teacherName': teacherName,
+      if (coordinatorId != null) 'coordinatorId': coordinatorId,
+      if (createdAt != null) 'createdAt': createdAt,
     };
   }
 
@@ -61,6 +73,7 @@ class CourseModel extends Course {
       if (description != null) 'description': description,
       if (teacherId != null) 'teacherId': teacherId,
       if (teacherName != null) 'teacherName': teacherName,
+      if (coordinatorId != null) 'coordinatorId': coordinatorId,
       'updatedAt': FieldValue.serverTimestamp(),
     };
   }
@@ -105,6 +118,18 @@ class CourseAssignmentModel extends CourseAssignment {
       'isCoordinator': isCoordinator,
     };
   }
+
+  Map<String, dynamic> toFirestore() {
+    return {
+      'courseId': courseId,
+      'courseCode': courseCode,
+      'courseTitle': courseTitle,
+      'teacherId': teacherId,
+      'teacherName': teacherName,
+      'isCoordinator': isCoordinator,
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+  }
 }
 
 class EnrollmentModel extends Enrollment {
@@ -147,6 +172,18 @@ class EnrollmentModel extends Enrollment {
       'year': year,
       'semester': semester,
       'enrolledCourseIds': enrolledCourseIds,
+    };
+  }
+
+  Map<String, dynamic> toFirestore() {
+    return {
+      'studentId': studentId,
+      'studentName': studentName,
+      'studentRoll': studentRoll,
+      'year': year,
+      'semester': semester,
+      'enrolledCourseIds': enrolledCourseIds,
+      'updatedAt': FieldValue.serverTimestamp(),
     };
   }
 }

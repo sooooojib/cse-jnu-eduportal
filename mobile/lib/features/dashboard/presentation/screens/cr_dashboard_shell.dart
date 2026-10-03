@@ -75,7 +75,11 @@ class CrDashboardShell extends StatelessWidget {
                     ? const Color(0xFF7C2D12).withValues(alpha: 0.3)
                     : const Color(0xFFFFF7ED),
                 borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: const Color(0xFFFED7AA)),
+                border: Border.all(
+                  color: isDark
+                      ? const Color(0xFF7C2D12).withValues(alpha: 0.5)
+                      : const Color(0xFFFED7AA),
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

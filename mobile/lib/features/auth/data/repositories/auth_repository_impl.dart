@@ -28,7 +28,12 @@ class AuthRepositoryImpl implements AuthRepository {
         final doc = await _firestore.collection('users').doc(fbUser.uid).get();
         if (!doc.exists || doc.data() == null) return null;
         if (doc.data()?['isActive'] == false) return null;
-        return UserModel.fromFirestore(doc);
+        String? authoritativeRole;
+        try {
+          final tokenResult = await fbUser.getIdTokenResult();
+          authoritativeRole = tokenResult.claims?['role'] as String?;
+        } catch (_) {}
+        return UserModel.fromFirestore(doc, authoritativeRole: authoritativeRole);
       } catch (_) {
         return null;
       }

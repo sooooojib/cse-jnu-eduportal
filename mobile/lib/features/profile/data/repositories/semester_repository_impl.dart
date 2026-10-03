@@ -2,40 +2,16 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
 import '../../../../core/error/error_handler.dart';
 import '../../../../core/error/exceptions.dart';
+import '../models/semester_upgrade_request_model.dart';
 import '../../domain/entities/semester_status.dart';
 import '../../domain/repositories/semester_repository.dart';
-
-// ─── Model ────────────────────────────────────────────────────────────────────
-
-class SemesterStatusModel extends SemesterStatus {
-  const SemesterStatusModel({
-    super.currentYear,
-    super.currentSemester,
-    super.requestedYear,
-    super.requestedSemester,
-    required super.status,
-    super.rejectionReason,
-    super.updatedAt,
-  });
-
-  factory SemesterStatusModel.fromJson(Map<String, dynamic> json) {
-    return SemesterStatusModel(
-      currentYear: json["currentYear"] as int?,
-      currentSemester: json["currentSemester"] as int?,
-      requestedYear: json["requestedYear"] as int?,
-      requestedSemester: json["requestedSemester"] as int?,
-      status: json["semesterStatus"] as String? ?? json["status"] as String? ?? "NONE",
-      rejectionReason: json["rejectionReason"] as String?,
-      updatedAt: json["updatedAt"] as String?,
-    );
-  }
-}
 
 // ─── DataSource ───────────────────────────────────────────────────────────────
 
 abstract class SemesterRemoteDataSource {
   Future<SemesterStatusModel> getStatus();
   Future<SemesterStatusModel> requestUpgrade({required int requestedYear, required int requestedSemester});
+  Future<List<SemesterUpgradeRequestModel>> getMyUpgradeRequests();
 }
 
 class SemesterRemoteDataSourceImpl implements SemesterRemoteDataSource {
@@ -93,23 +69,49 @@ class SemesterRemoteDataSourceImpl implements SemesterRemoteDataSource {
     final userDoc = await _firestore.collection("users").doc(uid).get();
     final userData = userDoc.data() ?? {};
 
-    final now = DateTime.now().toIso8601String();
+    final currentYear = userData["year"] as int? ?? 1;
+    final currentSemester = userData["semester"] as int? ?? 1;
+    final studentName = userData["fullName"] as String? ?? "";
+    final studentRoll = userData["studentId"] as String? ?? "";
+
     await _firestore.collection("semesterUpgradeRequests").add({
       "studentId": uid,
+      "studentName": studentName,
+      "studentRoll": studentRoll,
+      "currentYear": currentYear,
+      "currentSemester": currentSemester,
       "requestedYear": requestedYear,
       "requestedSemester": requestedSemester,
       "status": "PENDING",
-      "createdAt": now,
+      "rejectionReason": null,
+      "createdAt": FieldValue.serverTimestamp(),
+      "updatedAt": FieldValue.serverTimestamp(),
     });
 
     return SemesterStatusModel(
-      currentYear: userData["year"] as int?,
-      currentSemester: userData["semester"] as int?,
+      currentYear: currentYear,
+      currentSemester: currentSemester,
       requestedYear: requestedYear,
       requestedSemester: requestedSemester,
       status: "PENDING",
-      updatedAt: now,
+      updatedAt: DateTime.now().toIso8601String(),
     );
+  }
+
+  @override
+  Future<List<SemesterUpgradeRequestModel>> getMyUpgradeRequests() async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) throw const ServerException(message: "Not authenticated.");
+
+    final snapshot = await _firestore
+        .collection("semesterUpgradeRequests")
+        .where("studentId", isEqualTo: uid)
+        .orderBy("createdAt", descending: true)
+        .get();
+
+    return snapshot.docs.map((doc) {
+      return SemesterUpgradeRequestModel.fromJson({"id": doc.id, ...doc.data()});
+    }).toList();
   }
 }
 
@@ -136,6 +138,16 @@ class SemesterRepositoryImpl implements SemesterRepository {
         requestedYear: requestedYear,
         requestedSemester: requestedSemester,
       );
+    } catch (e) {
+      throw ErrorHandler.handleException(e);
+    }
+  }
+
+  @override
+  Future<List<SemesterUpgradeRequest>> getMyUpgradeRequests() async {
+    try {
+      final list = await remoteDataSource.getMyUpgradeRequests();
+      return List<SemesterUpgradeRequest>.from(list);
     } catch (e) {
       throw ErrorHandler.handleException(e);
     }

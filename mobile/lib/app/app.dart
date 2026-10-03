@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'router/app_router.dart';
+import 'theme/app_colors.dart';
 import 'theme/app_theme.dart';
 import '../core/constants/app_constants.dart';
 
@@ -40,10 +42,34 @@ class _CSEEduPortalAppState extends State<CSEEduPortalApp> {
           themeAnimationCurve: Curves.easeInOutCubic,
           routerConfig: _router,
           builder: (context, child) {
-            return GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-              child: child,
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            final bg = isDark ? AppColors.surfaceDark : AppColors.surfaceLight;
+
+            final overlayStyle = SystemUiOverlayStyle(
+              statusBarColor: Colors.transparent,
+              statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+              statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+              systemNavigationBarColor: bg,
+              systemNavigationBarDividerColor: Colors.transparent,
+              systemNavigationBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+            );
+
+            SystemChrome.setSystemUIOverlayStyle(overlayStyle);
+
+            return AnnotatedRegion<SystemUiOverlayStyle>(
+              value: overlayStyle,
+              child: Container(
+                color: bg,
+                child: SafeArea(
+                  top: false,
+                  bottom: true,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+                    child: child,
+                  ),
+                ),
+              ),
             );
           },
         );

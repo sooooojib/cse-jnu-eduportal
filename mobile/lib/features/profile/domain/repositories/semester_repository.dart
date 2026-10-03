@@ -3,6 +3,7 @@ import '../entities/semester_status.dart';
 abstract class SemesterRepository {
   Future<SemesterStatus> getStatus();
   Future<SemesterStatus> requestUpgrade({required int requestedYear, required int requestedSemester});
+  Future<List<SemesterUpgradeRequest>> getMyUpgradeRequests();
 }
 
 class GetSemesterStatusUseCase {

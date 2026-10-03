@@ -52,6 +52,13 @@ import '../../features/notifications/data/repositories/notification_repository_i
 import '../../features/notifications/domain/repositories/notification_repository.dart';
 import '../../features/notifications/presentation/controllers/notification_controller.dart';
 
+// Admin Feature
+import '../../features/admin/data/datasources/admin_remote_datasource.dart';
+import '../../features/admin/data/repositories/admin_repository_impl.dart';
+import '../../features/admin/domain/repositories/admin_repository.dart';
+import '../../features/admin/domain/usecases/admin_usecases.dart';
+import '../../features/admin/presentation/controllers/admin_dashboard_controller.dart';
+
 final sl = GetIt.instance;
 
 Future<void> initDependencies() async {
@@ -124,7 +131,8 @@ Future<void> initDependencies() async {
       getCurrentUserUseCase: sl(),
       logoutUseCase: sl(),
       resetPasswordUseCase: sl(),
-    ),
+      authRepository: sl(),
+    )..startAuthListener(),
   );
 
   // 5. Curriculum Feature
@@ -306,6 +314,48 @@ Future<void> initDependencies() async {
       getNotificationsUseCase: sl(),
       markNotificationReadUseCase: sl(),
       markAllNotificationsReadUseCase: sl(),
+    ),
+  );
+
+  // 11. Admin Feature
+  sl.registerLazySingleton<AdminRemoteDataSource>(
+    () => AdminRemoteDataSourceImpl(
+      firestore: sl(),
+      functions: sl(),
+    ),
+  );
+
+  sl.registerLazySingleton<AdminRepository>(
+    () => AdminRepositoryImpl(remoteDataSource: sl()),
+  );
+
+  sl.registerLazySingleton<GetAdminDashboardDataUseCase>(
+    () => GetAdminDashboardDataUseCase(sl()),
+  );
+
+  sl.registerLazySingleton<ApproveSignupRequestUseCase>(
+    () => ApproveSignupRequestUseCase(sl()),
+  );
+
+  sl.registerLazySingleton<RejectSignupRequestUseCase>(
+    () => RejectSignupRequestUseCase(sl()),
+  );
+
+  sl.registerLazySingleton<ApproveSemesterUpgradeUseCase>(
+    () => ApproveSemesterUpgradeUseCase(sl()),
+  );
+
+  sl.registerLazySingleton<RejectSemesterUpgradeUseCase>(
+    () => RejectSemesterUpgradeUseCase(sl()),
+  );
+
+  sl.registerFactory<AdminDashboardController>(
+    () => AdminDashboardController(
+      getDataUseCase: sl(),
+      approveSignupUseCase: sl(),
+      rejectSignupUseCase: sl(),
+      approveSemesterUseCase: sl(),
+      rejectSemesterUseCase: sl(),
     ),
   );
 }

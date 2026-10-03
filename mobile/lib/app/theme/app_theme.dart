@@ -58,20 +58,20 @@ class AppTheme {
           backgroundColor: AppColors.primary,
           foregroundColor: AppColors.onPrimary,
           elevation: 0,
-          minimumSize: const Size(double.infinity, 52),
+          minimumSize: const Size(64, 44),
           shape: const StadiumBorder(),
           textStyle: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.2,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.primary,
-          minimumSize: const Size(double.infinity, 52),
+          minimumSize: const Size(64, 44),
           shape: const StadiumBorder(),
           side: const BorderSide(color: AppColors.primary, width: 1.5),
           textStyle: const TextStyle(
@@ -79,7 +79,7 @@ class AppTheme {
             fontWeight: FontWeight.w600,
             letterSpacing: 0.2,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
@@ -206,20 +206,20 @@ class AppTheme {
           backgroundColor: AppColors.primaryContainer,
           foregroundColor: AppColors.onPrimaryContainer,
           elevation: 0,
-          minimumSize: const Size(double.infinity, 52),
+          minimumSize: const Size(64, 44),
           shape: const StadiumBorder(),
           textStyle: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w700,
             letterSpacing: 0.2,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.primaryContainer,
-          minimumSize: const Size(double.infinity, 52),
+          minimumSize: const Size(64, 44),
           shape: const StadiumBorder(),
           side: const BorderSide(color: AppColors.primaryContainer, width: 1.5),
           textStyle: const TextStyle(
@@ -227,7 +227,7 @@ class AppTheme {
             fontWeight: FontWeight.w600,
             letterSpacing: 0.2,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         ),
       ),
       textButtonTheme: TextButtonThemeData(

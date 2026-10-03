@@ -12,6 +12,11 @@ class User extends Equatable {
   final int? year;
   final int? semester;
   final String? semesterStatus;
+  final List<String> assignedCourseIds;
+  final List<String> fcmTokens;
+  final bool isActive;
+  final String? createdAt;
+  final String? updatedAt;
 
   const User({
     required this.id,
@@ -24,6 +29,11 @@ class User extends Equatable {
     this.year,
     this.semester,
     this.semesterStatus,
+    this.assignedCourseIds = const [],
+    this.fcmTokens = const [],
+    this.isActive = true,
+    this.createdAt,
+    this.updatedAt,
   });
 
   @override
@@ -38,5 +48,10 @@ class User extends Equatable {
         year,
         semester,
         semesterStatus,
+        assignedCourseIds,
+        fcmTokens,
+        isActive,
+        createdAt,
+        updatedAt,
       ];
 }

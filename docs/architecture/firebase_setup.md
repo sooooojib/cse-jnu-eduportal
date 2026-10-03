@@ -157,5 +157,5 @@ firebase emulators:start
 | **Cloud Storage Initialization** | ✅ Pass | `FirebaseStorage.instance` registered in GetIt container. |
 | **Cloud Functions Initialization** | ✅ Pass | `FirebaseFunctions.instance` registered in GetIt container. |
 | **Cloud Messaging Initialization** | ✅ Pass | `FirebaseMessaging.instance` registered in GetIt container. |
-| **Dart Static Analysis** | ✅ Pass | **0 errors**, **0 warnings** across entire `mobile/lib` and `mobile/test`. |
-| **Automated Test Suite** | ✅ Pass | **53/53 tests passing** (`flutter test`). |
+| **Dart Static Analysis** | ✅ Pass | **0 errors** across entire `mobile/lib` and `mobile/test`. |
+| **Automated Test Suite** | ✅ Pass | **69/69 tests passing** (`flutter test`) including platform options & DI verification. |

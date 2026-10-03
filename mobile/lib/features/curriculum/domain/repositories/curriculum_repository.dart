@@ -4,6 +4,8 @@ abstract class CurriculumRepository {
   Future<List<Course>> getMyCourses();
   Future<List<ScheduleSlot>> getSchedule({String? day});
   Future<List<Exam>> getExams();
+  Future<List<CourseAssignment>> getCourseAssignments({String? courseId, String? teacherId});
+  Future<List<Enrollment>> getEnrollments({int? year, int? semester, String? studentId});
 }
 
 class GetMyCoursesUseCase {

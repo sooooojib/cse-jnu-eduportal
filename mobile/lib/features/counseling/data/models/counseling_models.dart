@@ -73,6 +73,8 @@ class CounselingBookingModel extends CounselingBooking {
   const CounselingBookingModel({
     required super.id,
     required super.slotId,
+    super.studentId,
+    super.studentName,
     required super.teacherId,
     required super.teacherName,
     required super.slotDate,
@@ -89,6 +91,8 @@ class CounselingBookingModel extends CounselingBooking {
     return CounselingBookingModel(
       id: json['id'] as String? ?? '',
       slotId: json['slotId'] as String? ?? '',
+      studentId: json['studentId'] as String?,
+      studentName: json['studentName'] as String?,
       teacherId: json['teacherId'] as String? ?? '',
       teacherName: json['teacherName'] as String? ?? '',
       slotDate: _tsToString(json['slotDate']),
@@ -111,6 +115,8 @@ class CounselingBookingModel extends CounselingBooking {
     return {
       'id': id,
       'slotId': slotId,
+      if (studentId != null) 'studentId': studentId,
+      if (studentName != null) 'studentName': studentName,
       'teacherId': teacherId,
       'teacherName': teacherName,
       'slotDate': slotDate,
@@ -127,6 +133,8 @@ class CounselingBookingModel extends CounselingBooking {
   Map<String, dynamic> toFirestore() {
     return {
       'slotId': slotId,
+      if (studentId != null) 'studentId': studentId,
+      if (studentName != null) 'studentName': studentName,
       'teacherId': teacherId,
       'teacherName': teacherName,
       'slotDate': slotDate,

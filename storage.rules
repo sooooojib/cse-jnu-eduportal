@@ -27,6 +27,13 @@ service firebase.storage {
       ) && request.resource.size < 10 * 1024 * 1024;
     }
 
+    // Notice Attachments (Admin only)
+    match /notices/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() && isValidDocument();
+      allow delete: if isAdmin();
+    }
+
     // Profile Avatars
     match /avatars/{userId}/{fileName} {
       allow read: if isAuthenticated();

@@ -71,10 +71,13 @@ class CourseAttendance extends Equatable {
 
 class AttendanceRecord extends Equatable {
   final String id;
+  final String? sessionId;
+  final String? courseId;
   final String courseCode;
   final String courseTitle;
   final String status;
   final String verifiedAt;
+  final String? date;
   final String? studentId;
   final String? studentName;
   final String? studentRoll;
@@ -82,10 +85,13 @@ class AttendanceRecord extends Equatable {
 
   const AttendanceRecord({
     required this.id,
+    this.sessionId,
+    this.courseId,
     required this.courseCode,
     required this.courseTitle,
     required this.status,
     required this.verifiedAt,
+    this.date,
     this.studentId,
     this.studentName,
     this.studentRoll,
@@ -93,7 +99,39 @@ class AttendanceRecord extends Equatable {
   });
 
   @override
-  List<Object?> get props => [id, courseCode, courseTitle, status, verifiedAt, studentId, studentName, studentRoll, isManualOverride];
+  List<Object?> get props => [
+        id,
+        sessionId,
+        courseId,
+        courseCode,
+        courseTitle,
+        status,
+        verifiedAt,
+        date,
+        studentId,
+        studentName,
+        studentRoll,
+        isManualOverride,
+      ];
+}
+
+class AttendanceVerificationResult extends Equatable {
+  final bool success;
+  final String message;
+  final String? courseCode;
+  final String? courseTitle;
+  final String? recordId;
+
+  const AttendanceVerificationResult({
+    required this.success,
+    required this.message,
+    this.courseCode,
+    this.courseTitle,
+    this.recordId,
+  });
+
+  @override
+  List<Object?> get props => [success, message, courseCode, courseTitle, recordId];
 }
 
 class AttendanceSummary extends Equatable {
@@ -114,3 +152,4 @@ class AttendanceSummary extends Equatable {
   @override
   List<Object?> get props => [overallPercentage, totalAttended, totalSessions, courseSummaries, recentRecords];
 }
+

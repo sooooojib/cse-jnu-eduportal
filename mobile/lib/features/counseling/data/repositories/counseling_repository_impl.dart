@@ -58,20 +58,24 @@ class CounselingRemoteDataSourceImpl implements CounselingRemoteDataSource {
     // Mark slot as booked
     await slotDoc.reference.update({"isBooked": true});
 
-    // Create booking record
-    final now = DateTime.now().toIso8601String();
+    // Fetch student info
+    final userDoc = await _firestore.collection("users").doc(uid).get();
+    final studentName = userDoc.data()?["fullName"] as String? ?? "Student";
+
+    // Create booking record with server timestamp and denormalized fields
     final docRef = await _firestore.collection("counselingBookings").add({
       "slotId": slotId,
       "studentId": uid,
+      "studentName": studentName,
       "teacherId": slotData["teacherId"] ?? "",
       "teacherName": slotData["teacherName"] ?? "",
-      "slotDate": slotData["date"] ?? "",
+      "slotDate": slotData["slotDate"] ?? slotData["date"] ?? "",
       "startTime": slotData["startTime"] ?? "",
       "endTime": slotData["endTime"] ?? "",
       "category": category,
       "notes": notes,
       "status": "PENDING",
-      "createdAt": now,
+      "createdAt": FieldValue.serverTimestamp(),
     });
 
     final newDoc = await docRef.get();

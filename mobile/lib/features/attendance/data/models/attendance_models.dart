@@ -118,10 +118,13 @@ class CourseAttendanceModel extends CourseAttendance {
 class AttendanceRecordModel extends AttendanceRecord {
   const AttendanceRecordModel({
     required super.id,
+    super.sessionId,
+    super.courseId,
     required super.courseCode,
     required super.courseTitle,
     required super.status,
     required super.verifiedAt,
+    super.date,
     super.studentId,
     super.studentName,
     super.studentRoll,
@@ -131,10 +134,13 @@ class AttendanceRecordModel extends AttendanceRecord {
   factory AttendanceRecordModel.fromJson(Map<String, dynamic> json) {
     return AttendanceRecordModel(
       id: json['id'] as String? ?? '',
+      sessionId: json['sessionId'] as String?,
+      courseId: json['courseId'] as String?,
       courseCode: json['courseCode'] as String? ?? '',
       courseTitle: json['courseTitle'] as String? ?? '',
       status: json['status'] as String? ?? 'PRESENT',
       verifiedAt: _tsToString(json['verifiedAt'] ?? json['date']),
+      date: json['date'] as String?,
       studentId: json['studentId'] as String?,
       studentName: json['studentName'] as String?,
       studentRoll: json['studentRoll'] as String?,
@@ -150,10 +156,13 @@ class AttendanceRecordModel extends AttendanceRecord {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      if (sessionId != null) 'sessionId': sessionId,
+      if (courseId != null) 'courseId': courseId,
       'courseCode': courseCode,
       'courseTitle': courseTitle,
       'status': status,
       'verifiedAt': verifiedAt,
+      if (date != null) 'date': date,
       if (studentId != null) 'studentId': studentId,
       if (studentName != null) 'studentName': studentName,
       if (studentRoll != null) 'studentRoll': studentRoll,
@@ -163,10 +172,13 @@ class AttendanceRecordModel extends AttendanceRecord {
 
   Map<String, dynamic> toFirestore() {
     return {
+      if (sessionId != null) 'sessionId': sessionId,
+      if (courseId != null) 'courseId': courseId,
       'courseCode': courseCode,
       'courseTitle': courseTitle,
       'status': status,
       'verifiedAt': FieldValue.serverTimestamp(),
+      if (date != null) 'date': date,
       if (studentId != null) 'studentId': studentId,
       if (studentName != null) 'studentName': studentName,
       if (studentRoll != null) 'studentRoll': studentRoll,

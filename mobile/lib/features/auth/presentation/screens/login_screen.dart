@@ -6,6 +6,7 @@ import '../../../../core/constants/role_constants.dart';
 import '../../../../core/utils/context_extensions.dart';
 import '../../../../core/utils/validators.dart';
 import '../../../../shared/widgets/buttons/app_primary_button.dart';
+import '../../../../shared/widgets/buttons/app_text_button.dart';
 import '../../../../shared/widgets/inputs/app_text_field.dart';
 import '../../../../shared/widgets/dialogs/app_dialog.dart';
 import '../../../../shared/widgets/theme/theme_toggle_button.dart';
@@ -58,6 +59,8 @@ class _LoginScreenState extends State<LoginScreen> {
       final state = widget.authController.state;
       if (state is AuthError) {
         context.showSnackBar(state.message, isError: true);
+      } else if (state is AuthAccountDisabled) {
+        context.showSnackBar(state.message, isError: true);
       }
     }
   }
@@ -85,6 +88,40 @@ class _LoginScreenState extends State<LoginScreen> {
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(kToolbarHeight),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < 100) {
+              return const SizedBox.shrink();
+            }
+            return AppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              leading: IconButton(
+                icon: Icon(
+                  Icons.arrow_back_rounded,
+                  color: isDark ? Colors.white70 : const Color(0xFF334155),
+                ),
+                onPressed: () {
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    context.go(RouteNames.welcome);
+                  }
+                },
+              ),
+              actions: const [
+                Padding(
+                  padding: EdgeInsets.only(right: 16),
+                  child: ThemeToggleButton(),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
       body: Stack(
         children: [
           // Decorative ambient background glow orbs (IgnorePointer to never block touch)
@@ -278,18 +315,53 @@ class _LoginScreenState extends State<LoginScreen> {
                                     child: GestureDetector(
                                       behavior: HitTestBehavior.opaque,
                                       onTap: () {
+                                        final resetEmailController = TextEditingController(text: _emailController.text.trim());
                                         AppDialog.show(
                                           context: context,
-                                          title: 'Password Reset',
-                                          content: const Text(
-                                            'To reset your password, please contact the Department Administrator or the Computer Science & Engineering IT Helpdesk with your student ID or institutional email.',
-                                            style: TextStyle(fontSize: 14, height: 1.4),
+                                          title: 'Reset Password',
+                                          content: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              const Text(
+                                                'Enter your registered institutional email to receive a password reset link:',
+                                                style: TextStyle(fontSize: 14, height: 1.4),
+                                              ),
+                                              const SizedBox(height: 12),
+                                              AppTextField(
+                                                controller: resetEmailController,
+                                                label: 'Email address',
+                                                hint: 'you@example.com',
+                                                keyboardType: TextInputType.emailAddress,
+                                              ),
+                                            ],
                                           ),
                                           actions: [
-                                            AppPrimaryButton(
-                                              text: 'Understood',
-                                              height: 48,
+                                            AppTextButton(
+                                              text: 'Cancel',
                                               onPressed: () => Navigator.of(context).pop(),
+                                            ),
+                                            AppPrimaryButton(
+                                              text: 'Send Link',
+                                              height: 44,
+                                              onPressed: () async {
+                                                final email = resetEmailController.text.trim();
+                                                if (email.isEmpty) {
+                                                  context.showSnackBar('Please enter your email', isError: true);
+                                                  return;
+                                                }
+                                                Navigator.of(context).pop();
+                                                final sent = await widget.authController.resetPassword(email);
+                                                if (!context.mounted) return;
+                                                if (sent) {
+                                                  context.showSnackBar('Password reset email sent. Check your inbox.');
+                                                } else {
+                                                  final state = widget.authController.state;
+                                                  if (state is AuthError) {
+                                                    context.showSnackBar(state.message, isError: true);
+                                                  }
+                                                }
+                                              },
                                             ),
                                           ],
                                         );
@@ -361,15 +433,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
               ),
-            ),
-          ),
-
-          // Top-right theme switcher button (Rendered on top-most layer for instant touch responsiveness)
-          const Positioned(
-            top: 12,
-            right: 16,
-            child: SafeArea(
-              child: ThemeToggleButton(showBackground: true),
             ),
           ),
         ],

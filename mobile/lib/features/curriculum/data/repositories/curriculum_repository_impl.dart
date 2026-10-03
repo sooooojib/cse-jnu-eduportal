@@ -12,6 +12,8 @@ abstract class CurriculumRemoteDataSource {
   Future<List<CourseModel>> getMyCourses();
   Future<List<ScheduleSlotModel>> getSchedule({String? day});
   Future<List<ExamModel>> getExams();
+  Future<List<CourseAssignmentModel>> getCourseAssignments({String? courseId, String? teacherId});
+  Future<List<EnrollmentModel>> getEnrollments({int? year, int? semester, String? studentId});
 }
 
 class CurriculumRemoteDataSourceImpl implements CurriculumRemoteDataSource {
@@ -79,6 +81,31 @@ class CurriculumRemoteDataSourceImpl implements CurriculumRemoteDataSource {
       return ExamModel.fromJson({"id": doc.id, ...doc.data() as Map<String, dynamic>});
     }).toList();
   }
+
+  @override
+  Future<List<CourseAssignmentModel>> getCourseAssignments({String? courseId, String? teacherId}) async {
+    Query query = _firestore.collection("courseAssignments");
+    if (courseId != null) query = query.where("courseId", isEqualTo: courseId);
+    if (teacherId != null) query = query.where("teacherId", isEqualTo: teacherId);
+
+    final snapshot = await query.get();
+    return snapshot.docs.map((doc) {
+      return CourseAssignmentModel.fromJson({"id": doc.id, ...doc.data() as Map<String, dynamic>});
+    }).toList();
+  }
+
+  @override
+  Future<List<EnrollmentModel>> getEnrollments({int? year, int? semester, String? studentId}) async {
+    Query query = _firestore.collection("enrollments");
+    if (year != null) query = query.where("year", isEqualTo: year);
+    if (semester != null) query = query.where("semester", isEqualTo: semester);
+    if (studentId != null) query = query.where("studentId", isEqualTo: studentId);
+
+    final snapshot = await query.get();
+    return snapshot.docs.map((doc) {
+      return EnrollmentModel.fromJson({"id": doc.id, ...doc.data() as Map<String, dynamic>});
+    }).toList();
+  }
 }
 
 // ─── Repository ──────────────────────────────────────────────────────────────
@@ -113,6 +140,26 @@ class CurriculumRepositoryImpl implements CurriculumRepository {
     try {
       final list = await remoteDataSource.getExams();
       return List<Exam>.from(list);
+    } catch (e) {
+      throw ErrorHandler.handleException(e);
+    }
+  }
+
+  @override
+  Future<List<CourseAssignment>> getCourseAssignments({String? courseId, String? teacherId}) async {
+    try {
+      final list = await remoteDataSource.getCourseAssignments(courseId: courseId, teacherId: teacherId);
+      return List<CourseAssignment>.from(list);
+    } catch (e) {
+      throw ErrorHandler.handleException(e);
+    }
+  }
+
+  @override
+  Future<List<Enrollment>> getEnrollments({int? year, int? semester, String? studentId}) async {
+    try {
+      final list = await remoteDataSource.getEnrollments(year: year, semester: semester, studentId: studentId);
+      return List<Enrollment>.from(list);
     } catch (e) {
       throw ErrorHandler.handleException(e);
     }

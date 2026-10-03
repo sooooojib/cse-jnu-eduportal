@@ -2,10 +2,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../domain/entities/user.dart';
 import '../../../../core/constants/role_constants.dart';
 
-class UserModel extends User {
-  final List<String> assignedCourseIds;
-  final bool isActive;
+String _tsToString(dynamic value) {
+  if (value == null) return DateTime.now().toIso8601String();
+  if (value is Timestamp) return value.toDate().toIso8601String();
+  return value.toString();
+}
 
+class UserModel extends User {
   const UserModel({
     required super.id,
     required super.email,
@@ -17,8 +20,11 @@ class UserModel extends User {
     super.year,
     super.semester,
     super.semesterStatus,
-    this.assignedCourseIds = const [],
-    this.isActive = true,
+    super.assignedCourseIds = const [],
+    super.fcmTokens = const [],
+    super.isActive = true,
+    super.createdAt,
+    super.updatedAt,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -37,13 +43,29 @@ class UserModel extends User {
               ?.map((e) => e.toString())
               .toList() ??
           const [],
+      fcmTokens: (json['fcmTokens'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
       isActive: json['isActive'] as bool? ?? true,
+      createdAt: json['createdAt'] != null ? _tsToString(json['createdAt']) : null,
+      updatedAt: json['updatedAt'] != null ? _tsToString(json['updatedAt']) : null,
     );
   }
 
-  factory UserModel.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
+  factory UserModel.fromFirestore(
+    DocumentSnapshot<Map<String, dynamic>> doc, {
+    String? authoritativeRole,
+  }) {
     final data = doc.data() ?? {};
-    return UserModel.fromJson({'id': doc.id, ...data});
+    final effectiveRole = (authoritativeRole != null && authoritativeRole.isNotEmpty)
+        ? authoritativeRole
+        : (data['role'] as String? ?? 'STUDENT');
+    return UserModel.fromJson({
+      'id': doc.id,
+      ...data,
+      'role': effectiveRole,
+    });
   }
 
   Map<String, dynamic> toJson() {
@@ -52,14 +74,17 @@ class UserModel extends User {
       'email': email,
       'fullName': fullName,
       'role': role.value,
-      'studentId': studentId,
-      'phone': phone,
-      'avatarUrl': avatarUrl,
-      'year': year,
-      'semester': semester,
-      'semesterStatus': semesterStatus,
+      if (studentId != null) 'studentId': studentId,
+      if (phone != null) 'phone': phone,
+      if (avatarUrl != null) 'avatarUrl': avatarUrl,
+      if (year != null) 'year': year,
+      if (semester != null) 'semester': semester,
+      if (semesterStatus != null) 'semesterStatus': semesterStatus,
       'assignedCourseIds': assignedCourseIds,
+      'fcmTokens': fcmTokens,
       'isActive': isActive,
+      if (createdAt != null) 'createdAt': createdAt,
+      if (updatedAt != null) 'updatedAt': updatedAt,
     };
   }
 
@@ -75,6 +100,7 @@ class UserModel extends User {
       if (semester != null) 'semester': semester,
       if (semesterStatus != null) 'semesterStatus': semesterStatus,
       'assignedCourseIds': assignedCourseIds,
+      'fcmTokens': fcmTokens,
       'isActive': isActive,
       'updatedAt': FieldValue.serverTimestamp(),
     };

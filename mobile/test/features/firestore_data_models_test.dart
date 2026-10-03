@@ -3,15 +3,16 @@ import 'package:cse_jnu_eduportal/core/constants/role_constants.dart';
 import 'package:cse_jnu_eduportal/features/auth/data/models/user_model.dart';
 import 'package:cse_jnu_eduportal/features/auth/data/models/signup_request_model.dart';
 import 'package:cse_jnu_eduportal/features/curriculum/data/models/curriculum_models.dart';
+import 'package:cse_jnu_eduportal/features/attendance/domain/entities/attendance_entities.dart';
 import 'package:cse_jnu_eduportal/features/attendance/data/models/attendance_models.dart';
 import 'package:cse_jnu_eduportal/features/counseling/data/models/counseling_models.dart';
 import 'package:cse_jnu_eduportal/features/feedback/data/models/feedback_models.dart';
-import 'package:cse_jnu_eduportal/features/profile/data/repositories/semester_repository_impl.dart';
+import 'package:cse_jnu_eduportal/features/profile/data/models/semester_upgrade_request_model.dart';
 import 'package:cse_jnu_eduportal/features/notifications/data/models/notification_models.dart';
 
 void main() {
   group('Firestore Data Models & Serialization Tests', () {
-    test('UserModel serializes and deserializes correctly', () {
+    test('1. UserModel serializes and deserializes correctly', () {
       final model = UserModel.fromJson({
         'id': 'uid_123',
         'email': 'student@cse.jnu.ac.bd',
@@ -21,6 +22,7 @@ void main() {
         'year': 3,
         'semester': 1,
         'assignedCourseIds': ['CSE-3101'],
+        'fcmTokens': ['token_123'],
         'isActive': true,
       });
 
@@ -28,14 +30,17 @@ void main() {
       expect(model.role, UserRole.student);
       expect(model.fullName, 'Sajib Ahmed');
       expect(model.assignedCourseIds, ['CSE-3101']);
+      expect(model.fcmTokens, ['token_123']);
+      expect(model.isActive, true);
 
       final firestoreMap = model.toFirestore();
       expect(firestoreMap['email'], 'student@cse.jnu.ac.bd');
       expect(firestoreMap['role'], 'STUDENT');
       expect(firestoreMap['year'], 3);
+      expect(firestoreMap['fcmTokens'], ['token_123']);
     });
 
-    test('SignupRequestModel handles serialization and pending status', () {
+    test('2. SignupRequestModel handles serialization and pending status', () {
       final model = SignupRequestModel.fromJson({
         'id': 'req_99',
         'email': 'applicant@cse.jnu.ac.bd',
@@ -54,7 +59,7 @@ void main() {
       expect(json['status'], 'PENDING');
     });
 
-    test('CourseModel and ScheduleSlotModel serialize accurately', () {
+    test('3. CourseModel, CourseAssignmentModel & EnrollmentModel serialize accurately', () {
       final course = CourseModel.fromJson({
         'id': 'CSE-3101',
         'code': 'CSE-3101',
@@ -64,11 +69,41 @@ void main() {
         'semester': 1,
         'courseType': 'THEORY',
         'teacherName': 'Dr. Shafiul Alam',
+        'coordinatorId': 'uid_teacher_1',
       });
 
       expect(course.code, 'CSE-3101');
       expect(course.credit, 3.0);
+      expect(course.coordinatorId, 'uid_teacher_1');
 
+      final assignment = CourseAssignmentModel.fromJson({
+        'id': 'asg_1',
+        'courseId': 'CSE-3101',
+        'courseCode': 'CSE-3101',
+        'courseTitle': 'Operating Systems',
+        'teacherId': 'uid_teacher_1',
+        'teacherName': 'Dr. Shafiul Alam',
+        'isCoordinator': true,
+      });
+
+      expect(assignment.courseCode, 'CSE-3101');
+      expect(assignment.isCoordinator, true);
+
+      final enrollment = EnrollmentModel.fromJson({
+        'id': 'enr_1',
+        'studentId': 'uid_student_42',
+        'studentName': 'Sajib Ahmed',
+        'studentRoll': '2020CSE042',
+        'year': 3,
+        'semester': 1,
+        'enrolledCourseIds': ['CSE-3101', 'CSE-3102'],
+      });
+
+      expect(enrollment.studentRoll, '2020CSE042');
+      expect(enrollment.enrolledCourseIds.length, 2);
+    });
+
+    test('4. ScheduleSlotModel and ExamModel serialize accurately', () {
       final slot = ScheduleSlotModel.fromJson({
         'id': 'slot_1',
         'courseId': 'CSE-3101',
@@ -87,9 +122,26 @@ void main() {
 
       expect(slot.room, 'Room 402');
       expect(slot.dayOfWeek, 'SUNDAY');
+
+      final exam = ExamModel.fromJson({
+        'id': 'exam_1',
+        'courseId': 'CSE-3101',
+        'courseCode': 'CSE-3101',
+        'courseTitle': 'Operating Systems',
+        'title': 'Midterm Assessment 1',
+        'examDate': '2026-09-15',
+        'startTime': '10:00',
+        'endTime': '11:30',
+        'room': 'Room 402',
+        'year': 3,
+        'semester': 1,
+      });
+
+      expect(exam.title, 'Midterm Assessment 1');
+      expect(exam.examDate, '2026-09-15');
     });
 
-    test('AttendanceSessionModel and AttendanceRecordModel handle verification codes', () {
+    test('5. AttendanceSessionModel, AttendanceRecordModel & VerificationResult handle invariants', () {
       final session = AttendanceSessionModel.fromJson({
         'id': 'sess_1',
         'courseId': 'CSE-3101',
@@ -108,18 +160,38 @@ void main() {
       expect(session.code, '7K9P2X');
       expect(session.isActive, true);
 
+      // Verify composite docId invariant
+      final studentId = 'uid_student_42';
+      final compositeDocId = '${session.id}_$studentId';
+      expect(compositeDocId, 'sess_1_uid_student_42');
+
       final record = AttendanceRecordModel.fromJson({
-        'id': 'rec_1',
+        'id': compositeDocId,
+        'sessionId': session.id,
+        'studentId': studentId,
+        'studentName': 'Sajib Ahmed',
+        'studentRoll': '2020CSE042',
         'courseCode': 'CSE-3101',
         'courseTitle': 'Operating Systems',
         'status': 'PRESENT',
         'verifiedAt': '2026-08-31T09:05:00Z',
       });
 
+      expect(record.id, 'sess_1_uid_student_42');
+      expect(record.studentName, 'Sajib Ahmed');
       expect(record.status, 'PRESENT');
+
+      const result = AttendanceVerificationResult(
+        success: true,
+        message: 'Attendance marked successfully.',
+        courseCode: 'CSE-3101',
+        recordId: 'sess_1_uid_student_42',
+      );
+      expect(result.success, true);
+      expect(result.recordId, 'sess_1_uid_student_42');
     });
 
-    test('CounselingSlotModel and CounselingBookingModel handle booking statuses', () {
+    test('6. CounselingSlotModel and CounselingBookingModel handle student & status properties', () {
       final slot = CounselingSlotModel.fromJson({
         'id': 'slot_1',
         'teacherId': 't_1',
@@ -137,6 +209,8 @@ void main() {
       final booking = CounselingBookingModel.fromJson({
         'id': 'book_1',
         'slotId': 'slot_1',
+        'studentId': 'uid_student_42',
+        'studentName': 'Sajib Ahmed',
         'teacherId': 't_1',
         'teacherName': 'Dr. Shafiul Alam',
         'slotDate': '2026-09-02',
@@ -148,11 +222,22 @@ void main() {
         'createdAt': '2026-08-31T20:00:00Z',
       });
 
+      expect(booking.studentId, 'uid_student_42');
+      expect(booking.studentName, 'Sajib Ahmed');
       expect(booking.category, 'ACADEMIC_ADVISING');
       expect(booking.status, 'PENDING');
     });
 
-    test('FeedbackItemModel handles anonymous reviews and threaded replies', () {
+    test('7. FeedbackItemModel, FeedbackReplyModel & AttachmentModel handle anonymous reviews', () {
+      final attachment = AttachmentModel.fromJson({
+        'id': 'att_1',
+        'fileName': 'note.png',
+        'fileUrl': 'https://firebasestorage.googleapis.com/...',
+        'mimeType': 'image/png',
+        'fileSize': 1024,
+      });
+      expect(attachment.fileName, 'note.png');
+
       final feedback = FeedbackItemModel.fromJson({
         'id': 'fb_1',
         'teacherId': 't_1',
@@ -187,7 +272,7 @@ void main() {
       expect(feedback.replies.first.replyText, 'Thank you!');
     });
 
-    test('SemesterStatusModel and NotificationModels parse correctly', () {
+    test('8. SemesterUpgradeRequestModel, SemesterStatusModel & NotificationModels parse correctly', () {
       final semStatus = SemesterStatusModel.fromJson({
         'currentYear': 3,
         'currentSemester': 1,
@@ -200,6 +285,23 @@ void main() {
       expect(semStatus.currentYear, 3);
       expect(semStatus.requestedSemester, 2);
 
+      final semUpgrade = SemesterUpgradeRequestModel.fromJson({
+        'id': 'sem_req_1',
+        'studentId': 'uid_student_42',
+        'studentName': 'Sajib Ahmed',
+        'studentRoll': '2020CSE042',
+        'currentYear': 2,
+        'currentSemester': 2,
+        'requestedYear': 3,
+        'requestedSemester': 1,
+        'status': 'PENDING',
+        'createdAt': '2026-08-31T20:00:00Z',
+      });
+
+      expect(semUpgrade.id, 'sem_req_1');
+      expect(semUpgrade.studentRoll, '2020CSE042');
+      expect(semUpgrade.requestedYear, 3);
+
       final notif = AppNotificationModel.fromJson({
         'id': 'notif_1',
         'title': 'Booking Approved',
@@ -211,6 +313,23 @@ void main() {
 
       expect(notif.isRead, false);
       expect(notif.notificationType, 'COUNSELING');
+
+      final feed = NotificationFeedModel.fromJson({
+        'unreadCount': 1,
+        'notifications': [
+          {
+            'id': 'notif_1',
+            'title': 'Booking Approved',
+            'body': 'Your appointment was approved.',
+            'notificationType': 'COUNSELING',
+            'isRead': false,
+            'createdAt': '2026-08-31T20:00:00Z',
+          }
+        ],
+      });
+
+      expect(feed.unreadCount, 1);
+      expect(feed.notifications.length, 1);
     });
   });
 }

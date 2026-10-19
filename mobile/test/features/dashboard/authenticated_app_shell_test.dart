@@ -567,7 +567,8 @@ void main() {
 
       await tester.pumpWidget(MaterialApp.router(routerConfig: router));
       await tester.pumpAndSettle();
-      expect(find.text('Admin Console'), findsWidgets);
+      expect(find.text('Administrator'), findsWidgets);
+      expect(find.text('Console'), findsWidgets);
     });
   });
 }

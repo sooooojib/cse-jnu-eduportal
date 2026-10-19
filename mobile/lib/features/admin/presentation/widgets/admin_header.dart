@@ -26,21 +26,6 @@ class AdminHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Role Title Header (Shell provides top app bar and actions)
-        Padding(
-          padding: const EdgeInsets.only(top: 2, bottom: 4),
-          child: Text(
-            'Admin Console',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.6,
-              color: isDark ? Colors.white : const Color(0xFF0F172A),
-            ),
-          ),
-        ),
-        const SizedBox(height: 14),
-
         // Modern Executive Welcome Card
         Container(
           width: double.infinity,

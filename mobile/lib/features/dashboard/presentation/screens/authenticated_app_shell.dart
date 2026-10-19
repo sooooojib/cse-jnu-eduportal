@@ -162,10 +162,10 @@ class _AuthenticatedAppShellState extends State<AuthenticatedAppShell> {
       shellTitle = 'Admin Console';
       screens = [
         AdminDashboardScreen(authController: _authController),
-        const AdminUserDirectoryScreen(),
-        const AdminSignupRequestsScreen(),
-        const AdminCourseManagementScreen(),
-        const AdminSettingsScreen(),
+        const AdminUserDirectoryScreen(showAppBar: false),
+        const AdminSignupRequestsScreen(showAppBar: false),
+        const AdminCourseManagementScreen(showAppBar: false),
+        const AdminSettingsScreen(showAppBar: false),
       ];
       destinations = const [
         NavigationDestination(

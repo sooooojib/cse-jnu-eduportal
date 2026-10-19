@@ -275,7 +275,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Header checks
-      expect(find.text('Admin Console'), findsOneWidget);
+      expect(find.text('JAGANNATH UNIVERSITY'), findsOneWidget);
       expect(find.text('Welcome, Chief Administrator'), findsOneWidget);
       expect(find.text('Administrator'), findsOneWidget);
 
@@ -414,7 +414,8 @@ void main() {
       await tester.pumpWidget(MaterialApp.router(routerConfig: router));
       await tester.pumpAndSettle();
 
-      expect(find.text('Admin Console'), findsOneWidget);
+      expect(find.text('Administrator'), findsOneWidget);
+      expect(find.text('Console'), findsOneWidget);
     });
 
     testWidgets('8. Non-admin (Student) attempting to access Admin Dashboard is redirected', (tester) async {
@@ -431,7 +432,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Student redirected to student dashboard
-      expect(find.text('Admin Console'), findsNothing);
+      expect(find.text('Console'), findsNothing);
       expect(find.textContaining('Student User'), findsOneWidget);
     });
 

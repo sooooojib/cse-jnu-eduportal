@@ -241,7 +241,8 @@ void main() {
       await tester.pumpWidget(MaterialApp.router(routerConfig: router));
       await tester.pumpAndSettle();
 
-      expect(find.text('Admin Console'), findsOneWidget);
+      expect(find.text('Administrator'), findsOneWidget);
+      expect(find.text('Console'), findsOneWidget);
     });
 
     testWidgets('Admin user is permitted on Admin Dashboard', (tester) async {
@@ -257,7 +258,8 @@ void main() {
       await tester.pumpWidget(MaterialApp.router(routerConfig: router));
       await tester.pumpAndSettle();
 
-      expect(find.text('Admin Console'), findsOneWidget);
+      expect(find.text('Administrator'), findsOneWidget);
+      expect(find.text('Console'), findsOneWidget);
     });
 
     testWidgets('Disabled account user is redirected to Login Screen', (tester) async {

@@ -28,11 +28,13 @@ import '../../domain/repositories/admin_repository.dart';
 class AdminUserDirectoryScreen extends StatefulWidget {
   final AdminRepository? repository;
   final int? initialRoleIndex;
+  final bool showAppBar;
 
   const AdminUserDirectoryScreen({
     super.key,
     this.repository,
     this.initialRoleIndex,
+    this.showAppBar = true,
   });
 
   @override
@@ -395,18 +397,20 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
     final isDark = context.isDarkMode;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Department User Directory'),
-        actions: [
-          const ThemeToggleButton(showBackground: false),
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            tooltip: 'Refresh',
-            onPressed: _loadUsers,
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
+      appBar: widget.showAppBar
+          ? AppBar(
+              title: const Text('Department User Directory'),
+              actions: [
+                const ThemeToggleButton(showBackground: false),
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded),
+                  tooltip: 'Refresh',
+                  onPressed: _loadUsers,
+                ),
+                const SizedBox(width: 8),
+              ],
+            )
+          : null,
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: const Color(0xFF7E22CE),
         foregroundColor: Colors.white,
@@ -415,6 +419,7 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
         onPressed: _showCreateUserModal,
       ),
       body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Filter & Search Header
           Padding(
@@ -619,8 +624,13 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
 
 class AdminSignupRequestsScreen extends StatefulWidget {
   final AdminRepository? repository;
+  final bool showAppBar;
 
-  const AdminSignupRequestsScreen({super.key, this.repository});
+  const AdminSignupRequestsScreen({
+    super.key,
+    this.repository,
+    this.showAppBar = true,
+  });
 
   @override
   State<AdminSignupRequestsScreen> createState() => _AdminSignupRequestsScreenState();
@@ -767,14 +777,17 @@ class _AdminSignupRequestsScreenState extends State<AdminSignupRequestsScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Signup Petitions Queue'),
-        actions: [
-          IconButton(icon: const Icon(Icons.refresh_rounded), onPressed: _loadRequests),
-          const SizedBox(width: 8),
-        ],
-      ),
+      appBar: widget.showAppBar
+          ? AppBar(
+              title: const Text('Signup Petitions Queue'),
+              actions: [
+                IconButton(icon: const Icon(Icons.refresh_rounded), onPressed: _loadRequests),
+                const SizedBox(width: 8),
+              ],
+            )
+          : null,
       body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -810,82 +823,86 @@ class _AdminSignupRequestsScreenState extends State<AdminSignupRequestsScreen> {
                     ? Center(child: AppErrorStateView(message: _errorMessage!, onRetry: _loadRequests))
                     : _requests.isEmpty
                         ? const Center(child: AppEmptyStateView(title: 'No Petitions Found', message: 'No registration petitions match this filter.'))
-                        : ListView.separated(
-                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
-                            itemCount: _requests.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 10),
-                            itemBuilder: (context, i) {
-                              final req = _requests[i];
-                              return AppCard(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      crossAxisAlignment: CrossAxisAlignment.center,
-                                      children: [
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                req.fullName,
-                                                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                              const SizedBox(height: 2),
-                                              Text(
-                                                req.email,
-                                                style: const TextStyle(fontSize: 12, color: Colors.grey),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        RoleBadgeChip(role: req.role, isCompact: true),
-                                      ],
-                                    ),
-                                    if (req.studentId != null || req.phone != null) ...[
-                                      const SizedBox(height: 6),
-                                      Wrap(
-                                        spacing: 8,
+                        : RefreshIndicator(
+                            color: const Color(0xFF7E22CE),
+                            onRefresh: _loadRequests,
+                            child: ListView.separated(
+                              padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+                              itemCount: _requests.length,
+                              separatorBuilder: (_, __) => const SizedBox(height: 10),
+                              itemBuilder: (context, i) {
+                                final req = _requests[i];
+                                return AppCard(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        crossAxisAlignment: CrossAxisAlignment.center,
                                         children: [
-                                          if (req.studentId != null)
-                                            Text('Student ID: ${req.studentId}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                                          if (req.phone != null)
-                                            Text('Phone: ${req.phone}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  req.fullName,
+                                                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  req.email,
+                                                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          RoleBadgeChip(role: req.role, isCompact: true),
+                                        ],
+                                      ),
+                                      if (req.studentId != null || req.phone != null) ...[
+                                        const SizedBox(height: 6),
+                                        Wrap(
+                                          spacing: 8,
+                                          children: [
+                                            if (req.studentId != null)
+                                              Text('Student ID: ${req.studentId}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                            if (req.phone != null)
+                                              Text('Phone: ${req.phone}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                          ],
+                                        ),
+                                      ],
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text('Status: ${req.status}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: req.status == 'PENDING' ? const Color(0xFFDC2626) : (req.status == 'APPROVED' ? const Color(0xFF047857) : Colors.grey))),
+                                          if (req.status == 'PENDING')
+                                            Row(
+                                              children: [
+                                                ElevatedButton(
+                                                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF047857), foregroundColor: Colors.white),
+                                                  onPressed: () => _approve(req),
+                                                  child: const Text('Approve'),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                OutlinedButton(
+                                                  style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFFDC2626)),
+                                                  onPressed: () => _reject(req),
+                                                  child: const Text('Reject'),
+                                                ),
+                                              ],
+                                            ),
                                         ],
                                       ),
                                     ],
-                                    const SizedBox(height: 8),
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text('Status: ${req.status}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: req.status == 'PENDING' ? const Color(0xFFDC2626) : (req.status == 'APPROVED' ? const Color(0xFF047857) : Colors.grey))),
-                                        if (req.status == 'PENDING')
-                                          Row(
-                                            children: [
-                                              ElevatedButton(
-                                                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF047857), foregroundColor: Colors.white),
-                                                onPressed: () => _approve(req),
-                                                child: const Text('Approve'),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              OutlinedButton(
-                                                style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFFDC2626)),
-                                                onPressed: () => _reject(req),
-                                                child: const Text('Reject'),
-                                              ),
-                                            ],
-                                          ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
+                                  ),
+                                );
+                              },
+                            ),
                           ),
           ),
         ],
@@ -1265,8 +1282,13 @@ class _AdminSemesterRequestsScreenState extends State<AdminSemesterRequestsScree
 
 class AdminCourseManagementScreen extends StatefulWidget {
   final AdminRepository? repository;
+  final bool showAppBar;
 
-  const AdminCourseManagementScreen({super.key, this.repository});
+  const AdminCourseManagementScreen({
+    super.key,
+    this.repository,
+    this.showAppBar = true,
+  });
 
   @override
   State<AdminCourseManagementScreen> createState() => _AdminCourseManagementScreenState();
@@ -1483,13 +1505,15 @@ class _AdminCourseManagementScreenState extends State<AdminCourseManagementScree
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Course Catalog Management'),
-        actions: [
-          IconButton(icon: const Icon(Icons.refresh_rounded), onPressed: _loadCourses),
-          const SizedBox(width: 8),
-        ],
-      ),
+      appBar: widget.showAppBar
+          ? AppBar(
+              title: const Text('Course Catalog Management'),
+              actions: [
+                IconButton(icon: const Icon(Icons.refresh_rounded), onPressed: _loadCourses),
+                const SizedBox(width: 8),
+              ],
+            )
+          : null,
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: const Color(0xFF047857),
         foregroundColor: Colors.white,
@@ -1503,75 +1527,79 @@ class _AdminCourseManagementScreenState extends State<AdminCourseManagementScree
               ? Center(child: AppErrorStateView(message: _errorMessage!, onRetry: _loadCourses))
               : _courses.isEmpty
                   ? const Center(child: AppEmptyStateView(title: 'No Courses Found', message: 'Tap "+ Add Course" to create the first curriculum unit.'))
-                  : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
-                      itemCount: _courses.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (context, i) {
-                        final c = _courses[i];
-                        return AppCard(
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: isDark ? const Color(0xFF312E81).withValues(alpha: 0.35) : const Color(0xFFEEF2FF),
-                                  borderRadius: BorderRadius.circular(12),
+                  : RefreshIndicator(
+                      color: const Color(0xFF047857),
+                      onRefresh: _loadCourses,
+                      child: ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
+                        itemCount: _courses.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 10),
+                        itemBuilder: (context, i) {
+                          final c = _courses[i];
+                          return AppCard(
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: isDark ? const Color(0xFF312E81).withValues(alpha: 0.35) : const Color(0xFFEEF2FF),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Icon(Icons.menu_book_rounded, color: isDark ? const Color(0xFFA5B4FC) : const Color(0xFF4F46E5), size: 24),
                                 ),
-                                child: Icon(Icons.menu_book_rounded, color: isDark ? const Color(0xFFA5B4FC) : const Color(0xFF4F46E5), size: 24),
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Wrap(
-                                      crossAxisAlignment: WrapCrossAlignment.center,
-                                      spacing: 8,
-                                      runSpacing: 4,
-                                      children: [
-                                        Text(c.code, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.grey[200],
-                                            borderRadius: BorderRadius.circular(6),
-                                          ),
-                                          child: Text(
-                                            '${c.credit} Credits • ${c.courseType}',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
-                                              color: isDark ? Colors.white70 : Colors.black87,
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Wrap(
+                                        crossAxisAlignment: WrapCrossAlignment.center,
+                                        spacing: 8,
+                                        runSpacing: 4,
+                                        children: [
+                                          Text(c.code, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.grey[200],
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              '${c.credit} Credits • ${c.courseType}',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold,
+                                                color: isDark ? Colors.white70 : Colors.black87,
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                      ],
+                                        ],
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(c.title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                                      const SizedBox(height: 2),
+                                      Text('Year ${c.year}, Semester ${c.semester} • Teacher: ${c.teacherName ?? "Unassigned"}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                    ],
+                                  ),
+                                ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.edit_outlined, size: 20),
+                                      onPressed: () => _showCourseDialog(existing: c),
                                     ),
-                                    const SizedBox(height: 2),
-                                    Text(c.title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                                    const SizedBox(height: 2),
-                                    Text('Year ${c.year}, Semester ${c.semester} • Teacher: ${c.teacherName ?? "Unassigned"}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFDC2626), size: 20),
+                                      onPressed: () => _deleteCourse(c),
+                                    ),
                                   ],
                                 ),
-                              ),
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.edit_outlined, size: 20),
-                                    onPressed: () => _showCourseDialog(existing: c),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFDC2626), size: 20),
-                                    onPressed: () => _deleteCourse(c),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        );
-                      },
+                              ],
+                            ),
+                          );
+                        },
+                      ),
                     ),
     );
   }
@@ -2511,15 +2539,23 @@ class _AdminFeedbackModerationScreenState extends State<AdminFeedbackModerationS
 // ═════════════════════════════════════════════════════════════════════════════
 
 class AdminSettingsScreen extends StatelessWidget {
-  const AdminSettingsScreen({super.key});
+  final bool showAppBar;
+
+  const AdminSettingsScreen({
+    super.key,
+    this.showAppBar = true,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('System Settings'),
-        actions: const [ThemeToggleButton(showBackground: false), SizedBox(width: 8)],
-      ),
+      appBar: showAppBar
+          ? AppBar(
+              title: const Text('System Settings'),
+              actions: const [ThemeToggleButton(showBackground: false), SizedBox(width: 8)],
+            )
+          : null,
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [

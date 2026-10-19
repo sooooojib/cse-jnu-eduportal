@@ -15,6 +15,7 @@ class AppNotificationModel extends AppNotification {
     required super.notificationType,
     super.referenceType,
     super.referenceId,
+    super.route,
     required super.isRead,
     required super.createdAt,
   });
@@ -27,6 +28,7 @@ class AppNotificationModel extends AppNotification {
       notificationType: json['notificationType'] as String? ?? 'GENERAL',
       referenceType: json['referenceType'] as String?,
       referenceId: json['referenceId'] as String?,
+      route: json['route'] as String?,
       isRead: json['isRead'] as bool? ?? false,
       createdAt: _tsToString(json['createdAt']),
     );
@@ -45,6 +47,7 @@ class AppNotificationModel extends AppNotification {
       'notificationType': notificationType,
       'referenceType': referenceType,
       'referenceId': referenceId,
+      'route': route,
       'isRead': isRead,
       'createdAt': createdAt,
     };
@@ -57,6 +60,7 @@ class AppNotificationModel extends AppNotification {
       'notificationType': notificationType,
       'referenceType': referenceType,
       'referenceId': referenceId,
+      if (route != null) 'route': route,
       'isRead': isRead,
       'createdAt': FieldValue.serverTimestamp(),
     };

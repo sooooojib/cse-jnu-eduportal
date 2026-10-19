@@ -51,11 +51,13 @@ class UserRepositoryImpl implements UserRepository {
   @override
   Future<void> updateProfile({
     required String uid,
+    String? fullName,
     String? phone,
     String? avatarUrl,
   }) async {
     try {
       final updateData = <String, dynamic>{
+        if (fullName != null) 'fullName': fullName,
         if (phone != null) 'phone': phone,
         if (avatarUrl != null) 'avatarUrl': avatarUrl,
         'updatedAt': FieldValue.serverTimestamp(),

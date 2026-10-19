@@ -81,6 +81,7 @@ class SemesterUpgradeRequestModel extends SemesterUpgradeRequest {
 
 class SemesterStatusModel extends SemesterStatus {
   const SemesterStatusModel({
+    super.requestId,
     super.currentYear,
     super.currentSemester,
     super.requestedYear,
@@ -92,6 +93,7 @@ class SemesterStatusModel extends SemesterStatus {
 
   factory SemesterStatusModel.fromJson(Map<String, dynamic> json) {
     return SemesterStatusModel(
+      requestId: json['requestId'] as String? ?? json['id'] as String?,
       currentYear: json['currentYear'] as int?,
       currentSemester: json['currentSemester'] as int?,
       requestedYear: json['requestedYear'] as int?,
@@ -109,6 +111,7 @@ class SemesterStatusModel extends SemesterStatus {
 
   Map<String, dynamic> toJson() {
     return {
+      if (requestId != null) 'requestId': requestId,
       if (currentYear != null) 'currentYear': currentYear,
       if (currentSemester != null) 'currentSemester': currentSemester,
       if (requestedYear != null) 'requestedYear': requestedYear,

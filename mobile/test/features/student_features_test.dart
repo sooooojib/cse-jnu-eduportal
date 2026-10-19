@@ -50,7 +50,7 @@ class MockCurriculumRepository implements CurriculumRepository {
   }
 
   @override
-  Future<List<ScheduleSlot>> getSchedule({String? day}) async {
+  Future<List<ScheduleSlot>> getSchedule({String? day, int? year, int? semester, String? teacherId}) async {
     return const [
       ScheduleSlot(
         id: 's1',
@@ -70,7 +70,30 @@ class MockCurriculumRepository implements CurriculumRepository {
   }
 
   @override
-  Future<List<Exam>> getExams() async {
+  Future<ScheduleSlot> createScheduleSlot(ScheduleSlot slot) async => slot;
+
+  @override
+  Future<ScheduleSlot> updateScheduleSlot(ScheduleSlot slot) async => slot;
+
+  @override
+  Future<void> deleteScheduleSlot(String slotId) async {}
+
+  @override
+  Future<TeacherAvailability> getTeacherAvailability({required String teacherId, required String dayOfWeek, String? date}) async =>
+      TeacherAvailability(teacherId: teacherId, teacherName: '', dayOfWeek: dayOfWeek, busySlots: const [], freeWindows: const []);
+
+  @override
+  Future<WhatsAppBroadcastData> getWhatsAppBroadcast({int? year, int? semester}) async =>
+      const WhatsAppBroadcastData(date: '', dayOfWeek: '', slotCount: 0, broadcastText: '', whatsappUrl: '');
+
+  @override
+  Future<List<Course>> getAllCourses({int? year, int? semester}) async => const [];
+
+  @override
+  Future<List<Map<String, String>>> getAllTeachers() async => const [];
+
+  @override
+  Future<List<Exam>> getExams({int? year, int? semester, String? courseId}) async {
     return const [
       Exam(
         id: 'e1',
@@ -87,6 +110,15 @@ class MockCurriculumRepository implements CurriculumRepository {
       ),
     ];
   }
+
+  @override
+  Future<Exam> createExam(Exam exam) async => exam;
+
+  @override
+  Future<Exam> updateExam(Exam exam) async => exam;
+
+  @override
+  Future<void> deleteExam(String examId) async {}
 
   @override
   Future<List<CourseAssignment>> getCourseAssignments({String? courseId, String? teacherId}) async => const [];
@@ -136,6 +168,49 @@ class MockAttendanceRepository implements AttendanceRepository {
     }
     throw Exception('Invalid verification code');
   }
+
+  @override
+  Future<AttendanceSession> startSession({required String courseId, int? durationMinutes}) async {
+    return AttendanceSession(
+      id: 'session-1',
+      courseId: courseId,
+      courseCode: 'CSE-3101',
+      courseTitle: 'Database Systems',
+      teacherId: 't1',
+      teacherName: 'Prof. Rahman',
+      code: 'ABC234',
+      isActive: true,
+      status: 'ACTIVE',
+      sessionDate: '2026-11-10',
+      totalPresentCount: 0,
+      createdAt: '2026-11-10T09:00:00Z',
+      expiresAt: DateTime.now().add(const Duration(minutes: 15)),
+    );
+  }
+
+  @override
+  Future<void> deactivateSession({required String sessionId}) async {}
+
+  @override
+  Future<AttendanceSession?> getActiveSession({required String courseId}) async => null;
+
+  @override
+  Future<SessionRoster> getSessionRoster({required String sessionId}) async {
+    return const SessionRoster(
+      sessionId: 'session-1',
+      courseCode: 'CSE-3101',
+      courseTitle: 'Database Systems',
+      sessionDate: '2026-11-10',
+      code: 'ABC234',
+      isActive: true,
+      totalEnrolled: 0,
+      totalPresent: 0,
+      roster: [],
+    );
+  }
+
+  @override
+  Future<void> updateRoster({required String sessionId, required List<AttendanceRosterItem> updates}) async {}
 }
 
 class MockCounselingRepository implements CounselingRepository {
@@ -193,6 +268,41 @@ class MockCounselingRepository implements CounselingRepository {
 
   @override
   Future<void> cancelBooking(String requestId) async {}
+
+  @override
+  Future<CounselingSlot> createSlot({
+    required String slotDate,
+    required String startTime,
+    required String endTime,
+    String? notes,
+  }) async {
+    return CounselingSlot(
+      id: 'slot-new',
+      teacherId: 'teacher-1',
+      teacherName: 'Prof. Hasan',
+      teacherEmail: 'hasan@cse.jnu.ac.bd',
+      slotDate: slotDate,
+      startTime: startTime,
+      endTime: endTime,
+      status: 'AVAILABLE',
+      notes: notes,
+    );
+  }
+
+  @override
+  Future<List<CounselingSlot>> getTeacherSlots(String teacherId) async => const [];
+
+  @override
+  Future<List<CounselingBooking>> getTeacherRequests(String teacherId) async => const [];
+
+  @override
+  Future<void> approveBooking(String bookingId) async {}
+
+  @override
+  Future<void> rejectBooking(String bookingId, {String? reason}) async {}
+
+  @override
+  Future<void> deleteSlot(String slotId) async {}
 }
 
 class MockFeedbackRepository implements FeedbackRepository {
@@ -244,6 +354,90 @@ class MockFeedbackRepository implements FeedbackRepository {
       ),
     ];
   }
+
+  @override
+  Future<FeedbackItem> editFeedback({
+    required String feedbackId,
+    int? rating,
+    String? comments,
+    bool? isAnonymous,
+    List<Attachment>? attachments,
+  }) async {
+    return FeedbackItem(
+      id: feedbackId,
+      teacherId: 'teacher-1',
+      teacherName: 'Prof. Rahman',
+      rating: rating ?? 5,
+      comments: comments ?? 'Updated feedback',
+      isAnonymous: isAnonymous ?? false,
+      replies: const [],
+      createdAt: '2026-11-10T11:00:00Z',
+    );
+  }
+
+  @override
+  Future<List<FeedbackItem>> getTeacherFeedback({
+    required String teacherId,
+    String filter = 'ALL',
+  }) async {
+    return const [];
+  }
+
+  @override
+  Future<FeedbackItem> replyToFeedback({
+    required String feedbackId,
+    required String replyText,
+    List<Attachment> attachments = const [],
+  }) async {
+    return FeedbackItem(
+      id: feedbackId,
+      teacherId: 'teacher-1',
+      teacherName: 'Prof. Rahman',
+      rating: 5,
+      comments: 'Comments',
+      isAnonymous: false,
+      replies: [
+        FeedbackReply(
+          id: 'rep-new',
+          teacherName: 'Prof. Rahman',
+          replyText: replyText,
+          createdAt: '2026-11-10T13:00:00Z',
+        ),
+      ],
+      createdAt: '2026-11-10T11:00:00Z',
+    );
+  }
+
+  @override
+  Future<FeedbackItem> editFeedbackReply({
+    required String feedbackId,
+    required String replyId,
+    required String replyText,
+    List<Attachment>? attachments,
+  }) async {
+    return FeedbackItem(
+      id: feedbackId,
+      teacherId: 'teacher-1',
+      teacherName: 'Prof. Rahman',
+      rating: 5,
+      comments: 'Comments',
+      isAnonymous: false,
+      replies: [
+        FeedbackReply(
+          id: replyId,
+          teacherName: 'Prof. Rahman',
+          replyText: replyText,
+          createdAt: '2026-11-10T13:00:00Z',
+        ),
+      ],
+      createdAt: '2026-11-10T11:00:00Z',
+    );
+  }
+
+  @override
+  Future<List<FeedbackItem>> getAdminFeedback() async {
+    return const [];
+  }
 }
 
 class MockSemesterRepository implements SemesterRepository {
@@ -266,6 +460,25 @@ class MockSemesterRepository implements SemesterRepository {
       status: 'PENDING',
     );
   }
+
+  @override
+  Future<SemesterStatus> changeUpgradeRequest({
+    required String requestId,
+    required int requestedYear,
+    required int requestedSemester,
+  }) async {
+    return SemesterStatus(
+      requestId: requestId,
+      currentYear: 3,
+      currentSemester: 1,
+      requestedYear: requestedYear,
+      requestedSemester: requestedSemester,
+      status: 'PENDING',
+    );
+  }
+
+  @override
+  Future<void> dismissRejection({required String requestId}) async {}
 
   @override
   Future<List<SemesterUpgradeRequest>> getMyUpgradeRequests() async => const [];
@@ -294,6 +507,12 @@ class MockNotificationRepository implements NotificationRepository {
 
   @override
   Future<void> markAllAsRead() async {}
+
+  @override
+  Future<void> registerDeviceToken(String token) async {}
+
+  @override
+  Future<void> unregisterDeviceToken(String token) async {}
 }
 
 void main() {

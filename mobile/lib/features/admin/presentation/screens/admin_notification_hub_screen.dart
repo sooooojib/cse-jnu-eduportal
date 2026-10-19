@@ -4,6 +4,8 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/storage/cloud_storage_service.dart';
+import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../../../../shared/widgets/cards/app_card.dart';
 import '../../../../shared/widgets/dialogs/app_confirmation_dialog.dart';
 import '../../../../shared/widgets/states/app_empty_state_view.dart';
@@ -194,38 +196,36 @@ class _AdminNotificationHubScreenState extends State<AdminNotificationHubScreen>
               });
 
               String? finalUrl;
+              final authUser = sl.isRegistered<AuthController>() ? sl<AuthController>().currentUser : null;
+              final adminUid = authUser?.id ?? 'admin';
+              final noticeId = 'broadcast_${DateTime.now().millisecondsSinceEpoch}';
+              final storagePath = StoragePathBuilder.noticeAttachment(
+                noticeId: noticeId,
+                fileName: fileName,
+              );
 
-              // 2. Try Firebase Storage with proper MIME metadata and 4-second timeout
+              // 2. Upload via CloudStorageService with secure path & MIME verification
               try {
-                final mime = fileType == 'IMAGE'
-                    ? (fileName.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg')
-                    : (fileType == 'PDF' ? 'application/pdf' : 'application/octet-stream');
-
-                final ref = FirebaseStorage.instance
-                    .ref('notices/${DateTime.now().millisecondsSinceEpoch}_$fileName');
-
-                await ref.putFile(file, SettableMetadata(contentType: mime)).timeout(const Duration(seconds: 4));
-                finalUrl = await ref.getDownloadURL();
-              } catch (storageErr) {
-                debugPrint('Cloud storage upload bypassed ($storageErr). Storing as compressed direct attachment.');
-              }
-
-              // 3. Fallback: If cloud storage failed (e.g. project Spark plan or bucket unconfigured),
-              // embed image/doc as Base64 Data URL so it is preserved in Firestore
-              if (finalUrl == null) {
-                try {
-                  final bytes = await file.readAsBytes();
-                  if (bytes.lengthInBytes < 850 * 1024) {
-                    final mime = fileType == 'IMAGE'
-                        ? (fileName.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg')
-                        : (fileType == 'PDF' ? 'application/pdf' : 'application/octet-stream');
-                    finalUrl = 'data:$mime;base64,${base64Encode(bytes)}';
-                  } else {
-                    finalUrl = filePath;
-                  }
-                } catch (readErr) {
-                  debugPrint('Error reading file bytes: $readErr');
+                if (sl.isRegistered<CloudStorageService>()) {
+                  final storageService = sl<CloudStorageService>();
+                  final uploadResult = await storageService.uploadFile(
+                    file: file,
+                    storagePath: storagePath,
+                    uploadedBy: adminUid,
+                    isImageOnly: fileType == 'IMAGE',
+                  );
+                  finalUrl = uploadResult.downloadUrl;
+                } else {
+                  final mime = fileType == 'IMAGE'
+                      ? (fileName.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg')
+                      : (fileType == 'PDF' ? 'application/pdf' : 'application/octet-stream');
+                  final ref = FirebaseStorage.instance.ref(storagePath);
+                  await ref.putFile(file, SettableMetadata(contentType: mime, customMetadata: {'uploadedBy': adminUid})).timeout(const Duration(seconds: 4));
+                  finalUrl = await ref.getDownloadURL();
                 }
+              } catch (storageErr) {
+                debugPrint('Notice cloud storage upload error ($storageErr). Keeping local preview.');
+                finalUrl = filePath;
               }
 
               // 4. Update state with final URL (keeps file attached!)

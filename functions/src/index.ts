@@ -80,6 +80,43 @@ export const approveSignupRequest = onCall(async (request) => {
     updatedAt: now,
   });
 
+  // Create Welcome In-App Notification for Provisioned User
+  const welcomeNotifRef = db.collection("notifications").doc();
+  await welcomeNotifRef.set({
+    id: welcomeNotifRef.id,
+    userId: userRecord.uid,
+    title: "Account Approved",
+    body: "Welcome to CSE JnU EduPortal! Your account has been verified and activated.",
+    notificationType: "SIGNUP_DECISION",
+    referenceId: userRecord.uid,
+    referenceType: "SIGNUP",
+    route: role === "TEACHER" ? "/dashboard/teacher" : "/dashboard/student",
+    isRead: false,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  // Safe External Communication: Dispatch Onboarding Email (Non-blocking)
+  try {
+    const { html, text } = generateOnboardingEmailHtml({
+      fullName: reqData.fullName,
+      email: reqData.email,
+      role,
+      studentId: reqData.studentId,
+      tempPassword: randomPassword,
+    });
+    await safeDispatchEmail(db, {
+      to: reqData.email,
+      subject: "Welcome to CSE JnU EduPortal — Your Account Details",
+      html,
+      text,
+      templateType: "ONBOARDING",
+      metadata: { userId: userRecord.uid, role },
+    });
+  } catch (err) {
+    console.error("Non-blocking onboarding email error:", err);
+  }
+
   return {
     success: true,
     userId: userRecord.uid,
@@ -99,131 +136,127 @@ export const rejectSignupRequest = onCall(async (request) => {
   }
 
   const requestRef = db.collection("signupRequests").doc(requestId);
+  const requestDoc = await requestRef.get();
+  const reqData = requestDoc.data();
+
+  const declineReason = reason || "Does not meet departmental verification criteria.";
+
   await requestRef.update({
     status: "REJECTED",
-    rejectionReason: reason || "Does not meet departmental verification criteria.",
+    rejectionReason: declineReason,
     reviewedBy: request.auth.uid,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
+  // Safe External Communication: Dispatch Rejection Notification Email
+  if (reqData && reqData.email) {
+    try {
+      const { html, text } = generateSignupRejectionEmailHtml({
+        fullName: reqData.fullName || "Applicant",
+        email: reqData.email,
+        reason: declineReason,
+      });
+      await safeDispatchEmail(db, {
+        to: reqData.email,
+        subject: "CSE JnU EduPortal — Registration Update",
+        html,
+        text,
+        templateType: "SIGNUP_REJECTION",
+        metadata: { requestId },
+      });
+    } catch (err) {
+      console.error("Non-blocking rejection email error:", err);
+    }
+  }
+
   return { success: true, message: "Signup request rejected." };
 });
 
-// ─── SEMESTER UPGRADE APPROVAL ────────────────────────────────────────────────
+// ─── STAGE 28: EXTERNAL COMMUNICATION & WHATSAPP ENDPOINTS ───────────────────
 
-export const approveSemesterUpgrade = onCall(async (request) => {
+import {
+  normalizeBangladeshiPhone,
+  buildWhatsAppShareUrls,
+  generateOnboardingEmailHtml,
+  generateSignupRejectionEmailHtml,
+  safeDispatchEmail,
+} from "./communication";
+
+export const formatBangladeshiPhone = onCall((request) => {
+  const phone = request.data?.phone;
+  return normalizeBangladeshiPhone(phone);
+});
+
+export const generateWhatsAppDeepLinks = onCall((request) => {
+  const { text, phone } = request.data || {};
+  if (!text || typeof text !== "string") {
+    throw new HttpsError("invalid-argument", "Message text is required.");
+  }
+  return buildWhatsAppShareUrls(text, phone);
+});
+
+export const testEmailTransport = onCall(async (request) => {
   if (!request.auth || request.auth.token.role !== "ADMIN") {
-    throw new HttpsError("permission-denied", "Only administrators can approve semester upgrades.");
+    throw new HttpsError("permission-denied", "Only administrators can test email transport.");
   }
-
-  const { requestId } = request.data;
-  const upgradeRef = db.collection("semesterUpgradeRequests").doc(requestId);
-  const upgradeDoc = await upgradeRef.get();
-  if (!upgradeDoc.exists) {
-    throw new HttpsError("not-found", "Semester upgrade request not found.");
-  }
-
-  const uData = upgradeDoc.data()!;
-  const studentId = uData.studentId;
-  const newYear = uData.requestedYear;
-  const newSemester = uData.requestedSemester;
-
-  // Update Firestore user document
-  await db.collection("users").doc(studentId).update({
-    year: newYear,
-    semester: newSemester,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  const to = request.data?.to || request.auth.token.email;
+  return await safeDispatchEmail(db, {
+    to,
+    subject: "CSE JnU EduPortal — Email Transport Verification",
+    html: "<p>Email transport test succeeded.</p>",
+    text: "Email transport test succeeded.",
+    templateType: "TEST",
   });
-
-  // Update Custom Claims
-  const userRecord = await auth.getUser(studentId);
-  const existingClaims = userRecord.customClaims || {};
-  await auth.setCustomUserClaims(studentId, {
-    ...existingClaims,
-    year: newYear,
-    semester: newSemester,
-  });
-
-  await upgradeRef.update({
-    status: "APPROVED",
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
-
-  // Post in-app notification
-  await db.collection("notifications").add({
-    userId: studentId,
-    title: "Semester Upgrade Approved",
-    body: `Your academic level has been updated to Year ${newYear}, Semester ${newSemester}.`,
-    notificationType: "SEMESTER",
-    isRead: false,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
-
-  return { success: true };
 });
 
-// ─── COUNSELING BOOKING MUTUAL-EXCLUSION TRANSACTION ─────────────────────────
+// Note: Semester and Enrollment functions moved to ./semester.ts
 
-export const approveCounselingBooking = onCall(async (request) => {
+// Note: Counseling functions moved to ./counseling.ts for atomic concurrency & validation
+
+// ─── STAGE 27: NOTIFICATION ENGINE & FCM DISPATCH TRIGGER ─────────────────────
+
+import {
+  executeRegisterDeviceToken,
+  executeUnregisterDeviceToken,
+  executeMarkNotificationAsRead,
+  executeMarkAllNotificationsAsRead,
+  dispatchPushNotification,
+} from "./notifications";
+
+export const registerDeviceToken = onCall(async (request) => {
   if (!request.auth) {
-    throw new HttpsError("unauthenticated", "Must be logged in.");
+    throw new HttpsError("unauthenticated", "User must be authenticated to register device token.");
   }
-
-  const { bookingId } = request.data;
-  const bookingRef = db.collection("counselingBookings").doc(bookingId);
-
-  return db.runTransaction(async (transaction) => {
-    const bookingDoc = await transaction.get(bookingRef);
-    if (!bookingDoc.exists) {
-      throw new HttpsError("not-found", "Booking not found.");
-    }
-
-    const bData = bookingDoc.data()!;
-    if (bData.teacherId !== request.auth!.uid && request.auth!.token.role !== "ADMIN") {
-      throw new HttpsError("permission-denied", "Only the assigned teacher can approve this booking.");
-    }
-
-    const slotId = bData.slotId;
-    const slotRef = db.collection("counselingSlots").doc(slotId);
-    const slotDoc = await transaction.get(slotRef);
-    if (!slotDoc.exists) {
-      throw new HttpsError("not-found", "Associated counseling slot not found.");
-    }
-
-    // Lock Slot
-    transaction.update(slotRef, {
-      isBooked: true,
-      status: "BOOKED",
-      bookedStudentId: bData.studentId,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    // Approve winning booking
-    transaction.update(bookingRef, {
-      status: "APPROVED",
-      reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    // Query and reject all other pending bookings for the same slot
-    const competingQuery = db.collection("counselingBookings")
-      .where("slotId", "==", slotId)
-      .where("status", "==", "PENDING");
-    
-    const competingDocs = await transaction.get(competingQuery);
-    competingDocs.forEach((doc) => {
-      if (doc.id !== bookingId) {
-        transaction.update(doc.ref, {
-          status: "REJECTED",
-          reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-      }
-    });
-
-    return { success: true, message: "Booking approved and slot locked atomically." };
-  });
+  const token = request.data?.token;
+  return await executeRegisterDeviceToken(db, request.auth.uid, token);
 });
 
-// ─── PUSH NOTIFICATION DISPATCH TRIGGER ──────────────────────────────────────
+export const unregisterDeviceToken = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "User must be authenticated to unregister device token.");
+  }
+  const token = request.data?.token;
+  return await executeUnregisterDeviceToken(db, request.auth.uid, token);
+});
+
+export const markNotificationRead = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Authentication required.");
+  }
+  const { notificationId } = request.data || {};
+  return await executeMarkNotificationAsRead(
+    db,
+    { uid: request.auth.uid, role: request.auth.token.role || "STUDENT" },
+    notificationId
+  );
+});
+
+export const markAllNotificationsRead = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Authentication required.");
+  }
+  return await executeMarkAllNotificationsAsRead(db, { uid: request.auth.uid });
+});
 
 export const onNotificationCreated = onDocumentCreated(
   "notifications/{notificationId}",
@@ -232,34 +265,7 @@ export const onNotificationCreated = onDocumentCreated(
     if (!snap) return;
 
     const notifData = snap.data();
-    const userId = notifData.userId;
-    if (!userId) return;
-
-    // Fetch user FCM tokens
-    const userDoc = await db.collection("users").doc(userId).get();
-    if (!userDoc.exists) return;
-
-    const fcmTokens: string[] = userDoc.data()?.fcmTokens || [];
-    if (fcmTokens.length === 0) return;
-
-    const payload: admin.messaging.MulticastMessage = {
-      tokens: fcmTokens,
-      notification: {
-        title: notifData.title || "CSE JnU EduPortal",
-        body: notifData.body || "",
-      },
-      data: {
-        notificationType: notifData.notificationType || "GENERAL",
-        referenceId: notifData.referenceId || "",
-      },
-    };
-
-    try {
-      const response = await admin.messaging().sendEachForMulticast(payload);
-      console.log(`Dispatched FCM notifications: ${response.successCount} successful.`);
-    } catch (err) {
-      console.error("FCM dispatch error:", err);
-    }
+    await dispatchPushNotification(db, admin.messaging(), event.params.notificationId, notifData);
   }
 );
 
@@ -397,8 +403,123 @@ export const deleteUserByAdmin = onCall(async (request) => {
   // 3. Delete user document from Firestore
   await db.collection("users").doc(userId).delete();
 
-  return {
-    success: true,
-    message: "User deleted and references unassigned successfully.",
-  };
-});
+    return {
+      success: true,
+      message: "User deleted and references unassigned successfully.",
+    };
+  }
+);
+
+// ─── STAGE 20: AUTHORITATIVE ATTENDANCE FUNCTIONS ───────────────────────────
+
+export {
+  startAttendanceSession,
+  deactivateAttendanceSession,
+  submitAttendanceCode,
+  getAttendanceSessionRoster,
+  updateAttendanceRoster,
+  generateSecureAttendanceCode,
+} from "./attendance";
+
+// ─── STAGE 21: AUTHORITATIVE SCHEDULE FUNCTIONS ─────────────────────────────
+
+export {
+  createScheduleSlot,
+  updateScheduleSlot,
+  deleteScheduleSlot,
+  getTeacherAvailability,
+  getWhatsAppBroadcast,
+  parseTimeToMinutes,
+  checkIntervalOverlap,
+  getTomorrowInfo,
+} from "./schedule";
+
+// ─── STAGE 22: AUTHORITATIVE EXAM FUNCTIONS ─────────────────────────────────
+
+export {
+  createExam,
+  updateExam,
+  deleteExam,
+  validateExamInput,
+  executeCreateExam,
+  executeUpdateExam,
+  executeDeleteExam,
+  getTodayDateUtc6,
+} from "./exam";
+
+// ─── STAGE 23: AUTHORITATIVE COUNSELING FUNCTIONS ───────────────────────────
+
+export {
+  APPROVED_PURPOSES,
+  normalizeCounselingPurpose,
+  validateCounselingSlotInput,
+  executeCreateCounselingSlot,
+  executeDeleteCounselingSlot,
+  executeRequestBooking,
+  executeApproveBooking,
+  executeRejectBooking,
+  executeCancelBooking,
+  createCounselingSlot,
+  deleteCounselingSlot,
+  requestCounselingBooking,
+  approveCounselingBooking,
+  rejectCounselingBooking,
+  cancelCounselingBooking,
+} from "./counseling";
+
+// ─── STAGE 24: AUTHORITATIVE FEEDBACK FUNCTIONS ─────────────────────────────
+
+export {
+  validateFeedbackInput,
+  executeSubmitFeedback,
+  executeEditFeedback,
+  executeReplyToFeedback,
+  executeEditFeedbackReply,
+  executeGetTeacherFeedback,
+  executeGetStudentFeedback,
+  executeGetAdminFeedback,
+  submitFeedback,
+  editFeedback,
+  replyToFeedback,
+  editFeedbackReply,
+} from "./feedback";
+
+// ─── STAGE 25: SEMESTER AND ENROLLMENT WORKFLOW ─────────────────────────────
+
+export {
+  validateSemesterInput,
+  executeSubmitSemesterRequest,
+  executeChangeSemesterRequest,
+  executeDismissSemesterRejection,
+  executeApproveSemesterUpgrade,
+  executeRejectSemesterUpgrade,
+  executeGetStudentSemesterStatus,
+  requestSemesterUpgrade,
+  changeSemesterUpgradeRequest,
+  dismissSemesterRejection,
+  approveSemesterUpgrade,
+  rejectSemesterUpgrade,
+  getSemesterStatus,
+} from "./semester";
+
+// ─── STAGE 26: FIREBASE CLOUD STORAGE POLICY & DELETION ────────────────────
+
+export {
+  MAX_IMAGE_SIZE_BYTES,
+  MAX_DOCUMENT_SIZE_BYTES,
+  ALLOWED_IMAGE_MIME_TYPES,
+  ALLOWED_DOCUMENT_MIME_TYPES,
+  DISALLOWED_EXTENSIONS,
+  sanitizePathSegment,
+  isApprovedStoragePath,
+  validateFileTypeAndSize,
+  evaluateUploadPermission,
+  evaluateDeletePermission,
+  generateCanonicalStoragePath,
+  executeGetStorageUploadPolicy,
+  getStorageUploadPolicy,
+  deleteStorageFile,
+} from "./storage";
+
+
+

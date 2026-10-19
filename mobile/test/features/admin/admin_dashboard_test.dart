@@ -432,7 +432,7 @@ void main() {
 
       // Student redirected to student dashboard
       expect(find.text('Admin Console'), findsNothing);
-      expect(find.text('Hi, Student User 👋'), findsOneWidget);
+      expect(find.textContaining('Student User'), findsOneWidget);
     });
 
     testWidgets('9. Non-admin (Student) attempting to access /admin/users sub-route is redirected', (tester) async {
@@ -449,7 +449,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('User Directory'), findsNothing);
-      expect(find.text('Hi, Student User 👋'), findsOneWidget);
+      expect(find.textContaining('Student User'), findsOneWidget);
     });
 
     testWidgets('10. Admin can navigate to User Directory screen', (tester) async {

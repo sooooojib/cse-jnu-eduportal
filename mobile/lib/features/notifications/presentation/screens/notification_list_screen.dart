@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/di/injection_container.dart';
 import '../controllers/notification_controller.dart';
@@ -110,6 +111,14 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
                     if (!notif.isRead) {
                       _controller.markAsRead(notif.id);
                     }
+                    final target = _resolveRoute(notif);
+                    if (target != null && target.isNotEmpty && target != '/notifications' && mounted) {
+                      try {
+                        context.push(target);
+                      } catch (e) {
+                        debugPrint('Notification navigation warning: $e');
+                      }
+                    }
                   },
                   child: Container(
                     padding: const EdgeInsets.all(16),
@@ -206,15 +215,44 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
       case 'ATTENDANCE':
         return Icons.fact_check_outlined;
       case 'COUNSELING_APPROVED':
+      case 'COUNSELING_STATUS':
       case 'COUNSELING_SLOT':
         return Icons.support_agent;
       case 'FEEDBACK_RECEIVED':
       case 'FEEDBACK_REPLY':
+      case 'FEEDBACK_SUBMISSION':
         return Icons.rate_review_outlined;
       case 'SEMESTER_UPGRADE':
+      case 'SEMESTER_DECISION':
+      case 'SEMESTER':
         return Icons.upgrade;
       default:
         return Icons.notifications_active_outlined;
+    }
+  }
+
+  String? _resolveRoute(AppNotification notif) {
+    if (notif.route != null && notif.route!.trim().isNotEmpty && notif.route != '/notifications') {
+      return notif.route!.trim();
+    }
+    switch (notif.notificationType.toUpperCase()) {
+      case 'COUNSELING_STATUS':
+      case 'COUNSELING_APPROVED':
+      case 'COUNSELING_SLOT':
+        return '/counseling';
+      case 'FEEDBACK_REPLY':
+        return '/feedback';
+      case 'FEEDBACK_SUBMISSION':
+        return '/teacher/feedback';
+      case 'SEMESTER_DECISION':
+      case 'SEMESTER':
+      case 'SEMESTER_UPGRADE':
+        return '/profile';
+      case 'ATTENDANCE':
+      case 'ATTENDANCE_VERIFIED':
+        return '/attendance';
+      default:
+        return null;
     }
   }
 }

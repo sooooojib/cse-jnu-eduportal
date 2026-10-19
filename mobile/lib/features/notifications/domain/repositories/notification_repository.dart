@@ -4,6 +4,8 @@ abstract class NotificationRepository {
   Future<NotificationFeed> getNotifications();
   Future<void> markAsRead(String id);
   Future<void> markAllAsRead();
+  Future<void> registerDeviceToken(String token);
+  Future<void> unregisterDeviceToken(String token);
 }
 
 class GetNotificationsUseCase {
@@ -25,4 +27,18 @@ class MarkAllNotificationsReadUseCase {
   MarkAllNotificationsReadUseCase(this.repository);
 
   Future<void> execute() => repository.markAllAsRead();
+}
+
+class RegisterDeviceTokenUseCase {
+  final NotificationRepository repository;
+  RegisterDeviceTokenUseCase(this.repository);
+
+  Future<void> execute(String token) => repository.registerDeviceToken(token);
+}
+
+class UnregisterDeviceTokenUseCase {
+  final NotificationRepository repository;
+  UnregisterDeviceTokenUseCase(this.repository);
+
+  Future<void> execute(String token) => repository.unregisterDeviceToken(token);
 }

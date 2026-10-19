@@ -1,0 +1,17 @@
+[
+  {
+    "updateDocument": {
+      "name": "projects/sajib-73b14/databases/(default)/documents/users/m9D12Dz4n8bSFSXvsMkizbkfDSJ2",
+      "fields": {
+        "id":                { "stringValue": "m9D12Dz4n8bSFSXvsMkizbkfDSJ2" },
+        "email":             { "stringValue": "cseadmin@cse.jnu.ac.bd" },
+        "fullName":          { "stringValue": "CSE Department Admin" },
+        "role":              { "stringValue": "ADMIN" },
+        "isActive":          { "booleanValue": true },
+        "assignedCourseIds": { "arrayValue": { "values": [] } },
+        "fcmTokens":         { "arrayValue": { "values": [] } }
+      }
+    },
+    "currentDocument": { "exists": false }
+  }
+]

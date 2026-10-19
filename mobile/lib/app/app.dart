@@ -5,6 +5,8 @@ import 'router/app_router.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_theme.dart';
 import '../core/constants/app_constants.dart';
+import '../core/di/injection_container.dart';
+import '../core/notifications/push_notification_service.dart';
 
 class CSEEduPortalApp extends StatefulWidget {
   final ValueNotifier<ThemeMode> themeModeNotifier;
@@ -25,6 +27,17 @@ class _CSEEduPortalAppState extends State<CSEEduPortalApp> {
   void initState() {
     super.initState();
     _router = AppRouter.createRouter(themeModeNotifier: widget.themeModeNotifier);
+
+    try {
+      final pushService = sl<PushNotificationService>();
+      pushService.initialize(
+        onNavigate: (route) {
+          if (mounted) {
+            _router.push(route);
+          }
+        },
+      );
+    } catch (_) {}
   }
 
   @override

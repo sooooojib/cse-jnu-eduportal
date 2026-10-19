@@ -10,6 +10,8 @@ class CounselingSlot extends Equatable {
   final String endTime;
   final String status;
   final String? notes;
+  final String? bookedStudentId;
+  final String? bookedStudentName;
 
   const CounselingSlot({
     required this.id,
@@ -21,10 +23,26 @@ class CounselingSlot extends Equatable {
     required this.endTime,
     required this.status,
     this.notes,
+    this.bookedStudentId,
+    this.bookedStudentName,
   });
 
+  bool get isBooked => status == 'BOOKED';
+
   @override
-  List<Object?> get props => [id, teacherId, teacherName, teacherEmail, slotDate, startTime, endTime, status, notes];
+  List<Object?> get props => [
+        id,
+        teacherId,
+        teacherName,
+        teacherEmail,
+        slotDate,
+        startTime,
+        endTime,
+        status,
+        notes,
+        bookedStudentId,
+        bookedStudentName,
+      ];
 }
 
 class CounselingBooking extends Equatable {
@@ -40,6 +58,7 @@ class CounselingBooking extends Equatable {
   final String category;
   final String notes;
   final String status;
+  final String? rejectionReason;
   final String? reviewedAt;
   final String createdAt;
 
@@ -56,6 +75,7 @@ class CounselingBooking extends Equatable {
     required this.category,
     required this.notes,
     required this.status,
+    this.rejectionReason,
     this.reviewedAt,
     required this.createdAt,
   });
@@ -74,6 +94,7 @@ class CounselingBooking extends Equatable {
         category,
         notes,
         status,
+        rejectionReason,
         reviewedAt,
         createdAt,
       ];

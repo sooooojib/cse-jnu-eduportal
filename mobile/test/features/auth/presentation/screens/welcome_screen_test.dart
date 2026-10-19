@@ -65,8 +65,6 @@ void main() {
 
       // Verify brand titles
       expect(find.text('JnU EduPortal'), findsOneWidget);
-      expect(find.text('Departmental Operating System'), findsOneWidget);
-      expect(find.text('Jagannath University · Dept. of CSE'), findsOneWidget);
 
       // Verify main action buttons
       expect(find.text('Sign In to Dashboard'), findsOneWidget);

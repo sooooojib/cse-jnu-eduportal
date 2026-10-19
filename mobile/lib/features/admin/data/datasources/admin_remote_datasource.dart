@@ -752,9 +752,21 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
   Future<List<FeedbackItemModel>> getAllFeedbackItems() async {
     try {
       final snap = await _firestore.collection('feedback').get();
-      final list = snap.docs
-          .map((doc) => FeedbackItemModel.fromFirestore(doc as DocumentSnapshot<Map<String, dynamic>>))
-          .toList();
+      final list = <FeedbackItemModel>[];
+      for (final doc in snap.docs) {
+        final data = Map<String, dynamic>.from(doc.data());
+        if (data['isAnonymous'] == true) {
+          try {
+            final identityDoc = await _firestore.collection('feedbackIdentities').doc(doc.id).get();
+            if (identityDoc.exists && identityDoc.data() != null) {
+              final idData = identityDoc.data()!;
+              data['studentName'] = 'Anonymous (${idData['studentName'] ?? 'Student'})';
+              data['studentEmail'] = idData['studentEmail'];
+            }
+          } catch (_) {}
+        }
+        list.add(FeedbackItemModel.fromJson({'id': doc.id, ...data}));
+      }
 
       list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return list;

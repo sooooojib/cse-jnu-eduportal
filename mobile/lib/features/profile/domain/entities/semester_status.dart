@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 
 class SemesterStatus extends Equatable {
+  final String? requestId;
   final int? currentYear;
   final int? currentSemester;
   final int? requestedYear;
@@ -10,6 +11,7 @@ class SemesterStatus extends Equatable {
   final String? updatedAt;
 
   const SemesterStatus({
+    this.requestId,
     this.currentYear,
     this.currentSemester,
     this.requestedYear,
@@ -22,10 +24,12 @@ class SemesterStatus extends Equatable {
   bool get hasPendingRequest => status == 'PENDING';
   bool get isPending => status == 'PENDING';
   bool get isRejected => status == 'REJECTED';
-  bool get isApproved => status == 'APPROVED';
+  bool get isApproved => status == 'APPROVED' || status == 'ACTIVE';
+  bool get isNoEnrollment => status == 'NONE' || status == 'NO_ENROLLMENT' || (currentYear == null && !isPending);
 
   @override
   List<Object?> get props => [
+        requestId,
         currentYear,
         currentSemester,
         requestedYear,

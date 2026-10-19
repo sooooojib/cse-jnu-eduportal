@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
 import '../../../../core/error/error_handler.dart';
 import '../../../../core/error/exceptions.dart';
@@ -13,17 +14,33 @@ abstract class CounselingRemoteDataSource {
   Future<CounselingBookingModel> requestBooking(String slotId, {required String category, required String notes});
   Future<List<CounselingBookingModel>> getMyBookings();
   Future<void> cancelBooking(String requestId);
+
+  // Teacher methods
+  Future<CounselingSlotModel> createSlot({
+    required String slotDate,
+    required String startTime,
+    required String endTime,
+    String? notes,
+  });
+  Future<List<CounselingSlotModel>> getTeacherSlots(String teacherId);
+  Future<List<CounselingBookingModel>> getTeacherRequests(String teacherId);
+  Future<void> approveBooking(String bookingId);
+  Future<void> rejectBooking(String bookingId, {String? reason});
+  Future<void> deleteSlot(String slotId);
 }
 
 class CounselingRemoteDataSourceImpl implements CounselingRemoteDataSource {
   final FirebaseFirestore _firestore;
   final fb.FirebaseAuth _auth;
+  final FirebaseFunctions _functions;
 
   CounselingRemoteDataSourceImpl({
     FirebaseFirestore? firestore,
     fb.FirebaseAuth? auth,
+    FirebaseFunctions? functions,
   })  : _firestore = firestore ?? FirebaseFirestore.instance,
-        _auth = auth ?? fb.FirebaseAuth.instance;
+        _auth = auth ?? fb.FirebaseAuth.instance,
+        _functions = functions ?? FirebaseFunctions.instance;
 
   @override
   Future<List<CounselingSlotModel>> getAvailableSlots({String? teacherId}) async {
@@ -31,7 +48,7 @@ class CounselingRemoteDataSourceImpl implements CounselingRemoteDataSource {
         .collection("counselingSlots")
         .where("isBooked", isEqualTo: false);
 
-    if (teacherId != null) {
+    if (teacherId != null && teacherId.isNotEmpty) {
       query = query.where("teacherId", isEqualTo: teacherId);
     }
 
@@ -50,23 +67,55 @@ class CounselingRemoteDataSourceImpl implements CounselingRemoteDataSource {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw const ServerException(message: "Not authenticated.");
 
-    // Fetch slot to get teacher info
+    try {
+      final callable = _functions.httpsCallable('requestCounselingBooking');
+      final res = await callable.call({
+        'slotId': slotId,
+        'category': category,
+        'notes': notes,
+      });
+      final data = res.data;
+      if (data is Map && data['booking'] != null) {
+        return CounselingBookingModel.fromJson(Map<String, dynamic>.from(data['booking'] as Map));
+      }
+    } on FirebaseFunctionsException catch (e) {
+      throw ServerException(message: e.message ?? 'Failed to request counseling slot.');
+    } catch (_) {
+      // Fallback: direct Firestore operation
+    }
+
+    // Fetch slot to verify availability
     final slotDoc = await _firestore.collection("counselingSlots").doc(slotId).get();
-    if (!slotDoc.exists) throw const ServerException(message: "Slot not found.");
+    if (!slotDoc.exists) throw const ServerException(message: "Counseling slot not found.");
     final slotData = slotDoc.data()!;
 
-    // Mark slot as booked
-    await slotDoc.reference.update({"isBooked": true});
+    if (slotData['isBooked'] == true || slotData['status'] == 'BOOKED') {
+      throw const ServerException(message: "This counseling slot is already booked.");
+    }
 
-    // Fetch student info
+    // Check duplicate pending request
+    final dupSnap = await _firestore
+        .collection("counselingBookings")
+        .where("slotId", isEqualTo: slotId)
+        .where("studentId", isEqualTo: uid)
+        .get();
+
+    for (final doc in dupSnap.docs) {
+      final st = doc.data()['status'];
+      if (st == 'PENDING' || st == 'APPROVED') {
+        throw const ServerException(message: "You have already submitted a request for this slot.");
+      }
+    }
+
     final userDoc = await _firestore.collection("users").doc(uid).get();
     final studentName = userDoc.data()?["fullName"] as String? ?? "Student";
+    final studentEmail = userDoc.data()?["email"] as String? ?? "";
 
-    // Create booking record with server timestamp and denormalized fields
     final docRef = await _firestore.collection("counselingBookings").add({
       "slotId": slotId,
       "studentId": uid,
       "studentName": studentName,
+      "studentEmail": studentEmail,
       "teacherId": slotData["teacherId"] ?? "",
       "teacherName": slotData["teacherName"] ?? "",
       "slotDate": slotData["slotDate"] ?? slotData["date"] ?? "",
@@ -90,26 +139,236 @@ class CounselingRemoteDataSourceImpl implements CounselingRemoteDataSource {
     final snapshot = await _firestore
         .collection("counselingBookings")
         .where("studentId", isEqualTo: uid)
-        .orderBy("createdAt", descending: true)
         .get();
 
-    return snapshot.docs.map((doc) {
+    final list = snapshot.docs.map((doc) {
       return CounselingBookingModel.fromJson({"id": doc.id, ...doc.data()});
     }).toList();
+
+    list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return list;
   }
 
   @override
   Future<void> cancelBooking(String requestId) async {
-    final bookingRef = _firestore.collection("counselingBookings").doc(requestId);
-    final booking = await bookingRef.get();
-    if (!booking.exists) throw const ServerException(message: "Booking not found.");
+    try {
+      final callable = _functions.httpsCallable('cancelCounselingBooking');
+      await callable.call({'bookingId': requestId});
+      return;
+    } on FirebaseFunctionsException catch (e) {
+      throw ServerException(message: e.message ?? 'Failed to cancel booking.');
+    } catch (_) {
+      // Fallback: direct Firestore cancellation
+      final bookingRef = _firestore.collection("counselingBookings").doc(requestId);
+      final booking = await bookingRef.get();
+      if (!booking.exists) throw const ServerException(message: "Booking not found.");
 
-    // Free up the slot and mark booking cancelled
-    final slotId = booking.data()!["slotId"] as String?;
-    if (slotId != null) {
-      await _firestore.collection("counselingSlots").doc(slotId).update({"isBooked": false});
+      final slotId = booking.data()!["slotId"] as String?;
+      if (slotId != null && booking.data()!["status"] == "APPROVED") {
+        await _firestore.collection("counselingSlots").doc(slotId).update({
+          "isBooked": false,
+          "status": "AVAILABLE",
+          "bookedStudentId": null,
+          "bookedBookingId": null,
+        });
+      }
+      await bookingRef.update({"status": "CANCELLED"});
     }
-    await bookingRef.update({"status": "CANCELLED"});
+  }
+
+  @override
+  Future<CounselingSlotModel> createSlot({
+    required String slotDate,
+    required String startTime,
+    required String endTime,
+    String? notes,
+  }) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) throw const ServerException(message: "Not authenticated.");
+
+    try {
+      final callable = _functions.httpsCallable('createCounselingSlot');
+      final res = await callable.call({
+        'slotDate': slotDate,
+        'startTime': startTime,
+        'endTime': endTime,
+        if (notes != null) 'notes': notes,
+      });
+      final data = res.data;
+      if (data is Map && data['slot'] != null) {
+        return CounselingSlotModel.fromJson(Map<String, dynamic>.from(data['slot'] as Map));
+      }
+    } on FirebaseFunctionsException catch (e) {
+      throw ServerException(message: e.message ?? 'Failed to create counseling slot.');
+    } catch (_) {
+      // Fallback
+    }
+
+    final userDoc = await _firestore.collection("users").doc(uid).get();
+    final teacherName = userDoc.data()?["fullName"] as String? ?? "Faculty Member";
+    final teacherEmail = userDoc.data()?["email"] as String? ?? "";
+
+    final docRef = await _firestore.collection("counselingSlots").add({
+      "teacherId": uid,
+      "teacherName": teacherName,
+      "teacherEmail": teacherEmail,
+      "slotDate": slotDate,
+      "startTime": startTime,
+      "endTime": endTime,
+      "isBooked": false,
+      "status": "AVAILABLE",
+      "notes": notes,
+      "createdAt": FieldValue.serverTimestamp(),
+      "updatedAt": FieldValue.serverTimestamp(),
+    });
+
+    final newDoc = await docRef.get();
+    return CounselingSlotModel.fromJson({"id": newDoc.id, ...newDoc.data()!});
+  }
+
+  @override
+  Future<List<CounselingSlotModel>> getTeacherSlots(String teacherId) async {
+    final snapshot = await _firestore
+        .collection("counselingSlots")
+        .where("teacherId", isEqualTo: teacherId)
+        .get();
+
+    final list = snapshot.docs.map((doc) {
+      return CounselingSlotModel.fromJson({"id": doc.id, ...doc.data()});
+    }).toList();
+
+    list.sort((a, b) {
+      final dateCmp = b.slotDate.compareTo(a.slotDate);
+      if (dateCmp != 0) return dateCmp;
+      return a.startTime.compareTo(b.startTime);
+    });
+    return list;
+  }
+
+  @override
+  Future<List<CounselingBookingModel>> getTeacherRequests(String teacherId) async {
+    final snapshot = await _firestore
+        .collection("counselingBookings")
+        .where("teacherId", isEqualTo: teacherId)
+        .get();
+
+    final list = snapshot.docs.map((doc) {
+      return CounselingBookingModel.fromJson({"id": doc.id, ...doc.data()});
+    }).toList();
+
+    list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return list;
+  }
+
+  @override
+  Future<void> approveBooking(String bookingId) async {
+    try {
+      final callable = _functions.httpsCallable('approveCounselingBooking');
+      await callable.call({'bookingId': bookingId});
+      return;
+    } on FirebaseFunctionsException catch (e) {
+      throw ServerException(message: e.message ?? 'Failed to approve booking.');
+    } catch (_) {
+      // Fallback: Atomic Firestore transaction
+      final bookingRef = _firestore.collection('counselingBookings').doc(bookingId);
+      await _firestore.runTransaction((transaction) async {
+        final bookingDoc = await transaction.get(bookingRef);
+        if (!bookingDoc.exists) {
+          throw const ServerException(message: 'Booking request not found.');
+        }
+        final bData = bookingDoc.data()!;
+        if (bData['status'] != 'PENDING') {
+          throw ServerException(message: 'Booking request is already ${bData['status']}.');
+        }
+
+        final slotId = bData['slotId'] as String?;
+        if (slotId == null) throw const ServerException(message: 'Slot ID missing.');
+
+        final slotRef = _firestore.collection('counselingSlots').doc(slotId);
+        final slotDoc = await transaction.get(slotRef);
+        if (!slotDoc.exists) {
+          throw const ServerException(message: 'Associated slot not found.');
+        }
+
+        final slotData = slotDoc.data()!;
+        if (slotData['isBooked'] == true || slotData['status'] == 'BOOKED') {
+          throw const ServerException(message: 'This slot has already been booked and confirmed.');
+        }
+
+        // Lock slot
+        transaction.update(slotRef, {
+          'isBooked': true,
+          'status': 'BOOKED',
+          'bookedStudentId': bData['studentId'],
+          'bookedStudentName': bData['studentName'],
+          'bookedBookingId': bookingId,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+
+        // Approve winning booking
+        transaction.update(bookingRef, {
+          'status': 'APPROVED',
+          'reviewedAt': FieldValue.serverTimestamp(),
+        });
+
+        // Mark competing requests as REJECTED
+        final competingQuery = await _firestore
+            .collection('counselingBookings')
+            .where('slotId', isEqualTo: slotId)
+            .where('status', isEqualTo: 'PENDING')
+            .get();
+
+        for (final doc in competingQuery.docs) {
+          if (doc.id != bookingId) {
+            transaction.update(doc.reference, {
+              'status': 'REJECTED',
+              'rejectionReason': 'Slot already booked by another student.',
+              'reviewedAt': FieldValue.serverTimestamp(),
+            });
+          }
+        }
+      });
+    }
+  }
+
+  @override
+  Future<void> rejectBooking(String bookingId, {String? reason}) async {
+    try {
+      final callable = _functions.httpsCallable('rejectCounselingBooking');
+      await callable.call({
+        'bookingId': bookingId,
+        if (reason != null) 'reason': reason,
+      });
+      return;
+    } on FirebaseFunctionsException catch (e) {
+      throw ServerException(message: e.message ?? 'Failed to reject booking.');
+    } catch (_) {
+      // Fallback
+      await _firestore.collection('counselingBookings').doc(bookingId).update({
+        'status': 'REJECTED',
+        'rejectionReason': reason ?? 'Declined by faculty.',
+        'reviewedAt': FieldValue.serverTimestamp(),
+      });
+    }
+  }
+
+  @override
+  Future<void> deleteSlot(String slotId) async {
+    try {
+      final callable = _functions.httpsCallable('deleteCounselingSlot');
+      await callable.call({'slotId': slotId});
+      return;
+    } on FirebaseFunctionsException catch (e) {
+      throw ServerException(message: e.message ?? 'Failed to delete counseling slot.');
+    } catch (_) {
+      // Fallback
+      final slotDoc = await _firestore.collection('counselingSlots').doc(slotId).get();
+      if (!slotDoc.exists) throw const ServerException(message: 'Slot not found.');
+      if (slotDoc.data()?['isBooked'] == true) {
+        throw const ServerException(message: 'Cannot delete a booked counseling slot.');
+      }
+      await _firestore.collection('counselingSlots').doc(slotId).delete();
+    }
   }
 }
 
@@ -153,6 +412,72 @@ class CounselingRepositoryImpl implements CounselingRepository {
   Future<void> cancelBooking(String requestId) async {
     try {
       await remoteDataSource.cancelBooking(requestId);
+    } catch (e) {
+      throw ErrorHandler.handleException(e);
+    }
+  }
+
+  @override
+  Future<CounselingSlot> createSlot({
+    required String slotDate,
+    required String startTime,
+    required String endTime,
+    String? notes,
+  }) async {
+    try {
+      return await remoteDataSource.createSlot(
+        slotDate: slotDate,
+        startTime: startTime,
+        endTime: endTime,
+        notes: notes,
+      );
+    } catch (e) {
+      throw ErrorHandler.handleException(e);
+    }
+  }
+
+  @override
+  Future<List<CounselingSlot>> getTeacherSlots(String teacherId) async {
+    try {
+      final list = await remoteDataSource.getTeacherSlots(teacherId);
+      return List<CounselingSlot>.from(list);
+    } catch (e) {
+      throw ErrorHandler.handleException(e);
+    }
+  }
+
+  @override
+  Future<List<CounselingBooking>> getTeacherRequests(String teacherId) async {
+    try {
+      final list = await remoteDataSource.getTeacherRequests(teacherId);
+      return List<CounselingBooking>.from(list);
+    } catch (e) {
+      throw ErrorHandler.handleException(e);
+    }
+  }
+
+  @override
+  Future<void> approveBooking(String bookingId) async {
+    try {
+      await remoteDataSource.approveBooking(bookingId);
+    } catch (e) {
+      throw ErrorHandler.handleException(e);
+    }
+  }
+
+  @override
+  Future<void> rejectBooking(String bookingId, {String? reason}) async {
+    try {
+      await remoteDataSource.rejectBooking(bookingId, reason: reason);
+    } catch (e) {
+      throw ErrorHandler.handleException(e);
+    }
+  }
+
+  @override
+  Future<void> deleteSlot(String slotId) async {
+    try {
+      await remoteDataSource.deleteSlot(slotId);
     } catch (e) {
       throw ErrorHandler.handleException(e);
     }

@@ -63,7 +63,7 @@ class AdminOverviewGrid extends StatelessWidget {
           crossAxisCount: 2,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
-          childAspectRatio: 1.35,
+          childAspectRatio: 1.25,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           children: [

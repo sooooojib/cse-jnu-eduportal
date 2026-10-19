@@ -37,6 +37,12 @@ import 'package:cse_jnu_eduportal/features/profile/presentation/controllers/prof
 import 'package:cse_jnu_eduportal/features/notifications/domain/repositories/notification_repository.dart';
 import 'package:cse_jnu_eduportal/features/notifications/presentation/controllers/notification_controller.dart';
 
+// Teacher
+import 'package:cse_jnu_eduportal/features/teacher/domain/entities/teacher_dashboard_data.dart';
+import 'package:cse_jnu_eduportal/features/teacher/domain/repositories/teacher_repository.dart';
+import 'package:cse_jnu_eduportal/features/teacher/domain/usecases/get_teacher_dashboard_data_usecase.dart';
+import 'package:cse_jnu_eduportal/features/teacher/presentation/controllers/teacher_dashboard_controller.dart';
+
 class MockAuthController extends Mock implements AuthController {}
 class MockLocalStorageService extends Mock implements LocalStorageService {}
 class MockSignupRequestUseCase extends Mock implements SignupRequestUseCase {}
@@ -46,6 +52,8 @@ class MockCounselingRepo extends Mock implements CounselingRepository {}
 class MockFeedbackRepo extends Mock implements FeedbackRepository {}
 class MockSemesterRepo extends Mock implements SemesterRepository {}
 class MockNotificationRepo extends Mock implements NotificationRepository {}
+class MockTeacherRepo extends Mock implements TeacherRepository {}
+class FakeUser extends Fake implements User {}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -71,6 +79,7 @@ void main() {
 
   setUpAll(() {
     GoogleFonts.config.allowRuntimeFetching = false;
+    registerFallbackValue(FakeUser());
   });
 
   setUp(() async {
@@ -128,6 +137,30 @@ void main() {
       markNotificationReadUseCase: MarkNotificationReadUseCase(notifRepo),
       markAllNotificationsReadUseCase: MarkAllNotificationsReadUseCase(notifRepo),
     ));
+
+    final teacherRepo = MockTeacherRepo();
+    when(() => teacherRepo.getTeacherDashboardData(
+      teacher: any(named: 'teacher'),
+      currentTime: any(named: 'currentTime'),
+    )).thenAnswer((_) async => const TeacherDashboardData(
+      teacherId: 'uid_teacher',
+      teacherName: 'Teacher User',
+      email: 'teacher@cse.jnu.ac.bd',
+      role: UserRole.teacher,
+      pendingCounselingCount: 0,
+      feedbackCount: 0,
+      classesTaughtCount: 0,
+      assignedCourses: [],
+      timeAwareClasses: [],
+      isTomorrow: false,
+      targetDateLabel: 'Today · Oct 19, 2026',
+      dayOfWeek: 'MONDAY',
+    ));
+
+    sl.registerFactory<TeacherDashboardController>(() => TeacherDashboardController(
+      getTeacherDashboardDataUseCase: GetTeacherDashboardDataUseCase(teacherRepo),
+      authController: mockAuthController,
+    ));
   });
 
   group('Protected Navigation & Role Routing Guards Tests', () {
@@ -160,7 +193,55 @@ void main() {
       await tester.pumpWidget(MaterialApp.router(routerConfig: router));
       await tester.pumpAndSettle();
 
-      expect(find.text('Faculty Portal'), findsOneWidget);
+      expect(find.text('Professor Dashboard'), findsOneWidget);
+    });
+
+    testWidgets('Teacher attempting to access Student Dashboard is redirected to Teacher Dashboard', (tester) async {
+      when(() => mockAuthController.state).thenReturn(const Authenticated(user: teacherUser));
+      when(() => mockAuthController.currentUser).thenReturn(teacherUser);
+
+      final router = AppRouter.createRouter(
+        themeModeNotifier: themeModeNotifier,
+        initialLocation: RouteNames.studentDashboard,
+        authController: mockAuthController,
+      );
+
+      await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Professor Dashboard'), findsOneWidget);
+    });
+
+    testWidgets('Teacher attempting to access Student Profile or Attendance is redirected to Teacher Dashboard', (tester) async {
+      when(() => mockAuthController.state).thenReturn(const Authenticated(user: teacherUser));
+      when(() => mockAuthController.currentUser).thenReturn(teacherUser);
+
+      final router = AppRouter.createRouter(
+        themeModeNotifier: themeModeNotifier,
+        initialLocation: RouteNames.studentProfile,
+        authController: mockAuthController,
+      );
+
+      await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Professor Dashboard'), findsOneWidget);
+    });
+
+    testWidgets('Admin user attempting to access Student Dashboard is redirected to Admin Dashboard', (tester) async {
+      when(() => mockAuthController.state).thenReturn(const Authenticated(user: adminUser));
+      when(() => mockAuthController.currentUser).thenReturn(adminUser);
+
+      final router = AppRouter.createRouter(
+        themeModeNotifier: themeModeNotifier,
+        initialLocation: RouteNames.studentDashboard,
+        authController: mockAuthController,
+      );
+
+      await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Admin Console'), findsOneWidget);
     });
 
     testWidgets('Admin user is permitted on Admin Dashboard', (tester) async {

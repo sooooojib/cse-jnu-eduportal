@@ -11,48 +11,105 @@ service firebase.storage {
     }
 
     function isAdmin() {
-      return isAuthenticated() && request.auth.token.role == 'ADMIN';
+      return isAuthenticated() && (
+        request.auth.token.role == 'ADMIN' ||
+        request.auth.token.role == 'admin'
+      );
+    }
+
+    function isTeacher() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'TEACHER' ||
+        request.auth.token.role == 'teacher'
+      );
+    }
+
+    function isStudentOrCr() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'STUDENT' ||
+        request.auth.token.role == 'student' ||
+        request.auth.token.role == 'CR' ||
+        request.auth.token.role == 'cr'
+      );
     }
 
     function isValidImage() {
       return request.resource.contentType.matches('image/(jpeg|png|webp)') &&
-             request.resource.size < 5 * 1024 * 1024;
+             request.resource.size <= 5 * 1024 * 1024;
     }
 
     function isValidDocument() {
       return (
         request.resource.contentType.matches('image/(jpeg|png|webp)') ||
         request.resource.contentType == 'application/pdf' ||
-        request.resource.contentType == 'text/plain'
-      ) && request.resource.size < 10 * 1024 * 1024;
+        request.resource.contentType == 'text/plain' ||
+        request.resource.contentType == 'application/msword' ||
+        request.resource.contentType == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      ) && request.resource.size <= 10 * 1024 * 1024;
     }
 
-    // Notice Attachments (Admin only)
-    match /notices/{fileName} {
+    function hasValidMetadata() {
+      return request.resource.metadata != null &&
+             request.resource.metadata.uploadedBy == request.auth.uid;
+    }
+
+    // ─── 1. NOTICE ATTACHMENTS (Admin only upload & delete, all authenticated read) ───
+    match /notices/{noticeId}/{fileName} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin() && isValidDocument();
+      allow create, update: if isAdmin() && isValidDocument() && hasValidMetadata();
       allow delete: if isAdmin();
     }
 
-    // Profile Avatars
+    match /notices/{fileName} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin() && isValidDocument() && hasValidMetadata();
+      allow delete: if isAdmin();
+    }
+
+    // ─── 2. PROFILE AVATARS (User or Admin, Image only <= 5MB) ──────────────────────
     match /avatars/{userId}/{fileName} {
       allow read: if isAuthenticated();
-      allow write: if (isOwner(userId) || isAdmin()) && isValidImage();
+      allow create, update: if (isOwner(userId) || isAdmin()) && isValidImage() && hasValidMetadata();
       allow delete: if isOwner(userId) || isAdmin();
     }
 
-    // Feedback Attachments
-    match /feedback/{userId}/{attachmentId} {
+    // ─── 3. FEEDBACK ATTACHMENTS (Student/CR/Author upload, Authenticated read) ───────
+    match /feedback/{feedbackId}/attachments/{attachmentId} {
       allow read: if isAuthenticated();
-      allow write: if isOwner(userId) && isValidDocument();
-      allow delete: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && isValidDocument() && hasValidMetadata();
+      allow delete: if isAdmin() || (isAuthenticated() && resource.metadata.uploadedBy == request.auth.uid);
     }
 
-    // Counseling Attachments
+    // ─── 4. FEEDBACK TEACHER REPLIES (Teacher or Admin upload) ───────────────────────
+    match /feedback/{feedbackId}/replies/{attachmentId} {
+      allow read: if isAuthenticated();
+      allow create: if (isTeacher() || isAdmin()) && isValidDocument() && hasValidMetadata();
+      allow delete: if isAdmin() || (isAuthenticated() && resource.metadata.uploadedBy == request.auth.uid);
+    }
+
+    // Legacy/generic feedback bucket path
+    match /feedback/{folderId}/{attachmentId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidDocument() && hasValidMetadata();
+      allow delete: if isAdmin() || (isAuthenticated() && resource.metadata.uploadedBy == request.auth.uid);
+    }
+
+    // ─── 5. COUNSELING ATTACHMENTS ──────────────────────────────────────────────────
+    match /counseling/{bookingId}/{attachmentId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidDocument() && hasValidMetadata();
+      allow delete: if isAdmin() || (isAuthenticated() && resource.metadata.uploadedBy == request.auth.uid);
+    }
+
     match /counseling/{userId}/{attachmentId} {
       allow read: if isAuthenticated();
-      allow write: if isOwner(userId) && isValidDocument();
+      allow create: if (isOwner(userId) || isAdmin()) && isValidDocument() && hasValidMetadata();
       allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // ─── 6. DEFAULT DENY ALL OTHER ARBITRARY STORAGE PATHS ──────────────────────────
+    match /{allPaths=**} {
+      allow read, write: if false;
     }
   }
 }

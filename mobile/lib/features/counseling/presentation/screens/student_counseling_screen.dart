@@ -29,17 +29,22 @@ class _StudentCounselingScreenState extends State<StudentCounselingScreen> with 
     super.dispose();
   }
 
+  String _safeTime(String t) {
+    if (t.length >= 5) return t.substring(0, 5);
+    return t;
+  }
+
   void _showBookingDialog(CounselingSlot slot) {
-    String selectedCategory = 'ACADEMIC_ADVISING';
+    String selectedCategory = 'Academic Advising';
     final notesController = TextEditingController();
 
     final categories = [
-      {'key': 'ACADEMIC_ADVISING', 'label': 'Academic Advising'},
-      {'key': 'RESEARCH_DISCUSSION', 'label': 'Research & Thesis'},
-      {'key': 'MENTAL_PRESSURE', 'label': 'Mental Wellbeing'},
-      {'key': 'CLASS_ISSUE', 'label': 'Course / Class Query'},
-      {'key': 'CAREER_GUIDANCE', 'label': 'Career Guidance'},
-      {'key': 'OTHER', 'label': 'General Consultation'},
+      {'key': 'Academic Advising', 'label': 'Academic Advising'},
+      {'key': 'Research Discussion', 'label': 'Research Discussion'},
+      {'key': 'Mental Pressure', 'label': 'Mental Pressure'},
+      {'key': 'Class Issue', 'label': 'Class Issue'},
+      {'key': 'Career Guidance', 'label': 'Career Guidance'},
+      {'key': 'Other', 'label': 'Other'},
     ];
 
     showModalBottomSheet(
@@ -80,7 +85,7 @@ class _StudentCounselingScreenState extends State<StudentCounselingScreen> with 
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Faculty: ${slot.teacherName} • ${slot.slotDate} (${slot.startTime.substring(0, 5)} - ${slot.endTime.substring(0, 5)})',
+                      'Faculty: ${slot.teacherName} • ${slot.slotDate} (${_safeTime(slot.startTime)} - ${_safeTime(slot.endTime)})',
                       style: TextStyle(
                         fontSize: 13,
                         color: isDark ? AppColors.outlineDark : AppColors.outlineLight,
@@ -329,10 +334,15 @@ class _StudentCounselingScreenState extends State<StudentCounselingScreen> with 
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      slot.teacherName,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    Expanded(
+                      child: Text(
+                        slot.teacherName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
@@ -353,6 +363,8 @@ class _StudentCounselingScreenState extends State<StudentCounselingScreen> with 
                 const SizedBox(height: 4),
                 Text(
                   slot.teacherEmail,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 12, color: isDark ? AppColors.outlineDark : AppColors.outlineLight),
                 ),
                 const SizedBox(height: 10),
@@ -364,9 +376,13 @@ class _StudentCounselingScreenState extends State<StudentCounselingScreen> with 
                     const SizedBox(width: 14),
                     const Icon(Icons.access_time, size: 15, color: AppColors.primaryLight),
                     const SizedBox(width: 4),
-                    Text(
-                      '${slot.startTime.substring(0, 5)} - ${slot.endTime.substring(0, 5)}',
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    Flexible(
+                      child: Text(
+                        '${_safeTime(slot.startTime)} - ${_safeTime(slot.endTime)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
                     ),
                   ],
                 ),
@@ -458,10 +474,15 @@ class _StudentCounselingScreenState extends State<StudentCounselingScreen> with 
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      booking.teacherName,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    Expanded(
+                      child: Text(
+                        booking.teacherName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
@@ -482,11 +503,15 @@ class _StudentCounselingScreenState extends State<StudentCounselingScreen> with 
                 const SizedBox(height: 6),
                 Text(
                   'Topic: ${booking.category.replaceAll('_', ' ')}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   'Agenda: ${booking.notes}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 12, color: isDark ? AppColors.outlineDark : AppColors.outlineLight),
                 ),
                 const SizedBox(height: 8),
@@ -498,9 +523,13 @@ class _StudentCounselingScreenState extends State<StudentCounselingScreen> with 
                     const SizedBox(width: 12),
                     const Icon(Icons.access_time, size: 14, color: Colors.grey),
                     const SizedBox(width: 4),
-                    Text(
-                      '${booking.startTime.substring(0, 5)} - ${booking.endTime.substring(0, 5)}',
-                      style: const TextStyle(fontSize: 12),
+                    Flexible(
+                      child: Text(
+                        '${_safeTime(booking.startTime)} - ${_safeTime(booking.endTime)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12),
+                      ),
                     ),
                   ],
                 ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../../app/router/route_names.dart';
 import '../../../../core/utils/context_extensions.dart';
 import '../../../../shared/widgets/dialogs/app_confirmation_dialog.dart';
@@ -17,94 +18,28 @@ class AdminHeader extends StatelessWidget {
     required this.authController,
   });
 
-  Future<void> _handleLogout(BuildContext context) async {
-    final confirmed = await AppConfirmationDialog.show(
-      context: context,
-      title: 'Sign Out?',
-      message: 'Are you sure you want to end your administrator session and sign out?',
-      confirmText: 'Sign Out',
-      isDestructive: true,
-      icon: Icons.logout_rounded,
-    );
-
-    if (confirmed == true && context.mounted) {
-      await authController.logout();
-      if (context.mounted) {
-        context.go(RouteNames.login);
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final isDark = context.isDarkMode;
     final name = user?.fullName.isNotEmpty == true ? user!.fullName : 'System Administrator';
-    final initials = name.split(' ').map((n) => n.isNotEmpty ? n[0] : '').take(2).join();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Top action bar
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: const Color(0xFF7E22CE).withValues(alpha: 0.15),
-                  child: Text(
-                    initials.isNotEmpty ? initials : 'AD',
-                    style: const TextStyle(
-                      color: Color(0xFF7E22CE),
-                      fontWeight: FontWeight.w800,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'JnU EduPortal',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.8,
-                        color: Color(0xFF7E22CE),
-                      ),
-                    ),
-                    Text(
-                      'Admin Console',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: isDark ? Colors.white : const Color(0xFF0F172A),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+        // Role Title Header (Shell provides top app bar and actions)
+        Padding(
+          padding: const EdgeInsets.only(top: 2, bottom: 4),
+          child: Text(
+            'Admin Console',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.6,
+              color: isDark ? Colors.white : const Color(0xFF0F172A),
             ),
-            Row(
-              children: [
-                const ThemeToggleButton(showBackground: false),
-                IconButton(
-                  icon: const Icon(Icons.notifications_outlined),
-                  tooltip: 'Notifications',
-                  onPressed: () => context.push(RouteNames.notifications),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.logout_rounded),
-                  tooltip: 'Sign Out',
-                  onPressed: () => _handleLogout(context),
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
 
         // Modern Executive Welcome Card
         Container(

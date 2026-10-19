@@ -5,11 +5,13 @@ import '../../../app/theme/role_colors.dart';
 class RoleBadgeChip extends StatelessWidget {
   final UserRole role;
   final bool isCompact;
+  final String? customLabel;
 
   const RoleBadgeChip({
     super.key,
     required this.role,
     this.isCompact = false,
+    this.customLabel,
   });
 
   @override
@@ -43,7 +45,7 @@ class RoleBadgeChip extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           Text(
-            role.label,
+            customLabel ?? role.label,
             style: TextStyle(
               color: colors.text,
               fontSize: isCompact ? 11 : 12,

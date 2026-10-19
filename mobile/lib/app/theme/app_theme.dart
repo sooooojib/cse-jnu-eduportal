@@ -166,8 +166,10 @@ class AppTheme {
       onSurfaceVariant: AppColors.onSurfaceVariantDark,
       outline: AppColors.outlineDark,
       outlineVariant: AppColors.surfaceContainerHighDark,
-      error: AppColors.errorContainer,
-      onError: AppColors.error,
+      error: Color(0xFFEF4444),
+      onError: Colors.white,
+      errorContainer: Color(0xFF7F1D1D),
+      onErrorContainer: Color(0xFFFCA5A5),
     );
 
     return ThemeData(

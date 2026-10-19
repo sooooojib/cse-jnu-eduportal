@@ -70,11 +70,15 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       String? authoritativeRole;
       String idToken = '';
       try {
+        // Force refresh=true to get a fresh token so Firestore security
+        // rules can correctly evaluate role-based access on first login.
         final tokenResult = await fbUser.getIdTokenResult(true);
         authoritativeRole = tokenResult.claims?['role'] as String?;
         idToken = tokenResult.token ?? '';
+        // Small delay to allow Firestore to recognise the refreshed token
+        await Future.delayed(const Duration(milliseconds: 500));
       } catch (_) {
-        idToken = await fbUser.getIdToken() ?? '';
+        idToken = await fbUser.getIdToken(true) ?? '';
       }
 
       final userModel = UserModel.fromFirestore(doc, authoritativeRole: authoritativeRole);
@@ -114,7 +118,8 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
 
       String? authoritativeRole;
       try {
-        final tokenResult = await fbUser.getIdTokenResult();
+        // Always force-refresh to ensure Firestore rules see the latest token.
+        final tokenResult = await fbUser.getIdTokenResult(true);
         authoritativeRole = tokenResult.claims?['role'] as String?;
       } catch (_) {}
 

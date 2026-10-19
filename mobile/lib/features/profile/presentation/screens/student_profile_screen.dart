@@ -6,10 +6,12 @@ import '../../../../shared/widgets/theme/theme_toggle_button.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../../../curriculum/domain/entities/curriculum_entities.dart';
 import '../../../curriculum/domain/repositories/curriculum_repository.dart';
+import '../../domain/entities/semester_status.dart';
 import '../controllers/profile_controller.dart';
 
 class StudentProfileScreen extends StatefulWidget {
-  const StudentProfileScreen({super.key});
+  final ProfileController? profileController;
+  const StudentProfileScreen({super.key, this.profileController});
 
   @override
   State<StudentProfileScreen> createState() => _StudentProfileScreenState();
@@ -23,7 +25,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _profileController = sl<ProfileController>();
+    _profileController = widget.profileController ?? sl<ProfileController>();
     _loadProfileData();
   }
 
@@ -43,9 +45,17 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
     }
   }
 
-  void _showUpgradeDialog(int currentYear, int currentSemester) {
-    int targetYear = currentSemester == 2 ? currentYear + 1 : currentYear;
-    int targetSemester = currentSemester == 2 ? 1 : 2;
+  void _showUpgradeDialog({int? currentYear, int? currentSemester, bool isInitial = false}) {
+    int targetYear;
+    int targetSemester;
+
+    if (isInitial || currentYear == null || currentSemester == null) {
+      targetYear = 1;
+      targetSemester = 1;
+    } else {
+      targetYear = currentSemester == 2 ? (currentYear < 4 ? currentYear + 1 : 4) : currentYear;
+      targetSemester = currentSemester == 2 ? 1 : 2;
+    }
 
     showDialog(
       context: context,
@@ -54,14 +64,19 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
           builder: (context, setDialogState) {
             return AlertDialog(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              title: const Text('Request Semester Upgrade', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              title: Text(
+                isInitial ? 'Initial Semester Enrollment' : 'Request Semester Upgrade',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Submit a request to the department administration to advance your academic semester.',
-                    style: TextStyle(fontSize: 13),
+                  Text(
+                    isInitial
+                        ? 'Select your starting academic year and semester to enroll in courses and access department features.'
+                        : 'Submit a request to the department administration to advance your academic semester.',
+                    style: const TextStyle(fontSize: 13),
                   ),
                   const SizedBox(height: 16),
                   Row(
@@ -130,8 +145,10 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                       );
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Semester upgrade request submitted for verification.'),
+                          SnackBar(
+                            content: Text(isInitial
+                                ? 'Initial enrollment request submitted for review.'
+                                : 'Semester upgrade request submitted for verification.'),
                             backgroundColor: Colors.green,
                           ),
                         );
@@ -154,6 +171,180 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
           },
         );
       },
+    );
+  }
+
+  void _showChangeRequestDialog(SemesterStatus status) {
+    int targetYear = status.requestedYear ?? 1;
+    int targetSemester = status.requestedSemester ?? 1;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: const Text('Change Enrollment Request', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Update the target year and semester for your pending enrollment request.',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Target Year', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                            const SizedBox(height: 6),
+                            DropdownButtonFormField<int>(
+                              value: targetYear,
+                              decoration: InputDecoration(
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              items: [1, 2, 3, 4].map((y) => DropdownMenuItem(value: y, child: Text('Year $y'))).toList(),
+                              onChanged: (val) {
+                                if (val != null) setDialogState(() => targetYear = val);
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Target Semester', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                            const SizedBox(height: 6),
+                            DropdownButtonFormField<int>(
+                              value: targetSemester,
+                              decoration: InputDecoration(
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              items: [1, 2].map((s) => DropdownMenuItem(value: s, child: Text('Sem $s'))).toList(),
+                              onChanged: (val) {
+                                if (val != null) setDialogState(() => targetSemester = val);
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryLight,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () async {
+                    Navigator.pop(dialogContext);
+                    try {
+                      await _profileController.changeUpgradeRequest(
+                        requestId: status.requestId ?? '',
+                        requestedYear: targetYear,
+                        requestedSemester: targetSemester,
+                      );
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Enrollment request updated successfully.'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(e.toString().replaceAll('Exception: ', '')),
+                            backgroundColor: Colors.redAccent,
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  child: const Text('Update Request'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _dismissRejection(String? requestId) async {
+    if (requestId == null || requestId.isEmpty) return;
+    try {
+      await _profileController.dismissRejection(requestId: requestId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Rejection notice dismissed.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceAll('Exception: ', '')),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
+
+  Widget _buildSemesterStatusBadge(SemesterStatus? semesterStatus) {
+    Color badgeColor;
+    String label;
+
+    if (semesterStatus?.isNoEnrollment == true) {
+      badgeColor = Colors.blueGrey;
+      label = 'NO ENROLLMENT';
+    } else if (semesterStatus?.isPending == true) {
+      badgeColor = Colors.orange;
+      label = 'PENDING';
+    } else if (semesterStatus?.isRejected == true) {
+      badgeColor = Colors.redAccent;
+      label = 'REJECTED';
+    } else {
+      badgeColor = Colors.green;
+      label = 'ACTIVE';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: badgeColor.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          color: badgeColor,
+        ),
+      ),
     );
   }
 
@@ -254,7 +445,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                   ),
                   const SizedBox(height: 20),
 
-                  // Semester Advancement & Status Card
+                  // Semester Advancement & Status Card (4 States: No Enrollment, Pending, Active/Approved, Rejected)
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(20),
@@ -275,39 +466,62 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                               'Academic Semester',
                               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                             ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: semesterStatus?.isPending == true
-                                    ? Colors.orange.withOpacity(0.15)
-                                    : (semesterStatus?.isRejected == true
-                                        ? Colors.redAccent.withOpacity(0.15)
-                                        : Colors.green.withOpacity(0.15)),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                semesterStatus?.status ?? 'ACTIVE',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: semesterStatus?.isPending == true
-                                      ? Colors.orange
-                                      : (semesterStatus?.isRejected == true ? Colors.redAccent : Colors.green),
-                                ),
-                              ),
-                            ),
+                            _buildSemesterStatusBadge(semesterStatus),
                           ],
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Current Enrolled: Year ${semesterStatus?.currentYear ?? user?.year ?? 3}, Semester ${semesterStatus?.currentSemester ?? user?.semester ?? 1}',
+                          semesterStatus?.isNoEnrollment == true
+                              ? 'Current Enrolled: Not Enrolled'
+                              : 'Current Enrolled: Year ${semesterStatus?.currentYear ?? user?.year ?? 1}, Semester ${semesterStatus?.currentSemester ?? user?.semester ?? 1}',
                           style: TextStyle(
                             fontSize: 13,
                             color: isDark ? AppColors.outlineDark : AppColors.outlineLight,
                           ),
                         ),
 
-                        if (semesterStatus?.isPending == true) ...[
+                        // State 1: No Enrollment
+                        if (semesterStatus?.isNoEnrollment == true) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.blue.withOpacity(0.25)),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'You are not currently enrolled in an academic semester. Submit an initial enrollment request to join your cohort.',
+                                    style: TextStyle(fontSize: 12, color: Colors.blue, fontWeight: FontWeight.w500),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 44,
+                            child: ElevatedButton.icon(
+                              icon: const Icon(Icons.school, size: 18),
+                              label: const Text('Submit Initial Enrollment Request', style: TextStyle(fontWeight: FontWeight.bold)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primaryLight,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              onPressed: () => _showUpgradeDialog(isInitial: true),
+                            ),
+                          ),
+                        ]
+                        // State 2: Pending Request
+                        else if (semesterStatus?.isPending == true) ...[
                           const SizedBox(height: 12),
                           Container(
                             width: double.infinity,
@@ -330,9 +544,26 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                               ],
                             ),
                           ),
-                        ],
-
-                        if (semesterStatus?.isRejected == true && semesterStatus?.rejectionReason != null) ...[
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  icon: const Icon(Icons.edit_calendar, size: 18),
+                                  label: const Text('Change Request', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.orange,
+                                    side: const BorderSide(color: Colors.orange),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  ),
+                                  onPressed: () => _showChangeRequestDialog(semesterStatus!),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ]
+                        // State 4: Rejected State
+                        else if (semesterStatus?.isRejected == true) ...[
                           const SizedBox(height: 12),
                           Container(
                             width: double.infinity,
@@ -342,33 +573,85 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                               borderRadius: BorderRadius.circular(10),
                               border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
                             ),
-                            child: Text(
-                              'Rejection Reason: ${semesterStatus!.rejectionReason}',
-                              style: const TextStyle(fontSize: 12, color: Colors.redAccent),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.cancel_outlined, color: Colors.redAccent, size: 18),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        'Enrollment request for Year ${semesterStatus?.requestedYear ?? ''}, Sem ${semesterStatus?.requestedSemester ?? ''} was rejected.',
+                                        style: const TextStyle(fontSize: 12, color: Colors.redAccent, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (semesterStatus?.rejectionReason != null && semesterStatus!.rejectionReason!.isNotEmpty) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Reason: ${semesterStatus.rejectionReason}',
+                                    style: const TextStyle(fontSize: 12, color: Colors.redAccent),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  icon: const Icon(Icons.close, size: 16),
+                                  label: const Text('Dismiss Rejection', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: isDark ? Colors.white70 : Colors.black87,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  ),
+                                  onPressed: () => _dismissRejection(semesterStatus?.requestId),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  icon: const Icon(Icons.refresh, size: 16),
+                                  label: const Text('Re-apply', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.primaryLight,
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  ),
+                                  onPressed: () => _showUpgradeDialog(
+                                    currentYear: semesterStatus?.currentYear ?? user?.year,
+                                    currentSemester: semesterStatus?.currentSemester ?? user?.semester,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ]
+                        // State 3: Approved / Active
+                        else ...[
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 44,
+                            child: OutlinedButton.icon(
+                              icon: const Icon(Icons.upgrade, size: 18),
+                              label: const Text('Request Semester Upgrade', style: TextStyle(fontWeight: FontWeight.bold)),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.primaryLight,
+                                side: const BorderSide(color: AppColors.primaryLight),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              onPressed: () => _showUpgradeDialog(
+                                currentYear: semesterStatus?.currentYear ?? user?.year ?? 1,
+                                currentSemester: semesterStatus?.currentSemester ?? user?.semester ?? 1,
+                              ),
                             ),
                           ),
                         ],
-
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 44,
-                          child: OutlinedButton.icon(
-                            icon: const Icon(Icons.upgrade, size: 18),
-                            label: const Text('Request Semester Upgrade', style: TextStyle(fontWeight: FontWeight.bold)),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppColors.primaryLight,
-                              side: const BorderSide(color: AppColors.primaryLight),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                            onPressed: semesterStatus?.isPending == true
-                                ? null
-                                : () => _showUpgradeDialog(
-                                      semesterStatus?.currentYear ?? user?.year ?? 3,
-                                      semesterStatus?.currentSemester ?? user?.semester ?? 1,
-                                    ),
-                          ),
-                        ),
                       ],
                     ),
                   ),

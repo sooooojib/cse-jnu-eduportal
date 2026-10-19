@@ -207,6 +207,7 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
                     const SizedBox(height: 6),
                     DropdownButtonFormField<UserRole>(
                       value: selectedRole,
+                      isExpanded: true,
                       decoration: InputDecoration(
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -264,6 +265,7 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
                           Expanded(
                             child: DropdownButtonFormField<int>(
                               value: selectedYear,
+                              isExpanded: true,
                               decoration: InputDecoration(
                                 labelText: 'Year',
                                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -278,12 +280,13 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
                           Expanded(
                             child: DropdownButtonFormField<int>(
                               value: selectedSem,
+                              isExpanded: true,
                               decoration: InputDecoration(
                                 labelText: 'Semester',
                                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                               ),
                               items: [1, 2]
-                                  .map((s) => DropdownMenuItem(value: s, child: Text('Semester $s')))
+                                  .map((s) => DropdownMenuItem(value: s, child: Text('Sem $s')))
                                   .toList(),
                               onChanged: (val) => setModalState(() => selectedSem = val ?? 1),
                             ),
@@ -679,6 +682,7 @@ class _AdminSignupRequestsScreenState extends State<AdminSignupRequestsScreen> {
                     const SizedBox(height: 12),
                     DropdownButtonFormField<int>(
                       value: year,
+                      isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Year'),
                       items: [1, 2, 3, 4].map((y) => DropdownMenuItem(value: y, child: Text('Year $y'))).toList(),
                       onChanged: (v) => setSt(() => year = v ?? 1),
@@ -686,8 +690,9 @@ class _AdminSignupRequestsScreenState extends State<AdminSignupRequestsScreen> {
                     const SizedBox(height: 8),
                     DropdownButtonFormField<int>(
                       value: sem,
+                      isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Semester'),
-                      items: [1, 2].map((s) => DropdownMenuItem(value: s, child: Text('Semester $s'))).toList(),
+                      items: [1, 2].map((s) => DropdownMenuItem(value: s, child: Text('Sem $s'))).toList(),
                       onChanged: (v) => setSt(() => sem = v ?? 1),
                     ),
                   ],
@@ -998,6 +1003,138 @@ class _AdminSemesterRequestsScreenState extends State<AdminSemesterRequestsScree
     }
   }
 
+  void _showRequestDetails(SemesterUpgradeRequest req) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Request Details',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: req.status == 'PENDING'
+                        ? Colors.orange.withOpacity(0.15)
+                        : (req.status == 'APPROVED'
+                            ? Colors.green.withOpacity(0.15)
+                            : Colors.redAccent.withOpacity(0.15)),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    req.status,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      color: req.status == 'PENDING'
+                          ? Colors.orange
+                          : (req.status == 'APPROVED' ? Colors.green : Colors.redAccent),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _buildDetailRow('Student Name', req.studentName),
+            _buildDetailRow('Roll / ID', req.studentRoll),
+            _buildDetailRow('Current Standing', 'Year ${req.currentYear}, Semester ${req.currentSemester}'),
+            _buildDetailRow('Requested Standing', 'Year ${req.requestedYear}, Semester ${req.requestedSemester}'),
+            _buildDetailRow('Submission Date', req.createdAt),
+            if (req.rejectionReason != null && req.rejectionReason!.isNotEmpty)
+              _buildDetailRow('Rejection Reason', req.rejectionReason!, isError: true),
+            const SizedBox(height: 24),
+            if (req.status == 'PENDING') ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFFDC2626),
+                        side: const BorderSide(color: Color(0xFFDC2626)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _reject(req);
+                      },
+                      child: const Text('Reject Petition'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF047857),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _approve(req);
+                      },
+                      child: const Text('Approve Promotion'),
+                    ),
+                  ),
+                ],
+              ),
+            ] else ...[
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Close'),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value, {bool isError = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 140,
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w500),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: isError ? Colors.redAccent : null,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -1052,6 +1189,7 @@ class _AdminSemesterRequestsScreenState extends State<AdminSemesterRequestsScree
                             itemBuilder: (context, i) {
                               final req = _requests[i];
                               return AppCard(
+                                onTap: () => _showRequestDetails(req),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -1215,6 +1353,7 @@ class _AdminCourseManagementScreenState extends State<AdminCourseManagementScree
                         Expanded(
                           child: DropdownButtonFormField<String>(
                             value: type,
+                            isExpanded: true,
                             decoration: const InputDecoration(labelText: 'Type'),
                             items: const [
                               DropdownMenuItem(value: 'THEORY', child: Text('THEORY')),
@@ -1231,6 +1370,7 @@ class _AdminCourseManagementScreenState extends State<AdminCourseManagementScree
                         Expanded(
                           child: DropdownButtonFormField<int>(
                             value: year,
+                            isExpanded: true,
                             decoration: const InputDecoration(labelText: 'Year'),
                             items: [1, 2, 3, 4].map((y) => DropdownMenuItem(value: y, child: Text('Year $y'))).toList(),
                             onChanged: (v) => setSt(() => year = v ?? 1),
@@ -1240,8 +1380,9 @@ class _AdminCourseManagementScreenState extends State<AdminCourseManagementScree
                         Expanded(
                           child: DropdownButtonFormField<int>(
                             value: sem,
+                            isExpanded: true,
                             decoration: const InputDecoration(labelText: 'Semester'),
-                            items: [1, 2].map((s) => DropdownMenuItem(value: s, child: Text('Semester $s'))).toList(),
+                            items: [1, 2].map((s) => DropdownMenuItem(value: s, child: Text('Sem $s'))).toList(),
                             onChanged: (v) => setSt(() => sem = v ?? 1),
                           ),
                         ),
@@ -2308,22 +2449,54 @@ class _AdminFeedbackModerationScreenState extends State<AdminFeedbackModerationS
                                             color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.grey[200],
                                             borderRadius: BorderRadius.circular(6),
                                           ),
-                                          child: Text(
-                                            'Anonymous Student',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
-                                              color: isDark ? Colors.white60 : Colors.grey,
-                                            ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(Icons.shield_rounded, size: 12, color: Colors.blueGrey),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                item.studentName != null && item.studentName!.contains('Anonymous')
+                                                    ? item.studentName!
+                                                    : 'Anonymous Student',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: isDark ? Colors.white70 : Colors.black87,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         )
                                       else
-                                        const Text('By: Department Student', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                        Text('By: ${item.studentName ?? "Department Student"}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
                                     ],
                                   ),
-                                  Text(item.createdAt.substring(0, 10), style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                                  Text(item.createdAt.length >= 10 ? item.createdAt.substring(0, 10) : item.createdAt, style: const TextStyle(fontSize: 10, color: Colors.grey)),
                                 ],
                               ),
+                              if (item.replies.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.03),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: Colors.green.withValues(alpha: 0.2)),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Reply by ${item.replies.first.teacherName}:',
+                                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.green),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(item.replies.first.replyText, style: const TextStyle(fontSize: 11)),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         );

@@ -7,6 +7,7 @@ import '../../domain/usecases/logout_usecase.dart';
 import '../../domain/usecases/reset_password_usecase.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../../../../core/error/failures.dart';
+import '../../../../core/notifications/push_notification_service.dart';
 import 'auth_state.dart';
 
 class AuthController extends ChangeNotifier {
@@ -15,6 +16,7 @@ class AuthController extends ChangeNotifier {
   final LogoutUseCase logoutUseCase;
   final ResetPasswordUseCase? resetPasswordUseCase;
   final AuthRepository? authRepository;
+  final PushNotificationService? pushNotificationService;
 
   AuthState _state = const AuthInitial();
   StreamSubscription<User?>? _authSubscription;
@@ -25,6 +27,7 @@ class AuthController extends ChangeNotifier {
     required this.logoutUseCase,
     this.resetPasswordUseCase,
     this.authRepository,
+    this.pushNotificationService,
   });
 
   void startAuthListener() {
@@ -39,6 +42,7 @@ class AuthController extends ChangeNotifier {
             ));
           } else {
             _setState(Authenticated(user: user));
+            pushNotificationService?.registerCurrentToken();
           }
         } else {
           if (_state is Authenticated) {
@@ -57,6 +61,12 @@ class AuthController extends ChangeNotifier {
   User? get currentUser => _state is Authenticated ? (_state as Authenticated).user : null;
 
   bool get isAuthenticated => _state is Authenticated;
+
+  void updateUserProfile(User updatedUser) {
+    if (_state is Authenticated) {
+      _setState(Authenticated(user: updatedUser));
+    }
+  }
 
   void _setState(AuthState newState) {
     _state = newState;
@@ -94,6 +104,7 @@ class AuthController extends ChangeNotifier {
     try {
       final user = await loginUseCase.execute(email: email, password: password);
       _setState(Authenticated(user: user));
+      unawaited(pushNotificationService?.registerCurrentToken());
       return true;
     } catch (failure) {
       if (failure is Failure) {
@@ -127,6 +138,11 @@ class AuthController extends ChangeNotifier {
   Future<void> logout() async {
     _setState(const AuthLoading());
     try {
+      try {
+        await pushNotificationService?.unregisterCurrentToken();
+      } catch (e) {
+        debugPrint('Logout push token removal error: $e');
+      }
       await logoutUseCase.execute();
     } finally {
       _setState(const Unauthenticated());

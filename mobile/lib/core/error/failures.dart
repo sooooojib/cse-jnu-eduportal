@@ -13,6 +13,14 @@ abstract class Failure extends Equatable {
   });
 
   @override
+  String toString() {
+    if (message == 'NOT_FOUND' || code == 'not-found' || statusCode == 404) {
+      return 'The requested resource or session was not found.';
+    }
+    return message.isNotEmpty ? message : 'An unexpected server error occurred.';
+  }
+
+  @override
   List<Object?> get props => [message, code, statusCode];
 }
 

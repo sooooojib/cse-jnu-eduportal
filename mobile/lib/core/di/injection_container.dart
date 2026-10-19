@@ -7,6 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../storage/local_storage_service.dart';
+import '../storage/cloud_storage_service.dart';
+import '../communication/whatsapp_share_service.dart';
+import '../notifications/push_notification_service.dart';
 import '../../app/theme/theme_controller.dart';
 
 // Auth Feature
@@ -59,6 +62,21 @@ import '../../features/admin/domain/repositories/admin_repository.dart';
 import '../../features/admin/domain/usecases/admin_usecases.dart';
 import '../../features/admin/presentation/controllers/admin_dashboard_controller.dart';
 
+// Teacher Feature
+import '../../features/teacher/data/datasources/teacher_remote_datasource.dart';
+import '../../features/teacher/data/repositories/teacher_repository_impl.dart';
+import '../../features/teacher/domain/repositories/teacher_repository.dart';
+import '../../features/teacher/domain/usecases/get_teacher_dashboard_data_usecase.dart';
+import '../../features/teacher/presentation/controllers/teacher_dashboard_controller.dart';
+
+// CR Feature
+import '../../features/cr/data/datasources/cr_remote_datasource.dart';
+import '../../features/cr/data/repositories/cr_repository_impl.dart';
+import '../../features/cr/domain/repositories/cr_repository.dart';
+import '../../features/cr/domain/usecases/add_tomorrow_slot_usecase.dart';
+import '../../features/cr/domain/usecases/get_cr_dashboard_data_usecase.dart';
+import '../../features/cr/presentation/controllers/cr_dashboard_controller.dart';
+
 final sl = GetIt.instance;
 
 Future<void> initDependencies() async {
@@ -76,6 +94,14 @@ Future<void> initDependencies() async {
   // 3. Core Storage Services
   sl.registerLazySingleton<LocalStorageService>(
     () => LocalStorageServiceImpl(prefs: sl()),
+  );
+
+  sl.registerLazySingleton<CloudStorageService>(
+    () => CloudStorageServiceImpl(storage: sl()),
+  );
+
+  sl.registerLazySingleton<WhatsAppShareService>(
+    () => WhatsAppShareService(),
   );
 
   sl.registerLazySingleton<ThemeController>(
@@ -132,6 +158,7 @@ Future<void> initDependencies() async {
       logoutUseCase: sl(),
       resetPasswordUseCase: sl(),
       authRepository: sl(),
+      pushNotificationService: sl(),
     )..startAuthListener(),
   );
 
@@ -140,6 +167,7 @@ Future<void> initDependencies() async {
     () => CurriculumRemoteDataSourceImpl(
       firestore: sl(),
       auth: sl(),
+      functions: sl(),
     ),
   );
 
@@ -155,16 +183,71 @@ Future<void> initDependencies() async {
     () => GetScheduleUseCase(sl()),
   );
 
+  sl.registerLazySingleton<CreateScheduleSlotUseCase>(
+    () => CreateScheduleSlotUseCase(sl()),
+  );
+
+  sl.registerLazySingleton<UpdateScheduleSlotUseCase>(
+    () => UpdateScheduleSlotUseCase(sl()),
+  );
+
+  sl.registerLazySingleton<DeleteScheduleSlotUseCase>(
+    () => DeleteScheduleSlotUseCase(sl()),
+  );
+
+  sl.registerLazySingleton<GetTeacherAvailabilityUseCase>(
+    () => GetTeacherAvailabilityUseCase(sl()),
+  );
+
+  sl.registerLazySingleton<GetWhatsAppBroadcastUseCase>(
+    () => GetWhatsAppBroadcastUseCase(sl()),
+  );
+
+  sl.registerLazySingleton<GetAllCoursesUseCase>(
+    () => GetAllCoursesUseCase(sl()),
+  );
+
+  sl.registerLazySingleton<GetAllTeachersUseCase>(
+    () => GetAllTeachersUseCase(sl()),
+  );
+
   sl.registerLazySingleton<GetExamsUseCase>(
     () => GetExamsUseCase(sl()),
   );
 
+  sl.registerLazySingleton<CreateExamUseCase>(
+    () => CreateExamUseCase(sl()),
+  );
+
+  sl.registerLazySingleton<UpdateExamUseCase>(
+    () => UpdateExamUseCase(sl()),
+  );
+
+  sl.registerLazySingleton<DeleteExamUseCase>(
+    () => DeleteExamUseCase(sl()),
+  );
+
   sl.registerFactory<ScheduleController>(
-    () => ScheduleController(getScheduleUseCase: sl()),
+    () => ScheduleController(
+      getScheduleUseCase: sl(),
+      createScheduleSlotUseCase: sl(),
+      updateScheduleSlotUseCase: sl(),
+      deleteScheduleSlotUseCase: sl(),
+      getTeacherAvailabilityUseCase: sl(),
+      getWhatsAppBroadcastUseCase: sl(),
+      getAllCoursesUseCase: sl(),
+      getAllTeachersUseCase: sl(),
+    ),
   );
 
   sl.registerFactory<ExamsController>(
-    () => ExamsController(getExamsUseCase: sl()),
+    () => ExamsController(
+      getExamsUseCase: sl(),
+      createExamUseCase: sl(),
+      updateExamUseCase: sl(),
+      deleteExamUseCase: sl(),
+      getAllCoursesUseCase: sl(),
+    ),
   );
 
   // 6. Attendance Feature
@@ -172,6 +255,7 @@ Future<void> initDependencies() async {
     () => AttendanceRemoteDataSourceImpl(
       firestore: sl(),
       auth: sl(),
+      functions: sl(),
     ),
   );
 
@@ -187,10 +271,35 @@ Future<void> initDependencies() async {
     () => VerifyAttendanceCodeUseCase(sl()),
   );
 
+  sl.registerLazySingleton<StartAttendanceSessionUseCase>(
+    () => StartAttendanceSessionUseCase(sl()),
+  );
+
+  sl.registerLazySingleton<DeactivateAttendanceSessionUseCase>(
+    () => DeactivateAttendanceSessionUseCase(sl()),
+  );
+
+  sl.registerLazySingleton<GetActiveAttendanceSessionUseCase>(
+    () => GetActiveAttendanceSessionUseCase(sl()),
+  );
+
+  sl.registerLazySingleton<GetSessionRosterUseCase>(
+    () => GetSessionRosterUseCase(sl()),
+  );
+
+  sl.registerLazySingleton<UpdateAttendanceRosterUseCase>(
+    () => UpdateAttendanceRosterUseCase(sl()),
+  );
+
   sl.registerFactory<AttendanceController>(
     () => AttendanceController(
       getAttendanceSummaryUseCase: sl(),
       verifyAttendanceCodeUseCase: sl(),
+      startAttendanceSessionUseCase: sl(),
+      deactivateAttendanceSessionUseCase: sl(),
+      getActiveAttendanceSessionUseCase: sl(),
+      getSessionRosterUseCase: sl(),
+      updateAttendanceRosterUseCase: sl(),
     ),
   );
 
@@ -199,6 +308,7 @@ Future<void> initDependencies() async {
     () => CounselingRemoteDataSourceImpl(
       firestore: sl(),
       auth: sl(),
+      functions: sl.isRegistered<FirebaseFunctions>() ? sl<FirebaseFunctions>() : null,
     ),
   );
 
@@ -222,12 +332,42 @@ Future<void> initDependencies() async {
     () => CancelBookingUseCase(sl()),
   );
 
+  sl.registerLazySingleton<CreateCounselingSlotUseCase>(
+    () => CreateCounselingSlotUseCase(sl()),
+  );
+
+  sl.registerLazySingleton<GetTeacherSlotsUseCase>(
+    () => GetTeacherSlotsUseCase(sl()),
+  );
+
+  sl.registerLazySingleton<GetTeacherRequestsUseCase>(
+    () => GetTeacherRequestsUseCase(sl()),
+  );
+
+  sl.registerLazySingleton<ApproveBookingUseCase>(
+    () => ApproveBookingUseCase(sl()),
+  );
+
+  sl.registerLazySingleton<RejectBookingUseCase>(
+    () => RejectBookingUseCase(sl()),
+  );
+
+  sl.registerLazySingleton<DeleteCounselingSlotUseCase>(
+    () => DeleteCounselingSlotUseCase(sl()),
+  );
+
   sl.registerFactory<CounselingController>(
     () => CounselingController(
       getAvailableSlotsUseCase: sl(),
       requestBookingUseCase: sl(),
       getMyBookingsUseCase: sl(),
       cancelBookingUseCase: sl(),
+      createCounselingSlotUseCase: sl(),
+      getTeacherSlotsUseCase: sl(),
+      getTeacherRequestsUseCase: sl(),
+      approveBookingUseCase: sl(),
+      rejectBookingUseCase: sl(),
+      deleteCounselingSlotUseCase: sl(),
     ),
   );
 
@@ -236,6 +376,7 @@ Future<void> initDependencies() async {
     () => FeedbackRemoteDataSourceImpl(
       firestore: sl(),
       auth: sl(),
+      functions: sl(),
     ),
   );
 
@@ -247,14 +388,39 @@ Future<void> initDependencies() async {
     () => SubmitFeedbackUseCase(sl()),
   );
 
+  sl.registerLazySingleton<EditFeedbackUseCase>(
+    () => EditFeedbackUseCase(sl()),
+  );
+
   sl.registerLazySingleton<GetMyFeedbackUseCase>(
     () => GetMyFeedbackUseCase(sl()),
+  );
+
+  sl.registerLazySingleton<GetTeacherFeedbackUseCase>(
+    () => GetTeacherFeedbackUseCase(sl()),
+  );
+
+  sl.registerLazySingleton<ReplyToFeedbackUseCase>(
+    () => ReplyToFeedbackUseCase(sl()),
+  );
+
+  sl.registerLazySingleton<EditFeedbackReplyUseCase>(
+    () => EditFeedbackReplyUseCase(sl()),
+  );
+
+  sl.registerLazySingleton<GetAdminFeedbackUseCase>(
+    () => GetAdminFeedbackUseCase(sl()),
   );
 
   sl.registerFactory<FeedbackController>(
     () => FeedbackController(
       submitFeedbackUseCase: sl(),
+      editFeedbackUseCase: sl(),
       getMyFeedbackUseCase: sl(),
+      getTeacherFeedbackUseCase: sl(),
+      replyToFeedbackUseCase: sl(),
+      editFeedbackReplyUseCase: sl(),
+      getAdminFeedbackUseCase: sl(),
     ),
   );
 
@@ -278,10 +444,20 @@ Future<void> initDependencies() async {
     () => RequestSemesterUpgradeUseCase(sl()),
   );
 
+  sl.registerLazySingleton<ChangeSemesterUpgradeRequestUseCase>(
+    () => ChangeSemesterUpgradeRequestUseCase(sl()),
+  );
+
+  sl.registerLazySingleton<DismissSemesterRejectionUseCase>(
+    () => DismissSemesterRejectionUseCase(sl()),
+  );
+
   sl.registerFactory<ProfileController>(
     () => ProfileController(
       getSemesterStatusUseCase: sl(),
       requestSemesterUpgradeUseCase: sl(),
+      changeSemesterUpgradeRequestUseCase: sl(),
+      dismissSemesterRejectionUseCase: sl(),
     ),
   );
 
@@ -307,6 +483,13 @@ Future<void> initDependencies() async {
 
   sl.registerLazySingleton<MarkAllNotificationsReadUseCase>(
     () => MarkAllNotificationsReadUseCase(sl()),
+  );
+
+  sl.registerLazySingleton<PushNotificationService>(
+    () => PushNotificationServiceImpl(
+      messaging: sl(),
+      notificationRepository: sl(),
+    ),
   );
 
   sl.registerFactory<NotificationController>(
@@ -356,6 +539,51 @@ Future<void> initDependencies() async {
       rejectSignupUseCase: sl(),
       approveSemesterUseCase: sl(),
       rejectSemesterUseCase: sl(),
+    ),
+  );
+
+  // 12. Teacher Feature
+  sl.registerLazySingleton<TeacherRemoteDataSource>(
+    () => TeacherRemoteDataSourceImpl(firestore: sl()),
+  );
+
+  sl.registerLazySingleton<TeacherRepository>(
+    () => TeacherRepositoryImpl(remoteDataSource: sl()),
+  );
+
+  sl.registerLazySingleton<GetTeacherDashboardDataUseCase>(
+    () => GetTeacherDashboardDataUseCase(sl()),
+  );
+
+  sl.registerFactory<TeacherDashboardController>(
+    () => TeacherDashboardController(
+      getTeacherDashboardDataUseCase: sl(),
+      authController: sl(),
+    ),
+  );
+
+  // 13. CR Feature
+  sl.registerLazySingleton<CrRemoteDataSource>(
+    () => CrRemoteDataSourceImpl(firestore: sl()),
+  );
+
+  sl.registerLazySingleton<CrRepository>(
+    () => CrRepositoryImpl(remoteDataSource: sl()),
+  );
+
+  sl.registerLazySingleton<GetCrDashboardDataUseCase>(
+    () => GetCrDashboardDataUseCase(sl()),
+  );
+
+  sl.registerLazySingleton<AddTomorrowSlotUseCase>(
+    () => AddTomorrowSlotUseCase(sl()),
+  );
+
+  sl.registerFactory<CrDashboardController>(
+    () => CrDashboardController(
+      getCrDashboardDataUseCase: sl(),
+      addTomorrowSlotUseCase: sl(),
+      authController: sl(),
     ),
   );
 }

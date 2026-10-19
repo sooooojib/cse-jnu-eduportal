@@ -18,6 +18,9 @@ import '../../features/profile/presentation/screens/student_profile_screen.dart'
 import '../../features/notifications/presentation/screens/notification_list_screen.dart';
 import '../../features/admin/presentation/screens/admin_management_screens.dart';
 import '../../features/admin/presentation/screens/admin_notification_hub_screen.dart';
+import '../../features/teacher/presentation/screens/teacher_schedule_screen.dart';
+import '../../features/counseling/presentation/screens/teacher_counseling_screen.dart';
+import '../../features/feedback/presentation/screens/teacher_feedback_screen.dart';
 import '../../shared/presentation/foundation_preview_screen.dart';
 
 class AppRouter {
@@ -40,11 +43,12 @@ class AppRouter {
         final isSplash = state.matchedLocation == RouteNames.initial;
         final isPreview = state.matchedLocation == RouteNames.foundationPreview;
 
-        // Allow splash, preview, welcome, login, and signup requests without auth
-        if (isSplash || isPreview || isWelcome || isLoggingIn || isSigningUp) return null;
+        // Allow splash, preview, and signup requests without auth
+        if (isSplash || isPreview || isSigningUp) return null;
 
-        // If unauthenticated or disabled, redirect all protected paths to login
+        // If unauthenticated or disabled, permit login & welcome, redirect others to login
         if (authState is! Authenticated) {
+          if (isWelcome || isLoggingIn) return null;
           return RouteNames.login;
         }
 
@@ -62,14 +66,39 @@ class AppRouter {
           return _getDashboardRouteForRole(user.role);
         }
         if (currentPath == RouteNames.teacherDashboard &&
-            user.role != UserRole.teacher &&
-            user.role != UserRole.admin) {
+            user.role != UserRole.teacher) {
+          return _getDashboardRouteForRole(user.role);
+        }
+        if (currentPath == RouteNames.teacherFeedback &&
+            user.role != UserRole.teacher) {
           return _getDashboardRouteForRole(user.role);
         }
         if (currentPath == RouteNames.crDashboard &&
-            user.role != UserRole.cr &&
-            user.role != UserRole.admin) {
+            user.role != UserRole.cr) {
           return _getDashboardRouteForRole(user.role);
+        }
+        if (user.role == UserRole.cr && currentPath == RouteNames.studentDashboard) {
+          return RouteNames.crDashboard;
+        }
+        if (user.role == UserRole.teacher &&
+            (currentPath == RouteNames.studentDashboard ||
+             currentPath == RouteNames.attendanceTerminal ||
+             currentPath == RouteNames.schedule ||
+             currentPath == RouteNames.counseling ||
+             currentPath == RouteNames.studentProfile)) {
+          return RouteNames.teacherDashboard;
+        }
+        if (user.role == UserRole.teacher && currentPath == RouteNames.feedback) {
+          return RouteNames.teacherFeedback;
+        }
+        if (user.role == UserRole.admin &&
+            (currentPath == RouteNames.studentDashboard ||
+             currentPath == RouteNames.attendanceTerminal ||
+             currentPath == RouteNames.schedule ||
+             currentPath == RouteNames.counseling ||
+             currentPath == RouteNames.feedback ||
+             currentPath == RouteNames.studentProfile)) {
+          return RouteNames.adminDashboard;
         }
 
         return null;
@@ -114,15 +143,42 @@ class AppRouter {
         ),
         GoRoute(
           path: RouteNames.schedule,
-          builder: (context, state) => const StudentMainScaffold(initialIndex: 2),
+          builder: (context, state) {
+            if (auth.currentUser?.role == UserRole.teacher) {
+              return const TeacherScheduleScreen();
+            }
+            return const StudentMainScaffold(initialIndex: 2);
+          },
+        ),
+        GoRoute(
+          path: RouteNames.teacherSchedule,
+          builder: (context, state) => const TeacherScheduleScreen(),
         ),
         GoRoute(
           path: RouteNames.counseling,
-          builder: (context, state) => const StudentMainScaffold(initialIndex: 3),
+          builder: (context, state) {
+            if (auth.currentUser?.role == UserRole.teacher) {
+              return const TeacherCounselingScreen();
+            }
+            return const StudentMainScaffold(initialIndex: 3);
+          },
+        ),
+        GoRoute(
+          path: RouteNames.teacherCounseling,
+          builder: (context, state) => const TeacherCounselingScreen(),
         ),
         GoRoute(
           path: RouteNames.feedback,
-          builder: (context, state) => const StudentMainScaffold(initialIndex: 4),
+          builder: (context, state) {
+            if (auth.currentUser?.role == UserRole.teacher) {
+              return const TeacherFeedbackScreen();
+            }
+            return const StudentMainScaffold(initialIndex: 4);
+          },
+        ),
+        GoRoute(
+          path: RouteNames.teacherFeedback,
+          builder: (context, state) => const TeacherFeedbackScreen(),
         ),
         GoRoute(
           path: RouteNames.studentProfile,

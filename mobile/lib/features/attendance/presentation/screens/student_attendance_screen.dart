@@ -4,7 +4,12 @@ import '../../../../core/di/injection_container.dart';
 import '../controllers/attendance_controller.dart';
 
 class StudentAttendanceScreen extends StatefulWidget {
-  const StudentAttendanceScreen({super.key});
+  final AttendanceController? controller;
+
+  const StudentAttendanceScreen({
+    super.key,
+    this.controller,
+  });
 
   @override
   State<StudentAttendanceScreen> createState() => _StudentAttendanceScreenState();
@@ -18,7 +23,7 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
   @override
   void initState() {
     super.initState();
-    _controller = sl<AttendanceController>();
+    _controller = widget.controller ?? sl<AttendanceController>();
     _controller.fetchSummary();
   }
 
@@ -33,7 +38,7 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
     if (code.length != 6) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please enter the complete 6-digit verification code.'),
+          content: Text('Please enter the complete 6-character verification code.'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -118,7 +123,7 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Submit the 6-digit session code provided by faculty during lecture.',
+                  'Submit the 6-character verification code provided by faculty during lecture.',
                   style: TextStyle(
                     fontSize: 13,
                     color: isDark ? AppColors.outlineDark : AppColors.outlineLight,
@@ -294,30 +299,37 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Row(
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.primaryLight.withOpacity(0.12),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Text(
-                                        item.courseCode,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          color: AppColors.primaryLight,
-                                          fontSize: 12,
+                                Expanded(
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primaryLight.withOpacity(0.12),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          item.courseCode,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.primaryLight,
+                                            fontSize: 12,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      item.courseTitle,
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                    ),
-                                  ],
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          item.courseTitle,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
+                                const SizedBox(width: 8),
                                 Text(
                                   '${item.percentage.toStringAsFixed(1)}%',
                                   style: TextStyle(
@@ -344,13 +356,18 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(
-                                  '${item.attendedClasses} / ${item.totalClasses} lectures attended',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: isDark ? AppColors.outlineDark : AppColors.outlineLight,
+                                Expanded(
+                                  child: Text(
+                                    '${item.attendedClasses} / ${item.totalClasses} lectures attended',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isDark ? AppColors.outlineDark : AppColors.outlineLight,
+                                    ),
                                   ),
                                 ),
+                                const SizedBox(width: 8),
                                 Text(
                                   isEligible ? 'Eligible' : 'Non-Collegiate / Ineligible',
                                   style: TextStyle(
@@ -409,23 +426,30 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '${record.courseCode} • ${record.courseTitle}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  record.verifiedAt.length >= 10 ? record.verifiedAt.substring(0, 10) : record.verifiedAt,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: isDark ? AppColors.outlineDark : AppColors.outlineLight,
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${record.courseCode} • ${record.courseTitle}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    record.verifiedAt.length >= 10 ? record.verifiedAt.substring(0, 10) : record.verifiedAt,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: isDark ? AppColors.outlineDark : AppColors.outlineLight,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
+                            const SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(

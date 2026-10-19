@@ -40,26 +40,47 @@ class AttachmentModel extends Attachment {
 class FeedbackReplyModel extends FeedbackReply {
   const FeedbackReplyModel({
     required super.id,
+    super.teacherId,
     required super.teacherName,
     required super.replyText,
+    super.attachments = const [],
     required super.createdAt,
+    super.updatedAt,
   });
 
   factory FeedbackReplyModel.fromJson(Map<String, dynamic> json) {
+    final attachmentsList = (json['attachments'] as List? ?? [])
+        .map((a) => AttachmentModel.fromJson(a as Map<String, dynamic>))
+        .toList();
+
     return FeedbackReplyModel(
       id: json['id'] as String? ?? '',
+      teacherId: json['teacherId'] as String?,
       teacherName: json['teacherName'] as String? ?? '',
       replyText: json['replyText'] as String? ?? '',
+      attachments: attachmentsList,
       createdAt: _tsToString(json['createdAt']),
+      updatedAt: json['updatedAt'] != null ? _tsToString(json['updatedAt']) : null,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      if (teacherId != null) 'teacherId': teacherId,
       'teacherName': teacherName,
       'replyText': replyText,
+      'attachments': attachments
+          .map((a) => (a is AttachmentModel ? a : AttachmentModel(
+                id: a.id,
+                fileName: a.fileName,
+                fileUrl: a.fileUrl,
+                mimeType: a.mimeType,
+                fileSize: a.fileSize,
+              )).toJson())
+          .toList(),
       'createdAt': createdAt,
+      if (updatedAt != null) 'updatedAt': updatedAt,
     };
   }
 }
@@ -75,9 +96,13 @@ class FeedbackItemModel extends FeedbackItem {
     required super.rating,
     required super.comments,
     required super.isAnonymous,
+    super.studentId,
+    super.studentName,
+    super.studentEmail,
     super.attachments = const [],
     required super.replies,
     required super.createdAt,
+    super.updatedAt,
   });
 
   factory FeedbackItemModel.fromJson(Map<String, dynamic> json) {
@@ -98,9 +123,13 @@ class FeedbackItemModel extends FeedbackItem {
       rating: json['rating'] as int? ?? 0,
       comments: json['comments'] as String? ?? '',
       isAnonymous: json['isAnonymous'] as bool? ?? false,
+      studentId: json['studentId'] as String?,
+      studentName: json['studentName'] as String?,
+      studentEmail: json['studentEmail'] as String?,
       attachments: attachmentsList,
       replies: List<FeedbackReply>.from(repliesList),
       createdAt: _tsToString(json['createdAt']),
+      updatedAt: json['updatedAt'] != null ? _tsToString(json['updatedAt']) : null,
     );
   }
 
@@ -120,24 +149,31 @@ class FeedbackItemModel extends FeedbackItem {
       'rating': rating,
       'comments': comments,
       'isAnonymous': isAnonymous,
+      if (studentId != null) 'studentId': studentId,
+      if (studentName != null) 'studentName': studentName,
+      if (studentEmail != null) 'studentEmail': studentEmail,
       'attachments': attachments
-          .map((a) => {
-                'id': a.id,
-                'fileName': a.fileName,
-                'fileUrl': a.fileUrl,
-                'mimeType': a.mimeType,
-                'fileSize': a.fileSize,
-              })
+          .map((a) => (a is AttachmentModel ? a : AttachmentModel(
+                id: a.id,
+                fileName: a.fileName,
+                fileUrl: a.fileUrl,
+                mimeType: a.mimeType,
+                fileSize: a.fileSize,
+              )).toJson())
           .toList(),
       'replies': replies
-          .map((r) => {
-                'id': r.id,
-                'teacherName': r.teacherName,
-                'replyText': r.replyText,
-                'createdAt': r.createdAt,
-              })
+          .map((r) => (r is FeedbackReplyModel ? r : FeedbackReplyModel(
+                id: r.id,
+                teacherId: r.teacherId,
+                teacherName: r.teacherName,
+                replyText: r.replyText,
+                attachments: r.attachments,
+                createdAt: r.createdAt,
+                updatedAt: r.updatedAt,
+              )).toJson())
           .toList(),
       'createdAt': createdAt,
+      if (updatedAt != null) 'updatedAt': updatedAt,
     };
   }
 
@@ -151,7 +187,8 @@ class FeedbackItemModel extends FeedbackItem {
       'rating': rating,
       'comments': comments,
       'isAnonymous': isAnonymous,
-      'studentId': isAnonymous ? 'ANONYMOUS' : null,
+      'studentId': isAnonymous ? 'ANONYMOUS' : studentId,
+      'studentName': isAnonymous ? 'Anonymous Student' : studentName,
       'attachments': attachments
           .map((a) => {
                 'id': a.id,
@@ -164,12 +201,24 @@ class FeedbackItemModel extends FeedbackItem {
       'replies': replies
           .map((r) => {
                 'id': r.id,
+                if (r.teacherId != null) 'teacherId': r.teacherId,
                 'teacherName': r.teacherName,
                 'replyText': r.replyText,
+                'attachments': r.attachments
+                    .map((att) => {
+                          'id': att.id,
+                          'fileName': att.fileName,
+                          'fileUrl': att.fileUrl,
+                          'mimeType': att.mimeType,
+                          'fileSize': att.fileSize,
+                        })
+                    .toList(),
                 'createdAt': r.createdAt,
+                if (r.updatedAt != null) 'updatedAt': r.updatedAt,
               })
           .toList(),
-      'createdAt': FieldValue.serverTimestamp(),
+      'hasReplied': replies.isNotEmpty,
+      'updatedAt': FieldValue.serverTimestamp(),
     };
   }
 }

@@ -203,6 +203,9 @@ class ScheduleSlotModel extends ScheduleSlot {
     required super.targetYear,
     required super.targetSemester,
     super.isExtraClass = false,
+    super.date,
+    super.status = 'SCHEDULED',
+    super.createdBy,
   });
 
   factory ScheduleSlotModel.fromJson(Map<String, dynamic> json) {
@@ -220,6 +223,9 @@ class ScheduleSlotModel extends ScheduleSlot {
       targetYear: json['targetYear'] as int? ?? 1,
       targetSemester: json['targetSemester'] as int? ?? 1,
       isExtraClass: json['isExtraClass'] as bool? ?? false,
+      date: json['date'] as String?,
+      status: json['status'] as String? ?? 'SCHEDULED',
+      createdBy: json['createdBy'] as String?,
     );
   }
 
@@ -243,6 +249,9 @@ class ScheduleSlotModel extends ScheduleSlot {
       'targetYear': targetYear,
       'targetSemester': targetSemester,
       'isExtraClass': isExtraClass,
+      'date': date,
+      'status': status,
+      'createdBy': createdBy,
     };
   }
 
@@ -260,6 +269,9 @@ class ScheduleSlotModel extends ScheduleSlot {
       'targetYear': targetYear,
       'targetSemester': targetSemester,
       'isExtraClass': isExtraClass,
+      'date': date,
+      'status': status,
+      'createdBy': createdBy,
       'updatedAt': FieldValue.serverTimestamp(),
     };
   }
@@ -278,6 +290,14 @@ class ExamModel extends Exam {
     required super.room,
     required super.year,
     required super.semester,
+    super.type = 'MID_TERM',
+    super.instructions,
+    super.invigilatorName,
+    super.invigilatorId,
+    super.createdBy,
+    super.creatorRole,
+    super.createdAt,
+    super.updatedAt,
   });
 
   factory ExamModel.fromJson(Map<String, dynamic> json) {
@@ -293,6 +313,18 @@ class ExamModel extends Exam {
       room: json['room'] as String? ?? '',
       year: json['year'] as int? ?? 1,
       semester: json['semester'] as int? ?? 1,
+      type: json['type'] as String? ?? 'MID_TERM',
+      instructions: json['instructions'] as String?,
+      invigilatorName: json['invigilatorName'] as String?,
+      invigilatorId: json['invigilatorId'] as String?,
+      createdBy: json['createdBy'] as String?,
+      creatorRole: json['creatorRole'] as String?,
+      createdAt: json['createdAt'] is Timestamp
+          ? (json['createdAt'] as Timestamp).toDate().toIso8601String()
+          : json['createdAt'] as String?,
+      updatedAt: json['updatedAt'] is Timestamp
+          ? (json['updatedAt'] as Timestamp).toDate().toIso8601String()
+          : json['updatedAt'] as String?,
     );
   }
 
@@ -314,6 +346,14 @@ class ExamModel extends Exam {
       'room': room,
       'year': year,
       'semester': semester,
+      'type': type,
+      'instructions': instructions,
+      'invigilatorName': invigilatorName,
+      'invigilatorId': invigilatorId,
+      'createdBy': createdBy,
+      'creatorRole': creatorRole,
+      'createdAt': createdAt,
+      'updatedAt': updatedAt,
     };
   }
 
@@ -329,7 +369,74 @@ class ExamModel extends Exam {
       'room': room,
       'year': year,
       'semester': semester,
+      'type': type,
+      'instructions': instructions,
+      'invigilatorName': invigilatorName,
+      'invigilatorId': invigilatorId,
+      'createdBy': createdBy,
+      'creatorRole': creatorRole,
       'updatedAt': FieldValue.serverTimestamp(),
     };
+  }
+}
+
+class TeacherAvailabilityModel extends TeacherAvailability {
+  const TeacherAvailabilityModel({
+    required super.teacherId,
+    required super.teacherName,
+    required super.dayOfWeek,
+    required super.busySlots,
+    required super.freeWindows,
+  });
+
+  factory TeacherAvailabilityModel.fromJson(Map<String, dynamic> json) {
+    final rawBusy = json['busySlots'] as List<dynamic>? ?? [];
+    final busy = rawBusy.map((b) {
+      final map = b is Map<String, dynamic> ? b : Map<String, dynamic>.from(b as Map);
+      return TeacherAvailabilitySlot(
+        startTime: map['startTime'] as String? ?? '',
+        endTime: map['endTime'] as String? ?? '',
+        courseCode: map['courseCode'] as String? ?? '',
+        room: map['room'] as String? ?? '',
+      );
+    }).toList();
+
+    final rawFree = json['freeWindows'] as List<dynamic>? ?? [];
+    final free = rawFree.map((f) {
+      final map = f is Map<String, dynamic> ? f : Map<String, dynamic>.from(f as Map);
+      return TeacherAvailabilityWindow(
+        startTime: map['startTime'] as String? ?? '',
+        endTime: map['endTime'] as String? ?? '',
+        durationMinutes: (map['durationMinutes'] as num?)?.toInt() ?? 0,
+      );
+    }).toList();
+
+    return TeacherAvailabilityModel(
+      teacherId: json['teacherId'] as String? ?? '',
+      teacherName: json['teacherName'] as String? ?? '',
+      dayOfWeek: json['dayOfWeek'] as String? ?? '',
+      busySlots: busy,
+      freeWindows: free,
+    );
+  }
+}
+
+class WhatsAppBroadcastDataModel extends WhatsAppBroadcastData {
+  const WhatsAppBroadcastDataModel({
+    required super.date,
+    required super.dayOfWeek,
+    required super.slotCount,
+    required super.broadcastText,
+    required super.whatsappUrl,
+  });
+
+  factory WhatsAppBroadcastDataModel.fromJson(Map<String, dynamic> json) {
+    return WhatsAppBroadcastDataModel(
+      date: json['date'] as String? ?? '',
+      dayOfWeek: json['dayOfWeek'] as String? ?? '',
+      slotCount: (json['slotCount'] as num?)?.toInt() ?? 0,
+      broadcastText: json['broadcastText'] as String? ?? '',
+      whatsappUrl: json['whatsappUrl'] as String? ?? '',
+    );
   }
 }

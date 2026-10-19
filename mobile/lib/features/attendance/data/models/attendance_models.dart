@@ -7,6 +7,14 @@ String _tsToString(dynamic value) {
   return value.toString();
 }
 
+DateTime? _parseDateTime(dynamic value) {
+  if (value == null) return null;
+  if (value is Timestamp) return value.toDate();
+  if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+  if (value is String) return DateTime.tryParse(value);
+  return null;
+}
+
 class AttendanceSessionModel extends AttendanceSession {
   const AttendanceSessionModel({
     required super.id,
@@ -21,6 +29,7 @@ class AttendanceSessionModel extends AttendanceSession {
     required super.sessionDate,
     super.totalPresentCount = 0,
     required super.createdAt,
+    super.expiresAt,
   });
 
   factory AttendanceSessionModel.fromJson(Map<String, dynamic> json) {
@@ -37,6 +46,7 @@ class AttendanceSessionModel extends AttendanceSession {
       sessionDate: json['sessionDate'] as String? ?? json['date'] as String? ?? '',
       totalPresentCount: json['totalPresentCount'] as int? ?? 0,
       createdAt: _tsToString(json['createdAt']),
+      expiresAt: _parseDateTime(json['expiresAt'] ?? json['expiresAtMillis']),
     );
   }
 
@@ -210,6 +220,72 @@ class AttendanceSummaryModel extends AttendanceSummary {
       totalSessions: json['totalSessions'] as int? ?? 0,
       courseSummaries: List<CourseAttendance>.from(summaries),
       recentRecords: List<AttendanceRecord>.from(records),
+    );
+  }
+}
+
+class AttendanceRosterItemModel extends AttendanceRosterItem {
+  const AttendanceRosterItemModel({
+    required super.studentId,
+    required super.studentRoll,
+    required super.studentName,
+    required super.status,
+    super.isManualOverride = false,
+    super.verifiedAt,
+  });
+
+  factory AttendanceRosterItemModel.fromJson(Map<String, dynamic> json) {
+    return AttendanceRosterItemModel(
+      studentId: json['studentId'] as String? ?? '',
+      studentRoll: json['studentRoll'] as String? ?? json['roll'] as String? ?? '',
+      studentName: json['studentName'] as String? ?? json['name'] as String? ?? '',
+      status: json['status'] as String? ?? 'ABSENT',
+      isManualOverride: json['isManualOverride'] as bool? ?? false,
+      verifiedAt: json['verifiedAt'] != null ? _tsToString(json['verifiedAt']) : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'studentId': studentId,
+      'studentRoll': studentRoll,
+      'studentName': studentName,
+      'status': status,
+      'isManualOverride': isManualOverride,
+      'verifiedAt': verifiedAt,
+    };
+  }
+}
+
+class SessionRosterModel extends SessionRoster {
+  const SessionRosterModel({
+    required super.sessionId,
+    required super.courseCode,
+    required super.courseTitle,
+    required super.sessionDate,
+    super.code,
+    required super.isActive,
+    required super.totalEnrolled,
+    required super.totalPresent,
+    required super.roster,
+  });
+
+  factory SessionRosterModel.fromJson(Map<String, dynamic> json) {
+    final rawList = json['roster'] as List<dynamic>? ?? [];
+    final rosterList = rawList
+        .map((e) => AttendanceRosterItemModel.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+
+    return SessionRosterModel(
+      sessionId: json['sessionId'] as String? ?? '',
+      courseCode: json['courseCode'] as String? ?? '',
+      courseTitle: json['courseTitle'] as String? ?? '',
+      sessionDate: json['sessionDate'] as String? ?? '',
+      code: json['code'] as String?,
+      isActive: json['isActive'] as bool? ?? false,
+      totalEnrolled: json['totalEnrolled'] as int? ?? rosterList.length,
+      totalPresent: json['totalPresent'] as int? ?? rosterList.where((r) => r.status == 'PRESENT').length,
+      roster: rosterList,
     );
   }
 }

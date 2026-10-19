@@ -60,14 +60,20 @@ class AppConfirmationDialog extends StatelessWidget {
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: isDestructive
-                      ? theme.colorScheme.errorContainer
+                      ? (theme.brightness == Brightness.dark
+                          ? const Color(0xFFEF4444).withValues(alpha: 0.2)
+                          : const Color(0xFFFEE2E2))
                       : theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
                   icon,
                   size: 28,
-                  color: isDestructive ? theme.colorScheme.error : theme.colorScheme.primary,
+                  color: isDestructive
+                      ? (theme.brightness == Brightness.dark
+                          ? const Color(0xFFF87171)
+                          : const Color(0xFFDC2626))
+                      : theme.colorScheme.primary,
                 ),
               ),
               const SizedBox(height: 16),
@@ -104,7 +110,7 @@ class AppConfirmationDialog extends StatelessWidget {
                   child: AppPrimaryButton(
                     text: confirmText,
                     height: 44,
-                    backgroundColor: isDestructive ? theme.colorScheme.error : null,
+                    backgroundColor: isDestructive ? const Color(0xFFDC2626) : null,
                     onPressed: () => Navigator.of(context).pop(true),
                   ),
                 ),

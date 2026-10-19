@@ -69,17 +69,21 @@ class ErrorHandler {
   }
 
   static Failure _handleFirestoreError(FirebaseException e) {
-    switch (e.code) {
+    switch (e.code.toLowerCase()) {
       case "permission-denied":
-        return const ForbiddenFailure(message: "Access denied. Check Firestore security rules.");
+        return const ForbiddenFailure(message: "Access denied. Check permissions.");
       case "not-found":
-        return const ServerFailure(message: "The requested resource was not found.");
+        return const ServerFailure(message: "The requested resource or session was not found.");
       case "unavailable":
         return const NetworkFailure(message: "Service unavailable. Please try again.");
       case "deadline-exceeded":
         return const NetworkFailure(message: "Request timed out. Please check your network.");
       default:
-        return ServerFailure(message: e.message ?? "An unexpected error occurred.");
+        final rawMsg = e.message ?? "An unexpected error occurred.";
+        final cleanMsg = (rawMsg.toUpperCase() == "NOT_FOUND" || rawMsg == "not-found")
+            ? "The requested resource or session was not found."
+            : rawMsg;
+        return ServerFailure(message: cleanMsg, code: e.code);
     }
   }
 }

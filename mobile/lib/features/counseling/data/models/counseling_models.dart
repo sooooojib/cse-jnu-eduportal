@@ -18,6 +18,8 @@ class CounselingSlotModel extends CounselingSlot {
     required super.endTime,
     super.notes,
     required super.status,
+    super.bookedStudentId,
+    super.bookedStudentName,
   });
 
   factory CounselingSlotModel.fromJson(Map<String, dynamic> json) {
@@ -31,6 +33,8 @@ class CounselingSlotModel extends CounselingSlot {
       endTime: json['endTime'] as String? ?? '',
       notes: json['notes'] as String?,
       status: (json['isBooked'] as bool? ?? false) ? 'BOOKED' : (json['status'] as String? ?? 'AVAILABLE'),
+      bookedStudentId: json['bookedStudentId'] as String?,
+      bookedStudentName: json['bookedStudentName'] as String?,
     );
   }
 
@@ -50,6 +54,8 @@ class CounselingSlotModel extends CounselingSlot {
       'endTime': endTime,
       'notes': notes,
       'status': status,
+      if (bookedStudentId != null) 'bookedStudentId': bookedStudentId,
+      if (bookedStudentName != null) 'bookedStudentName': bookedStudentName,
     };
   }
 
@@ -64,6 +70,8 @@ class CounselingSlotModel extends CounselingSlot {
       'isBooked': status == 'BOOKED',
       'status': status,
       'notes': notes,
+      if (bookedStudentId != null) 'bookedStudentId': bookedStudentId,
+      if (bookedStudentName != null) 'bookedStudentName': bookedStudentName,
       'updatedAt': FieldValue.serverTimestamp(),
     };
   }
@@ -83,6 +91,7 @@ class CounselingBookingModel extends CounselingBooking {
     required super.category,
     required super.notes,
     required super.status,
+    super.rejectionReason,
     super.reviewedAt,
     required super.createdAt,
   });
@@ -98,9 +107,10 @@ class CounselingBookingModel extends CounselingBooking {
       slotDate: _tsToString(json['slotDate']),
       startTime: json['startTime'] as String? ?? '',
       endTime: json['endTime'] as String? ?? '',
-      category: json['category'] as String? ?? 'ACADEMIC_ADVISING',
+      category: json['category'] as String? ?? 'Academic Advising',
       notes: json['notes'] as String? ?? '',
       status: json['status'] as String? ?? 'PENDING',
+      rejectionReason: json['rejectionReason'] as String?,
       reviewedAt: json['reviewedAt'] != null ? _tsToString(json['reviewedAt']) : null,
       createdAt: _tsToString(json['createdAt']),
     );
@@ -125,6 +135,7 @@ class CounselingBookingModel extends CounselingBooking {
       'category': category,
       'notes': notes,
       'status': status,
+      if (rejectionReason != null) 'rejectionReason': rejectionReason,
       'reviewedAt': reviewedAt,
       'createdAt': createdAt,
     };
@@ -143,6 +154,7 @@ class CounselingBookingModel extends CounselingBooking {
       'category': category,
       'notes': notes,
       'status': status,
+      if (rejectionReason != null) 'rejectionReason': rejectionReason,
       'reviewedAt': reviewedAt != null ? FieldValue.serverTimestamp() : null,
       'createdAt': FieldValue.serverTimestamp(),
     };

@@ -4,12 +4,16 @@ import '../../domain/repositories/semester_repository.dart';
 import '../../../../core/error/failures.dart';
 
 abstract class ProfileState {}
+
 class ProfileInitial extends ProfileState {}
+
 class ProfileLoading extends ProfileState {}
+
 class ProfileLoaded extends ProfileState {
   final SemesterStatus semesterStatus;
   ProfileLoaded(this.semesterStatus);
 }
+
 class ProfileError extends ProfileState {
   final String message;
   ProfileError(this.message);
@@ -18,6 +22,8 @@ class ProfileError extends ProfileState {
 class ProfileController extends ChangeNotifier {
   final GetSemesterStatusUseCase getSemesterStatusUseCase;
   final RequestSemesterUpgradeUseCase requestSemesterUpgradeUseCase;
+  final ChangeSemesterUpgradeRequestUseCase changeSemesterUpgradeRequestUseCase;
+  final DismissSemesterRejectionUseCase dismissSemesterRejectionUseCase;
 
   ProfileState _state = ProfileInitial();
   bool _isActionLoading = false;
@@ -25,7 +31,12 @@ class ProfileController extends ChangeNotifier {
   ProfileController({
     required this.getSemesterStatusUseCase,
     required this.requestSemesterUpgradeUseCase,
-  });
+    ChangeSemesterUpgradeRequestUseCase? changeSemesterUpgradeRequestUseCase,
+    DismissSemesterRejectionUseCase? dismissSemesterRejectionUseCase,
+  })  : changeSemesterUpgradeRequestUseCase = changeSemesterUpgradeRequestUseCase ??
+            ChangeSemesterUpgradeRequestUseCase(getSemesterStatusUseCase.repository),
+        dismissSemesterRejectionUseCase = dismissSemesterRejectionUseCase ??
+            DismissSemesterRejectionUseCase(getSemesterStatusUseCase.repository);
 
   ProfileState get state => _state;
   bool get isActionLoading => _isActionLoading;
@@ -55,6 +66,48 @@ class ProfileController extends ChangeNotifier {
         requestedSemester: requestedSemester,
       );
       _state = ProfileLoaded(updatedStatus);
+      _isActionLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _isActionLoading = false;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<bool> changeUpgradeRequest({
+    required String requestId,
+    required int requestedYear,
+    required int requestedSemester,
+  }) async {
+    _isActionLoading = true;
+    notifyListeners();
+
+    try {
+      final updatedStatus = await changeSemesterUpgradeRequestUseCase.execute(
+        requestId: requestId,
+        requestedYear: requestedYear,
+        requestedSemester: requestedSemester,
+      );
+      _state = ProfileLoaded(updatedStatus);
+      _isActionLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _isActionLoading = false;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<bool> dismissRejection({required String requestId}) async {
+    _isActionLoading = true;
+    notifyListeners();
+
+    try {
+      await dismissSemesterRejectionUseCase.execute(requestId: requestId);
+      await fetchSemesterStatus();
       _isActionLoading = false;
       notifyListeners();
       return true;

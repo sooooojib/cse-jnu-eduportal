@@ -114,84 +114,16 @@ class WelcomeScreen extends StatelessWidget {
                         ),
                       ),
 
-                      const SizedBox(height: 18),
-
-                      // Institutional Tag Pill
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.06)
-                              : Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.12)
-                                : const Color(0xFFE2E8F0),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.04),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.account_balance_rounded,
-                              size: 14,
-                              color: isDark ? AppColors.terminalGlow : AppColors.primary,
-                            ),
-                            const SizedBox(width: 6),
-                            Flexible(
-                              child: Text(
-                                'Jagannath University · Dept. of CSE',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.4,
-                                  color: isDark ? Colors.white70 : const Color(0xFF334155),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 20),
 
                       // Brand Titles
                       Text(
                         'JnU EduPortal',
                         style: TextStyle(
-                          fontSize: 30,
+                          fontSize: 32,
                           fontWeight: FontWeight.w800,
                           letterSpacing: -0.5,
                           color: isDark ? Colors.white : const Color(0xFF0F172A),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Departmental Operating System',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? AppColors.terminalGlow : AppColors.primary,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        'Schedules, live counseling queues, and terminal attendance verification synchronized in one place.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 13,
-                          height: 1.45,
-                          color: isDark ? Colors.white60 : const Color(0xFF64748B),
                         ),
                       ),
 

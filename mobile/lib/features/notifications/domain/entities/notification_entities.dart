@@ -7,6 +7,7 @@ class AppNotification extends Equatable {
   final String notificationType;
   final String? referenceType;
   final String? referenceId;
+  final String? route;
   final bool isRead;
   final String createdAt;
 
@@ -17,12 +18,13 @@ class AppNotification extends Equatable {
     required this.notificationType,
     this.referenceType,
     this.referenceId,
+    this.route,
     required this.isRead,
     required this.createdAt,
   });
 
   @override
-  List<Object?> get props => [id, title, body, notificationType, referenceType, referenceId, isRead, createdAt];
+  List<Object?> get props => [id, title, body, notificationType, referenceType, referenceId, route, isRead, createdAt];
 }
 
 class NotificationFeed extends Equatable {

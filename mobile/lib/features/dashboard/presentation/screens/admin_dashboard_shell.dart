@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
-import '../../../admin/presentation/screens/admin_dashboard_screen.dart';
+import '../../../../core/constants/role_constants.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
+import 'authenticated_app_shell.dart';
 
+/// Backward-compatible entry point delegating to [AuthenticatedAppShell]
+/// for [UserRole.admin].
 class AdminDashboardShell extends StatelessWidget {
   final AuthController authController;
   final ValueNotifier<ThemeMode> themeModeNotifier;
@@ -14,6 +17,10 @@ class AdminDashboardShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AdminDashboardScreen(authController: authController);
+    return AuthenticatedAppShell(
+      role: UserRole.admin,
+      authController: authController,
+      themeModeNotifier: themeModeNotifier,
+    );
   }
 }

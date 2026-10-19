@@ -193,7 +193,7 @@ void main() {
       await tester.pumpWidget(MaterialApp.router(routerConfig: router));
       await tester.pumpAndSettle();
 
-      expect(find.text('Professor Dashboard'), findsOneWidget);
+      expect(find.textContaining('Welcome back'), findsOneWidget);
     });
 
     testWidgets('Teacher attempting to access Student Dashboard is redirected to Teacher Dashboard', (tester) async {
@@ -209,7 +209,7 @@ void main() {
       await tester.pumpWidget(MaterialApp.router(routerConfig: router));
       await tester.pumpAndSettle();
 
-      expect(find.text('Professor Dashboard'), findsOneWidget);
+      expect(find.textContaining('Welcome back'), findsOneWidget);
     });
 
     testWidgets('Teacher attempting to access Student Profile or Attendance is redirected to Teacher Dashboard', (tester) async {
@@ -225,7 +225,7 @@ void main() {
       await tester.pumpWidget(MaterialApp.router(routerConfig: router));
       await tester.pumpAndSettle();
 
-      expect(find.text('Professor Dashboard'), findsOneWidget);
+      expect(find.textContaining('Welcome back'), findsOneWidget);
     });
 
     testWidgets('Admin user attempting to access Student Dashboard is redirected to Admin Dashboard', (tester) async {

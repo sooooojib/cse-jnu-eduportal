@@ -26,6 +26,11 @@ import '../../../notifications/presentation/screens/notification_list_screen.dar
 import '../../../profile/presentation/screens/student_profile_screen.dart';
 import '../../../profile/presentation/widgets/student_profile_dialog.dart';
 import '../../../teacher/presentation/screens/teacher_dashboard_screen.dart';
+import '../../../teacher/presentation/screens/teacher_schedule_screen.dart';
+import '../../../teacher/presentation/widgets/teacher_profile_dialog.dart';
+import '../../../attendance/presentation/screens/teacher_attendance_terminal_screen.dart';
+import '../../../counseling/presentation/screens/teacher_counseling_screen.dart';
+import '../../../feedback/presentation/screens/teacher_feedback_screen.dart';
 import '../widgets/app_settings_bottom_sheet.dart';
 import 'student_dashboard_shell.dart';
 
@@ -138,20 +143,7 @@ class _AuthenticatedAppShellState extends State<AuthenticatedAppShell> {
     final role = widget.role ?? currentUser?.role ?? UserRole.student;
     final isDark = context.isDarkMode;
 
-    // Teacher dashboard has its own complete and tested screen architecture
-    if (role == UserRole.teacher) {
-      return PopScope(
-        canPop: _currentIndex == 0,
-        onPopInvokedWithResult: (didPop, result) {
-          if (!didPop && mounted) {
-            setState(() => _currentIndex = 0);
-          }
-        },
-        child: const TeacherDashboardScreen(),
-      );
-    }
-
-    // Role-tailored destinations & screens for Student, CR, and Admin
+    // Role-tailored destinations & screens for Admin, Teacher, CR, and Student
     final List<Widget> screens;
     final List<NavigationDestination> destinations;
     final Color roleColor;
@@ -161,7 +153,10 @@ class _AuthenticatedAppShellState extends State<AuthenticatedAppShell> {
       roleColor = const Color(0xFF7E22CE);
       shellTitle = 'Admin Console';
       screens = [
-        AdminDashboardScreen(authController: _authController),
+        AdminDashboardScreen(
+          authController: _authController,
+          onNavigateTab: _onTabSelected,
+        ),
         const AdminUserDirectoryScreen(showAppBar: false),
         const AdminSignupRequestsScreen(showAppBar: false),
         const AdminCourseManagementScreen(showAppBar: false),
@@ -192,6 +187,46 @@ class _AuthenticatedAppShellState extends State<AuthenticatedAppShell> {
           icon: Icon(Icons.tune_outlined),
           selectedIcon: Icon(Icons.tune_rounded),
           label: 'Settings',
+        ),
+      ];
+    } else if (role == UserRole.teacher) {
+      roleColor = const Color(0xFF1D4ED8);
+      shellTitle = 'JnU EduPortal';
+      screens = [
+        TeacherDashboardScreen(
+          wrapWithScaffold: false,
+          onNavigateTab: _onTabSelected,
+        ),
+        const TeacherAttendanceTerminalScreen(showAppBar: false),
+        const TeacherScheduleScreen(showAppBar: false),
+        const TeacherCounselingScreen(showAppBar: false),
+        const TeacherFeedbackScreen(showAppBar: false),
+      ];
+      destinations = const [
+        NavigationDestination(
+          icon: Icon(Icons.home_outlined),
+          selectedIcon: Icon(Icons.home_rounded),
+          label: 'Home',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.fact_check_outlined),
+          selectedIcon: Icon(Icons.fact_check_rounded),
+          label: 'Attendance',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.calendar_month_outlined),
+          selectedIcon: Icon(Icons.calendar_month_rounded),
+          label: 'Schedule',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.support_agent_outlined),
+          selectedIcon: Icon(Icons.support_agent_rounded),
+          label: 'Counseling',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.rate_review_outlined),
+          selectedIcon: Icon(Icons.rate_review_rounded),
+          label: 'Feedback',
         ),
       ];
     } else if (role == UserRole.cr) {
@@ -305,6 +340,13 @@ class _AuthenticatedAppShellState extends State<AuthenticatedAppShell> {
                     user: currentUser,
                     authController: _authController,
                   );
+                } else if (role == UserRole.teacher && currentUser != null) {
+                  TeacherProfileDialog.show(
+                    context: context,
+                    teacher: currentUser,
+                    assignedCoursesCount: currentUser.assignedCourseIds.length,
+                    onLogout: () => _handleLogout(context),
+                  );
                 } else if (currentUser != null) {
                   StudentProfileDialog.show(
                     context: context,
@@ -321,7 +363,7 @@ class _AuthenticatedAppShellState extends State<AuthenticatedAppShell> {
                     ? Text(
                         currentUser != null && currentUser.fullName.isNotEmpty
                             ? currentUser.fullName.substring(0, 1).toUpperCase()
-                            : (role == UserRole.admin ? 'A' : (role == UserRole.cr ? 'C' : 'S')),
+                            : (role == UserRole.admin ? 'A' : (role == UserRole.teacher ? 'T' : (role == UserRole.cr ? 'C' : 'S'))),
                         style: TextStyle(
                           color: roleColor,
                           fontWeight: FontWeight.w800,

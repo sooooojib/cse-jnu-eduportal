@@ -1,7 +1,6 @@
 class RouteNames {
   static const String initial = '/';
   static const String welcome = '/welcome';
-  static const String foundationPreview = '/foundation-preview';
   static const String login = '/login';
   static const String signupRequest = '/signup-request';
   static const String studentDashboard = '/dashboard/student';

@@ -388,7 +388,6 @@ void main() {
       await tester.tap(find.text('Try Again'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Professor Dashboard'), findsOneWidget);
       expect(find.text('Welcome back, Dr. Md. Abu Layek.'), findsOneWidget);
     });
 
@@ -413,7 +412,6 @@ void main() {
       expect(find.byIcon(Icons.logout_rounded), findsOneWidget);
 
       // Greeting & Role
-      expect(find.text('Professor Dashboard'), findsOneWidget);
       expect(find.text('Welcome back, Dr. Md. Abu Layek.'), findsOneWidget);
       expect(find.text('Professor / Faculty'), findsOneWidget);
     });

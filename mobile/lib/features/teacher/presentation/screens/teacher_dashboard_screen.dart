@@ -27,10 +27,14 @@ import '../../../feedback/presentation/screens/teacher_feedback_screen.dart';
 
 class TeacherDashboardScreen extends StatefulWidget {
   final TeacherDashboardController? controller;
+  final bool wrapWithScaffold;
+  final void Function(int tabIndex)? onNavigateTab;
 
   const TeacherDashboardScreen({
     super.key,
     this.controller,
+    this.wrapWithScaffold = true,
+    this.onNavigateTab,
   });
 
   @override
@@ -158,6 +162,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   }
 
   void _handleStartAttendance(ScheduleSlot slot) {
+    if (widget.onNavigateTab != null) {
+      widget.onNavigateTab!(1);
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => TeacherAttendanceTerminalScreen(preselectedCourseId: slot.courseId),
@@ -166,6 +174,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   }
 
   void _onBottomNavTapped(int index) {
+    if (widget.onNavigateTab != null) {
+      widget.onNavigateTab!(index);
+      return;
+    }
     if (index == 0) {
       setState(() => _currentNavIndex = 0);
     } else if (index == 1) {
@@ -220,6 +232,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     final currentUser = authController.currentUser;
     final state = _controller.state;
     final avatarProvider = _resolveAvatar(currentUser?.avatarUrl);
+
+    if (!widget.wrapWithScaffold) {
+      return _buildBody(context, state, currentUser, isDark);
+    }
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
@@ -348,6 +364,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               // 4. Quick Actions (below Today's Classes)
               TeacherQuickActions(
                 onAttendance: () {
+                  if (widget.onNavigateTab != null) {
+                    widget.onNavigateTab!(1);
+                    return;
+                  }
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => const TeacherAttendanceTerminalScreen(),
@@ -355,6 +375,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   );
                 },
                 onSchedule: () {
+                  if (widget.onNavigateTab != null) {
+                    widget.onNavigateTab!(2);
+                    return;
+                  }
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => const TeacherScheduleScreen(),
@@ -362,6 +386,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   );
                 },
                 onCounseling: () {
+                  if (widget.onNavigateTab != null) {
+                    widget.onNavigateTab!(3);
+                    return;
+                  }
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => const TeacherCounselingScreen(),
@@ -369,6 +397,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   );
                 },
                 onFeedback: () {
+                  if (widget.onNavigateTab != null) {
+                    widget.onNavigateTab!(4);
+                    return;
+                  }
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => const TeacherFeedbackScreen(),
@@ -397,37 +429,23 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   Widget _buildTeacherHeader(data, bool isDark) {
     return Padding(
       padding: const EdgeInsets.only(top: 2, bottom: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Text(
-                  'Professor Dashboard',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.6,
-                    color: isDark ? Colors.white : const Color(0xFF0F172A),
-                  ),
-                ),
+          Expanded(
+            child: Text(
+              'Welcome back, ${data.teacherName.isNotEmpty ? data.teacherName : "Professor"}.',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.5,
+                color: isDark ? Colors.white : const Color(0xFF0F172A),
               ),
-              const SizedBox(width: 8),
-              RoleBadgeChip(role: data.role, isCompact: true),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Welcome back, ${data.teacherName.isNotEmpty ? data.teacherName : "Professor"}.',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w400,
-              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
             ),
           ),
+          const SizedBox(width: 8),
+          RoleBadgeChip(role: data.role, isCompact: true),
         ],
       ),
     );
@@ -449,6 +467,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 badgeBackgroundColor: const Color(0xFFFFDAD6),
                 badgeTextColor: const Color(0xFF93000A),
                 onTap: () {
+                  if (widget.onNavigateTab != null) {
+                    widget.onNavigateTab!(3);
+                    return;
+                  }
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => const TeacherCounselingScreen(),
@@ -468,6 +490,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     : const Color(0xFFECFDF5),
                 iconColor: const Color(0xFF047857),
                 onTap: () {
+                  if (widget.onNavigateTab != null) {
+                    widget.onNavigateTab!(4);
+                    return;
+                  }
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => const TeacherFeedbackScreen(),

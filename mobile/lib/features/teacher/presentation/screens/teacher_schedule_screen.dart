@@ -12,7 +12,12 @@ import '../../../curriculum/presentation/widgets/schedule_slot_form_dialog.dart'
 import '../../../curriculum/presentation/widgets/exam_management_view.dart';
 
 class TeacherScheduleScreen extends StatefulWidget {
-  const TeacherScheduleScreen({super.key});
+  final bool showAppBar;
+
+  const TeacherScheduleScreen({
+    super.key,
+    this.showAppBar = true,
+  });
 
   @override
   State<TeacherScheduleScreen> createState() => _TeacherScheduleScreenState();
@@ -148,60 +153,118 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-      appBar: AppBar(
-        backgroundColor: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-        elevation: 0,
-        scrolledUnderElevation: 1,
-        titleSpacing: 12,
-        title: const Text(
-          'Faculty Schedule Hub',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add_circle_outline_rounded, color: AppColors.primary),
-            tooltip: 'Add Class',
-            onPressed: () => _openScheduleDialog(),
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            tooltip: 'Refresh',
-            onPressed: _loadData,
-          ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(48),
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.surfaceContainerDark : AppColors.surfaceContainerLight,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: TabBar(
-              controller: _tabController,
-              indicatorSize: TabBarIndicatorSize.tab,
-              indicator: BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.circular(12),
+      appBar: widget.showAppBar
+          ? AppBar(
+              backgroundColor: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+              elevation: 0,
+              scrolledUnderElevation: 1,
+              titleSpacing: 12,
+              title: const Text(
+                'Faculty Schedule Hub',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
               ),
-              labelColor: Colors.white,
-              unselectedLabelColor: isDark ? Colors.white60 : Colors.black54,
-              labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-              tabs: const [
-                Tab(text: 'Routine Grid'),
-                Tab(text: 'Manage Exams'),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.add_circle_outline_rounded, color: AppColors.primary),
+                  tooltip: 'Add Class',
+                  onPressed: () => _openScheduleDialog(),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded),
+                  tooltip: 'Refresh',
+                  onPressed: _loadData,
+                ),
+              ],
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(48),
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.surfaceContainerDark : AppColors.surfaceContainerLight,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: TabBar(
+                    controller: _tabController,
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    indicator: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    labelColor: Colors.white,
+                    unselectedLabelColor: isDark ? Colors.white60 : Colors.black54,
+                    labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    tabs: const [
+                      Tab(text: 'Routine Grid'),
+                      Tab(text: 'Manage Exams'),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          : null,
+      body: widget.showAppBar
+          ? TabBarView(
+              controller: _tabController,
+              children: [
+                _buildRoutineGridTab(isDark),
+                _buildManageExamsTab(isDark),
+              ],
+            )
+          : Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          height: 42,
+                          decoration: BoxDecoration(
+                            color: isDark ? AppColors.surfaceContainerDark : AppColors.surfaceContainerLight,
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: TabBar(
+                            controller: _tabController,
+                            indicatorSize: TabBarIndicatorSize.tab,
+                            indicator: BoxDecoration(
+                              color: AppColors.primary,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            labelColor: Colors.white,
+                            unselectedLabelColor: isDark ? Colors.white60 : Colors.black54,
+                            labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            tabs: const [
+                              Tab(text: 'Routine Grid'),
+                              Tab(text: 'Manage Exams'),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(Icons.add_circle_outline_rounded, color: AppColors.primary),
+                        tooltip: 'Add Class',
+                        onPressed: () => _openScheduleDialog(),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.refresh_rounded),
+                        tooltip: 'Refresh',
+                        onPressed: _loadData,
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildRoutineGridTab(isDark),
+                      _buildManageExamsTab(isDark),
+                    ],
+                  ),
+                ),
               ],
             ),
-          ),
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildRoutineGridTab(isDark),
-          _buildManageExamsTab(isDark),
-        ],
-      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openScheduleDialog(),
         backgroundColor: AppColors.primary,

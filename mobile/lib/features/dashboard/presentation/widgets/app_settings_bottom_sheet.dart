@@ -301,36 +301,9 @@ class AppSettingsBottomSheet extends StatelessWidget {
                     ),
                   ),
 
-                  const SizedBox(height: 20),
-
-                  // 4. Showcase & Navigation
-                  _SectionHeader(title: 'Development Preview', icon: Icons.developer_mode_outlined, isDark: isDark),
-                  const SizedBox(height: 10),
-                  Material(
-                    color: isDark ? const Color(0xFF13263E) : Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    child: ListTile(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        side: BorderSide(
-                          color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
-                        ),
-                      ),
-                      tileColor: Colors.transparent,
-                      leading: const Icon(Icons.palette_rounded, color: AppColors.primary),
-                      title: const Text('Foundation Design Showcase'),
-                      subtitle: const Text('Browse typography, buttons, and tokens'),
-                      trailing: const Icon(Icons.chevron_right_rounded),
-                      onTap: () {
-                        Navigator.of(context).pop();
-                        context.push(RouteNames.foundationPreview);
-                      },
-                    ),
-                  ),
-
                   const SizedBox(height: 24),
 
-                  // 5. Sign Out Action
+                  // 4. Sign Out Action
                   SizedBox(
                     width: double.infinity,
                     height: 50,

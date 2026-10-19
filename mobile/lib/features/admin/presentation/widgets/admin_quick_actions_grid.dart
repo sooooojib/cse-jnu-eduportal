@@ -4,7 +4,9 @@ import '../../../../app/router/route_names.dart';
 import '../../../../core/utils/context_extensions.dart';
 
 class AdminQuickActionsGrid extends StatelessWidget {
-  const AdminQuickActionsGrid({super.key});
+  final void Function(int tabIndex)? onNavigateTab;
+
+  const AdminQuickActionsGrid({super.key, this.onNavigateTab});
 
   @override
   Widget build(BuildContext context) {
@@ -17,6 +19,7 @@ class AdminQuickActionsGrid extends StatelessWidget {
         icon: Icons.people_alt_outlined,
         color: const Color(0xFF7E22CE),
         route: RouteNames.adminUsers,
+        targetTabIndex: 1,
       ),
       _QuickActionItem(
         title: 'Signup Requests',
@@ -24,6 +27,7 @@ class AdminQuickActionsGrid extends StatelessWidget {
         icon: Icons.how_to_reg_outlined,
         color: const Color(0xFFDC2626),
         route: RouteNames.adminSignupRequests,
+        targetTabIndex: 2,
       ),
       _QuickActionItem(
         title: 'Semester Requests',
@@ -38,6 +42,7 @@ class AdminQuickActionsGrid extends StatelessWidget {
         icon: Icons.menu_book_outlined,
         color: const Color(0xFF047857),
         route: RouteNames.adminCourses,
+        targetTabIndex: 3,
       ),
       _QuickActionItem(
         title: 'Teacher Courses',
@@ -96,7 +101,13 @@ class AdminQuickActionsGrid extends StatelessWidget {
             final item = actions[index];
 
             return InkWell(
-              onTap: () => context.push(item.route),
+              onTap: () {
+                if (item.targetTabIndex != null && onNavigateTab != null) {
+                  onNavigateTab!(item.targetTabIndex!);
+                } else {
+                  context.push(item.route);
+                }
+              },
               borderRadius: BorderRadius.circular(16),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -170,6 +181,7 @@ class _QuickActionItem {
   final IconData icon;
   final Color color;
   final String route;
+  final int? targetTabIndex;
 
   const _QuickActionItem({
     required this.title,
@@ -177,5 +189,6 @@ class _QuickActionItem {
     required this.icon,
     required this.color,
     required this.route,
+    this.targetTabIndex,
   });
 }

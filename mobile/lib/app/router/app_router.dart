@@ -21,7 +21,6 @@ import '../../features/admin/presentation/screens/admin_notification_hub_screen.
 import '../../features/teacher/presentation/screens/teacher_schedule_screen.dart';
 import '../../features/counseling/presentation/screens/teacher_counseling_screen.dart';
 import '../../features/feedback/presentation/screens/teacher_feedback_screen.dart';
-import '../../shared/presentation/foundation_preview_screen.dart';
 
 class AppRouter {
   static GoRouter createRouter({
@@ -41,10 +40,9 @@ class AppRouter {
         final isSigningUp = state.matchedLocation == RouteNames.signupRequest;
         final isWelcome = state.matchedLocation == RouteNames.welcome;
         final isSplash = state.matchedLocation == RouteNames.initial;
-        final isPreview = state.matchedLocation == RouteNames.foundationPreview;
 
-        // Allow splash, preview, and signup requests without auth
-        if (isSplash || isPreview || isSigningUp) return null;
+        // Allow splash and signup requests without auth
+        if (isSplash || isSigningUp) return null;
 
         // If unauthenticated or disabled, permit login & welcome, redirect others to login
         if (authState is! Authenticated) {
@@ -253,14 +251,6 @@ class AppRouter {
         GoRoute(
           path: RouteNames.adminNotifications,
           builder: (context, state) => const AdminNotificationHubScreen(),
-        ),
-
-        // Design System Foundation Showcase
-        GoRoute(
-          path: RouteNames.foundationPreview,
-          builder: (context, state) => FoundationPreviewScreen(
-            themeModeNotifier: themeModeNotifier,
-          ),
         ),
       ],
       errorBuilder: (context, state) => Scaffold(

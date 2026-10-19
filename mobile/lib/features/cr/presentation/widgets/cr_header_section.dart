@@ -19,24 +19,23 @@ class CrHeaderSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final roleColors = RoleColors.forRole(data.role, isDark: isDark);
-    final title = data.role == UserRole.student ? 'Student Dashboard' : 'CR Dashboard';
     final fallbackRole = data.role == UserRole.student ? 'Student' : 'Class Representative';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Title Row with Role Badge
+        // Welcome Row with Role Badge (Footer indicates active tab)
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Expanded(
               child: Text(
-                title,
+                'Welcome back, ${data.crName.isNotEmpty ? data.crName : fallbackRole}.',
                 style: TextStyle(
-                  fontSize: 24,
+                  fontSize: 20,
                   fontWeight: FontWeight.w800,
-                  letterSpacing: -0.6,
+                  letterSpacing: -0.5,
                   color: isDark ? Colors.white : const Color(0xFF0F172A),
                 ),
               ),
@@ -44,15 +43,6 @@ class CrHeaderSection extends StatelessWidget {
             const SizedBox(width: 8),
             RoleBadgeChip(role: data.role, isCompact: true),
           ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'Welcome back, ${data.crName.isNotEmpty ? data.crName : fallbackRole}.',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w400,
-            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-          ),
         ),
         const SizedBox(height: 14),
 

@@ -9,11 +9,13 @@ import '../widgets/create_counseling_slot_dialog.dart';
 class TeacherCounselingScreen extends StatefulWidget {
   final CounselingController? controller;
   final AuthController? authController;
+  final bool showAppBar;
 
   const TeacherCounselingScreen({
     super.key,
     this.controller,
     this.authController,
+    this.showAppBar = true,
   });
 
   @override
@@ -214,29 +216,81 @@ class _TeacherCounselingScreenState extends State<TeacherCounselingScreen> with 
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Faculty Counseling',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        bottom: TabBar(
+    final content = ListenableBuilder(
+      listenable: _controller,
+      builder: (context, _) {
+        final state = _controller.state;
+
+        if (state is CounselingLoading && !_controller.isActionLoading) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (state is CounselingError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.error_outline_rounded, color: Colors.red, size: 48),
+                  const SizedBox(height: 16),
+                  Text(
+                    state.message,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: _loadData,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        final loaded = state is CounselingLoaded ? state : null;
+        final requests = loaded?.teacherRequests ?? [];
+        final slots = loaded?.teacherSlots ?? [];
+
+        return TabBarView(
           controller: _tabController,
-          labelColor: AppColors.primaryLight,
-          unselectedLabelColor: isDark ? AppColors.outlineDark : AppColors.outlineLight,
-          indicatorColor: AppColors.primaryLight,
-          tabs: const [
-            Tab(
-              icon: Icon(Icons.inbox_rounded),
-              text: 'Requests',
-            ),
-            Tab(
-              icon: Icon(Icons.calendar_month_rounded),
-              text: 'My Office Slots',
-            ),
+          children: [
+            _buildRequestsTab(requests, isDark),
+            _buildSlotsTab(slots, isDark),
           ],
-        ),
-      ),
+        );
+      },
+    );
+
+    return Scaffold(
+      backgroundColor: widget.showAppBar ? null : Colors.transparent,
+      appBar: widget.showAppBar
+          ? AppBar(
+              title: const Text(
+                'Faculty Counseling',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              bottom: TabBar(
+                controller: _tabController,
+                labelColor: AppColors.primaryLight,
+                unselectedLabelColor: isDark ? AppColors.outlineDark : AppColors.outlineLight,
+                indicatorColor: AppColors.primaryLight,
+                tabs: const [
+                  Tab(
+                    icon: Icon(Icons.inbox_rounded),
+                    text: 'Requests',
+                  ),
+                  Tab(
+                    icon: Icon(Icons.calendar_month_rounded),
+                    text: 'My Office Slots',
+                  ),
+                ],
+              ),
+            )
+          : null,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _openCreateSlotDialog,
         backgroundColor: AppColors.primaryLight,
@@ -244,54 +298,42 @@ class _TeacherCounselingScreenState extends State<TeacherCounselingScreen> with 
         icon: const Icon(Icons.add),
         label: const Text('Create Slot', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
-      body: ListenableBuilder(
-        listenable: _controller,
-        builder: (context, _) {
-          final state = _controller.state;
-
-          if (state is CounselingLoading && !_controller.isActionLoading) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          if (state is CounselingError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.error_outline_rounded, color: Colors.red, size: 48),
-                    const SizedBox(height: 16),
-                    Text(
-                      state.message,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+      body: widget.showAppBar
+          ? content
+          : Column(
+              children: [
+                Container(
+                  color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Container(
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.surfaceContainerDark : AppColors.surfaceContainerLight,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: isDark ? AppColors.outlineDark.withOpacity(0.2) : AppColors.outlineLight.withOpacity(0.15),
+                      ),
                     ),
-                    const SizedBox(height: 16),
-                    ElevatedButton.icon(
-                      onPressed: _loadData,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Retry'),
+                    child: TabBar(
+                      controller: _tabController,
+                      indicatorSize: TabBarIndicatorSize.tab,
+                      indicator: BoxDecoration(
+                        color: AppColors.primaryLight,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      labelColor: Colors.white,
+                      unselectedLabelColor: isDark ? AppColors.outlineDark : AppColors.outlineLight,
+                      labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      tabs: const [
+                        Tab(text: 'Requests'),
+                        Tab(text: 'My Office Slots'),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            );
-          }
-
-          final loaded = state is CounselingLoaded ? state : null;
-          final requests = loaded?.teacherRequests ?? [];
-          final slots = loaded?.teacherSlots ?? [];
-
-          return TabBarView(
-            controller: _tabController,
-            children: [
-              _buildRequestsTab(requests, isDark),
-              _buildSlotsTab(slots, isDark),
-            ],
-          );
-        },
-      ),
+                Expanded(child: content),
+              ],
+            ),
     );
   }
 

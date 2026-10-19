@@ -26,11 +26,13 @@ import '../widgets/admin_quick_actions_grid.dart';
 class AdminDashboardScreen extends StatefulWidget {
   final AdminDashboardController? controller;
   final AuthController? authController;
+  final void Function(int tabIndex)? onNavigateTab;
 
   const AdminDashboardScreen({
     super.key,
     this.controller,
     this.authController,
+    this.onNavigateTab,
   });
 
   @override
@@ -149,18 +151,32 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       // 2. Administrative Overview Grid
                       AdminOverviewGrid(
                         stats: state.stats,
-                        onStudentsTap: () => context.push('${RouteNames.adminUsers}?role=students'),
-                        onFacultyTap: () => context.push('${RouteNames.adminUsers}?role=faculty'),
-                        onCrsTap: () => context.push('${RouteNames.adminUsers}?role=cr'),
-                        onCoursesTap: () => context.push(RouteNames.adminCourses),
-                        onPendingSignupsTap: () => context.push(RouteNames.adminSignupRequests),
+                        onStudentsTap: () => widget.onNavigateTab != null
+                            ? widget.onNavigateTab!(1)
+                            : context.push('${RouteNames.adminUsers}?role=students'),
+                        onFacultyTap: () => widget.onNavigateTab != null
+                            ? widget.onNavigateTab!(1)
+                            : context.push('${RouteNames.adminUsers}?role=faculty'),
+                        onCrsTap: () => widget.onNavigateTab != null
+                            ? widget.onNavigateTab!(1)
+                            : context.push('${RouteNames.adminUsers}?role=cr'),
+                        onCoursesTap: () => widget.onNavigateTab != null
+                            ? widget.onNavigateTab!(3)
+                            : context.push(RouteNames.adminCourses),
+                        onPendingSignupsTap: () => widget.onNavigateTab != null
+                            ? widget.onNavigateTab!(2)
+                            : context.push(RouteNames.adminSignupRequests),
                         onPendingSemesterTap: () => context.push(RouteNames.adminSemesterRequests),
-                        onUsersTap: () => context.push(RouteNames.adminUsers),
+                        onUsersTap: () => widget.onNavigateTab != null
+                            ? widget.onNavigateTab!(1)
+                            : context.push(RouteNames.adminUsers),
                       ),
                       const SizedBox(height: 24),
 
                       // 3. Administrative Quick Actions
-                      const AdminQuickActionsGrid(),
+                      AdminQuickActionsGrid(
+                        onNavigateTab: widget.onNavigateTab,
+                      ),
                       const SizedBox(height: 32),
                     ],
                   ),

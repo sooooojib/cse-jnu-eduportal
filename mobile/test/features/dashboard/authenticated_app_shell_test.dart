@@ -351,7 +351,6 @@ void main() {
 
       // Verifies CR Greeting & Hub
       expect(find.text('Class Representative'), findsWidgets);
-      expect(find.text('CR Dashboard'), findsOneWidget);
       expect(find.textContaining('Manage Tomorrow'), findsOneWidget);
       expect(find.byType(NavigationBar), findsOneWidget);
 
@@ -539,7 +538,7 @@ void main() {
 
       await tester.pumpWidget(MaterialApp.router(routerConfig: router));
       await tester.pumpAndSettle();
-      expect(find.text('Professor Dashboard'), findsOneWidget);
+      expect(find.text('Professor / Faculty'), findsWidgets);
 
       // Test CR entry
       when(() => mockAuthController.state).thenReturn(const Authenticated(user: crUser));

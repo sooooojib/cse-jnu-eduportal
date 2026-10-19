@@ -6,13 +6,19 @@ import 'package:image_picker/image_picker.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/storage/cloud_storage_service.dart';
+import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../controllers/feedback_controller.dart';
 import '../../domain/entities/feedback_entities.dart';
 
 class TeacherFeedbackScreen extends StatefulWidget {
   final String? teacherId;
+  final bool showAppBar;
 
-  const TeacherFeedbackScreen({super.key, this.teacherId});
+  const TeacherFeedbackScreen({
+    super.key,
+    this.teacherId,
+    this.showAppBar = true,
+  });
 
   @override
   State<TeacherFeedbackScreen> createState() => _TeacherFeedbackScreenState();
@@ -29,7 +35,18 @@ class _TeacherFeedbackScreenState extends State<TeacherFeedbackScreen> with Sing
     super.initState();
     _controller = sl<FeedbackController>();
     _tabController = TabController(length: 3, vsync: this);
-    _currentTeacherId = widget.teacherId ?? fb.FirebaseAuth.instance.currentUser?.uid ?? 'teacher-1';
+    String tid = widget.teacherId ?? '';
+    if (tid.isEmpty && sl.isRegistered<AuthController>()) {
+      tid = sl<AuthController>().currentUser?.id ?? '';
+    }
+    if (tid.isEmpty) {
+      try {
+        tid = fb.FirebaseAuth.instance.currentUser?.uid ?? 'teacher-1';
+      } catch (_) {
+        tid = 'teacher-1';
+      }
+    }
+    _currentTeacherId = tid;
 
     _tabController.addListener(() {
       if (_tabController.indexIsChanging) return;
@@ -93,7 +110,7 @@ class _TeacherFeedbackScreenState extends State<TeacherFeedbackScreen> with Sing
                 if (picked != null) {
                   setSheetState(() => isUploading = true);
                   final file = File(picked.path);
-                  final currentUid = fb.FirebaseAuth.instance.currentUser?.uid ?? 'teacher';
+                  final currentUid = _currentTeacherId;
                   final attachmentId = 'att_${DateTime.now().millisecondsSinceEpoch}';
                   final storagePath = StoragePathBuilder.feedbackReplyAttachment(
                     feedbackId: item.id,
@@ -364,113 +381,153 @@ class _TeacherFeedbackScreenState extends State<TeacherFeedbackScreen> with Sing
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      appBar: AppBar(
-        title: const Text('Received Feedback', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: false,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(48),
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            height: 40,
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.surfaceContainerDark : AppColors.surfaceContainerLight,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isDark ? AppColors.outlineDark.withOpacity(0.2) : AppColors.outlineLight.withOpacity(0.15),
-              ),
-            ),
-            child: TabBar(
-              controller: _tabController,
-              indicatorSize: TabBarIndicatorSize.tab,
-              indicator: BoxDecoration(
-                color: AppColors.primaryLight,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              labelColor: Colors.white,
-              unselectedLabelColor: isDark ? AppColors.outlineDark : AppColors.outlineLight,
-              labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-              tabs: const [
-                Tab(text: 'All'),
-                Tab(text: 'Replied'),
-                Tab(text: 'Not Replied'),
+    final content = AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        final state = _controller.state;
+
+        if (state is FeedbackLoading && !_controller.isSubmitting) {
+          return const Center(child: CircularProgressIndicator(color: AppColors.primaryLight));
+        }
+
+        if (state is FeedbackError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, size: 44, color: Colors.redAccent),
+                const SizedBox(height: 10),
+                Text(state.message, textAlign: TextAlign.center),
+                const SizedBox(height: 14),
+                ElevatedButton(
+                  onPressed: _loadData,
+                  child: const Text('Retry'),
+                ),
               ],
             ),
-          ),
-        ),
-      ),
-      body: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, _) {
-          final state = _controller.state;
+          );
+        }
 
-          if (state is FeedbackLoading && !_controller.isSubmitting) {
-            return const Center(child: CircularProgressIndicator(color: AppColors.primaryLight));
-          }
+        final items = state is FeedbackLoaded ? state.teacherFeedback : <FeedbackItem>[];
 
-          if (state is FeedbackError) {
-            return Center(
+        if (items.isEmpty) {
+          return Center(
+            child: Container(
+              margin: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.surfaceContainerDark : AppColors.surfaceContainerLight,
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.error_outline, size: 44, color: Colors.redAccent),
-                  const SizedBox(height: 10),
-                  Text(state.message, textAlign: TextAlign.center),
-                  const SizedBox(height: 14),
-                  ElevatedButton(
-                    onPressed: _loadData,
-                    child: const Text('Retry'),
+                  const Icon(Icons.rate_review_outlined, size: 40, color: Colors.grey),
+                  const SizedBox(height: 12),
+                  Text(
+                    _getEmptyMessage(),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.grey),
                   ),
                 ],
               ),
-            );
-          }
-
-          final items = state is FeedbackLoaded ? state.teacherFeedback : <FeedbackItem>[];
-
-          if (items.isEmpty) {
-            return Center(
-              child: Container(
-                margin: const EdgeInsets.all(24),
-                padding: const EdgeInsets.all(32),
-                decoration: BoxDecoration(
-                  color: isDark ? AppColors.surfaceContainerDark : AppColors.surfaceContainerLight,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.rate_review_outlined, size: 40, color: Colors.grey),
-                    const SizedBox(height: 12),
-                    Text(
-                      _getEmptyMessage(),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.grey),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-
-          return RefreshIndicator(
-            color: AppColors.primaryLight,
-            onRefresh: _loadData,
-            child: ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: items.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 14),
-              itemBuilder: (context, index) {
-                final item = items[index];
-                return _buildFeedbackCard(item, isDark);
-              },
             ),
           );
-        },
-      ),
+        }
+
+        return RefreshIndicator(
+          color: AppColors.primaryLight,
+          onRefresh: _loadData,
+          child: ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: items.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 14),
+            itemBuilder: (context, index) {
+              final item = items[index];
+              return _buildFeedbackCard(item, isDark);
+            },
+          ),
+        );
+      },
+    );
+
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      appBar: widget.showAppBar
+          ? AppBar(
+              title: const Text('Received Feedback', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              centerTitle: false,
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(48),
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.surfaceContainerDark : AppColors.surfaceContainerLight,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isDark ? AppColors.outlineDark.withOpacity(0.2) : AppColors.outlineLight.withOpacity(0.15),
+                    ),
+                  ),
+                  child: TabBar(
+                    controller: _tabController,
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    indicator: BoxDecoration(
+                      color: AppColors.primaryLight,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    labelColor: Colors.white,
+                    unselectedLabelColor: isDark ? AppColors.outlineDark : AppColors.outlineLight,
+                    labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    tabs: const [
+                      Tab(text: 'All'),
+                      Tab(text: 'Replied'),
+                      Tab(text: 'Not Replied'),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          : null,
+      body: widget.showAppBar
+          ? content
+          : Column(
+              children: [
+                Container(
+                  color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Container(
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.surfaceContainerDark : AppColors.surfaceContainerLight,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isDark ? AppColors.outlineDark.withOpacity(0.2) : AppColors.outlineLight.withOpacity(0.15),
+                      ),
+                    ),
+                    child: TabBar(
+                      controller: _tabController,
+                      indicatorSize: TabBarIndicatorSize.tab,
+                      indicator: BoxDecoration(
+                        color: AppColors.primaryLight,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      labelColor: Colors.white,
+                      unselectedLabelColor: isDark ? AppColors.outlineDark : AppColors.outlineLight,
+                      labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      tabs: const [
+                        Tab(text: 'All'),
+                        Tab(text: 'Replied'),
+                        Tab(text: 'Not Replied'),
+                      ],
+                    ),
+                  ),
+                ),
+                Expanded(child: content),
+              ],
+            ),
     );
   }
 

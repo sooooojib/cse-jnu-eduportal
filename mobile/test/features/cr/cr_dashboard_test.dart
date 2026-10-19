@@ -451,7 +451,7 @@ void main() {
       await tester.tap(find.text('Retry'));
       await tester.pumpAndSettle();
 
-      expect(find.text('CR Dashboard'), findsOneWidget);
+      expect(find.text('Welcome back, Sajib Ahmed.'), findsOneWidget);
     });
 
     testWidgets('Renders CR Identity, Active Semester, and Greeting Header', (tester) async {
@@ -475,7 +475,6 @@ void main() {
       expect(find.byIcon(Icons.logout_rounded), findsOneWidget);
 
       // Header
-      expect(find.text('CR Dashboard'), findsOneWidget);
       expect(find.text('Class Representative'), findsOneWidget);
       expect(find.text('Welcome back, Sajib Ahmed.'), findsOneWidget);
 

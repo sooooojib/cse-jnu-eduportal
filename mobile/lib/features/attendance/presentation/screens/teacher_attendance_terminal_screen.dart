@@ -17,6 +17,7 @@ class TeacherAttendanceTerminalScreen extends StatefulWidget {
   final AttendanceController? controller;
   final AuthController? authController;
   final List<String>? assignedCourseIds;
+  final bool showAppBar;
 
   const TeacherAttendanceTerminalScreen({
     super.key,
@@ -24,6 +25,7 @@ class TeacherAttendanceTerminalScreen extends StatefulWidget {
     this.controller,
     this.authController,
     this.assignedCourseIds,
+    this.showAppBar = true,
   });
 
   @override
@@ -264,7 +266,8 @@ class _TeacherAttendanceTerminalScreenState extends State<TeacherAttendanceTermi
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.surfaceDark : const Color(0xFFF8FAFC),
-      appBar: AppBar(
+      appBar: widget.showAppBar
+          ? AppBar(
         scrolledUnderElevation: 0,
         backgroundColor: isDark ? AppColors.surfaceDark : Colors.white,
         elevation: 0,
@@ -284,7 +287,8 @@ class _TeacherAttendanceTerminalScreenState extends State<TeacherAttendanceTermi
             child: RoleBadgeChip(role: UserRole.teacher, isCompact: true, customLabel: 'Faculty'),
           ),
         ],
-      ),
+      )
+          : null,
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Column(

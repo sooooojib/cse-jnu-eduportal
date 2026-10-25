@@ -214,16 +214,7 @@ class WelcomeScreen extends StatelessWidget {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'No account required',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
-                        ),
-                      ),
-
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 16),
 
                       // 3 Public Discovery Action Cards
                       _PublicServiceTile(
@@ -249,27 +240,7 @@ class WelcomeScreen extends StatelessWidget {
                         subtitle: 'Location, office hours, chairman desk & contacts',
                         onTap: () => _showOfficeHelpdeskBottomSheet(context, isDark),
                       ),
-
-                      const SizedBox(height: 36),
-
-                      // Institutional Copyright & Version
-                      Text(
-                        'Department of Computer Science & Engineering',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Jagannath University, Dhaka-1100 · v2.4',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: isDark ? Colors.white24 : const Color(0xFFCBD5E1),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 24),
                     ],
                   ),
                 ),

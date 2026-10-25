@@ -349,12 +349,26 @@ class CurriculumRemoteDataSourceImpl implements CurriculumRemoteDataSource {
       final snap = await query.get();
       final slots = snap.docs.map((d) => d.data() as Map<String, dynamic>).toList();
 
-      final buffer = StringBuffer('📅 *CSE JnU Schedule - $todayDay*\n');
-      for (final s in slots) {
-        buffer.writeln('• ${s['startTime']} - ${s['endTime']}: ${s['courseCode'] ?? s['courseTitle'] ?? 'Class'} (${s['room'] ?? 'N/A'})');
+      final buffer = StringBuffer('*Department of Computer Science & Engineering, JnU*\n');
+      buffer.writeln('*Class Routine Notice*\n');
+      buffer.writeln('*Date:* $todayDay');
+      buffer.writeln('────────────────────────────────────────');
+      if (slots.isEmpty) {
+        buffer.writeln('Notice: There are no classes scheduled for today ($todayDay).');
+      } else {
+        buffer.writeln('*Scheduled Classes:*\n');
+        for (int i = 0; i < slots.length; i++) {
+          final s = slots[i];
+          buffer.writeln('${i + 1}. *${s['courseCode'] ?? s['courseTitle'] ?? 'Class'}*');
+          buffer.writeln('   Time: ${s['startTime']} - ${s['endTime']}');
+          buffer.writeln('   Room: ${s['room'] ?? 'N/A'}');
+          if (s['teacherName'] != null && (s['teacherName'] as String).isNotEmpty) {
+            buffer.writeln('   Faculty: ${s['teacherName']}');
+          }
+          if (i < slots.length - 1) buffer.writeln('');
+        }
       }
-
-      final text = slots.isEmpty ? 'No classes scheduled for today ($todayDay).' : buffer.toString();
+      final text = buffer.toString();
       final encoded = Uri.encodeComponent(text);
 
       return WhatsAppBroadcastDataModel(

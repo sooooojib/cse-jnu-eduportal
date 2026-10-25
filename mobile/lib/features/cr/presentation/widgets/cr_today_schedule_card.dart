@@ -53,39 +53,44 @@ class _CrTodayScheduleCardState extends State<CrTodayScheduleCard> {
 
   void _handleWhatsAppBroadcast(BuildContext context) {
     final buffer = StringBuffer();
-    buffer.writeln('📢 *CSE JnU EduPortal — Class Routine for Tomorrow*');
-    buffer.writeln('📅 *Date:* ${widget.data.tomorrowDateLabel}');
-    buffer.writeln('🎓 *Batch:* Year ${widget.data.year}, Semester ${widget.data.semester}');
+    final dayText = isShowingTomorrow ? 'tomorrow' : 'today';
+    buffer.writeln('*Department of Computer Science & Engineering, JnU*');
+    buffer.writeln('*Class Routine Notice*');
+    buffer.writeln('');
+    buffer.writeln('*Date:* $currentDateLabel');
+    buffer.writeln('*Batch:* Year ${widget.data.year}, Semester ${widget.data.semester}');
     buffer.writeln('────────────────────────────────────────');
 
-    if (widget.data.tomorrowClasses.isEmpty) {
-      buffer.writeln('🏖️ *No classes scheduled for tomorrow.*');
-      buffer.writeln('Enjoy your study day and prepare for upcoming assignments!');
+    final classes = currentClasses;
+
+    if (classes.isEmpty) {
+      buffer.writeln('Notice: There are no classes scheduled for $dayText.');
     } else {
-      for (int i = 0; i < widget.data.tomorrowClasses.length; i++) {
-        final slot = widget.data.tomorrowClasses[i];
+      buffer.writeln('*Scheduled Classes:*');
+      buffer.writeln('');
+      for (int i = 0; i < classes.length; i++) {
+        final slot = classes[i];
         buffer.writeln('${i + 1}. *${slot.courseCode}: ${slot.courseTitle}*');
-        buffer.writeln('   ⏰ Time: ${slot.startTime} - ${slot.endTime}');
-        buffer.writeln('   📍 Room: ${slot.room}');
+        buffer.writeln('   Time: ${slot.startTime} - ${slot.endTime}');
+        buffer.writeln('   Room: ${slot.room}');
         if (slot.teacherName.isNotEmpty) {
-          buffer.writeln('   👨‍🏫 Faculty: ${slot.teacherName}');
+          buffer.writeln('   Faculty: ${slot.teacherName}');
         }
         if (slot.isExtraClass) {
-          buffer.writeln('   ⚠️ *Extra Class*');
+          buffer.writeln('   Note: Extra Class');
         }
-        buffer.writeln('');
+        if (i < classes.length - 1) {
+          buffer.writeln('');
+        }
       }
     }
-
-    buffer.writeln('────────────────────────────────────────');
-    buffer.writeln('Generated via *JnU EduPortal* CR Terminal.');
 
     final messageText = buffer.toString();
 
     WhatsAppShareDialog.show(
       context,
       title: 'WhatsApp Broadcast',
-      subtitle: '${widget.data.tomorrowDateLabel} (Year ${widget.data.year}, Sem ${widget.data.semester})',
+      subtitle: '$currentDateLabel (Year ${widget.data.year}, Sem ${widget.data.semester})',
       messageText: messageText,
       shareService: sl.isRegistered<WhatsAppShareService>() ? sl<WhatsAppShareService>() : null,
     );

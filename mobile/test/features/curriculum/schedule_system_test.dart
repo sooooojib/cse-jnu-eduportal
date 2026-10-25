@@ -321,7 +321,7 @@ void main() {
                 date: '2026-10-20',
                 dayOfWeek: 'MONDAY',
                 slotCount: 2,
-                broadcastText: '📢 *CSE JnU EduPortal — Class Routine for Tomorrow*',
+                broadcastText: '*Department of Computer Science & Engineering, JnU*\n*Class Routine Notice*',
                 whatsappUrl: 'https://wa.me/?text=Routine',
               ));
 

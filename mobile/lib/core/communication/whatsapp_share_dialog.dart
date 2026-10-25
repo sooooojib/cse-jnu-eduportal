@@ -157,6 +157,7 @@ class _WhatsAppShareDialogState extends State<WhatsAppShareDialog> {
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       backgroundColor: isDark ? AppColors.surfaceDark : Colors.white,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       title: Row(
         children: [
           Container(
@@ -193,15 +194,18 @@ class _WhatsAppShareDialogState extends State<WhatsAppShareDialog> {
             // Message Preview Box
             Container(
               width: double.infinity,
+              constraints: const BoxConstraints(maxHeight: 180),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: isDark ? AppColors.surfaceContainerDark : const Color(0xFFF8FAFC),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
               ),
-              child: SelectableText(
-                widget.messageText,
-                style: const TextStyle(fontFamily: 'monospace', fontSize: 11.5, height: 1.4),
+              child: SingleChildScrollView(
+                child: SelectableText(
+                  widget.messageText,
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 11.5, height: 1.4),
+                ),
               ),
             ),
             const SizedBox(height: 16),
@@ -229,12 +233,15 @@ class _WhatsAppShareDialogState extends State<WhatsAppShareDialog> {
             if (_phoneResult != null) ...[
               const SizedBox(height: 6),
               if (_phoneResult!.isValid)
-                Row(
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF25D366).withOpacity(0.15),
+                        color: const Color(0xFF25D366).withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
@@ -246,7 +253,6 @@ class _WhatsAppShareDialogState extends State<WhatsAppShareDialog> {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
                     Text(
                       'Target: ${_phoneResult!.whatsAppNumber}',
                       style: const TextStyle(fontSize: 11, color: Colors.grey),
@@ -261,7 +267,7 @@ class _WhatsAppShareDialogState extends State<WhatsAppShareDialog> {
             ],
             const SizedBox(height: 6),
             const Text(
-              'Leave blank to broadcast to your class WhatsApp group.',
+              'Leave blank to select contact or group in WhatsApp.',
               style: TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic),
             ),
           ],

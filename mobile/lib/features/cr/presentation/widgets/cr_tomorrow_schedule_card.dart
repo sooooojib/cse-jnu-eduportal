@@ -27,32 +27,34 @@ class _CrTomorrowScheduleCardState extends State<CrTomorrowScheduleCard> {
 
   void _handleWhatsAppBroadcast(BuildContext context) {
     final buffer = StringBuffer();
-    buffer.writeln('📢 *CSE JnU EduPortal — Class Routine for Tomorrow*');
-    buffer.writeln('📅 *Date:* ${widget.data.tomorrowDateLabel}');
-    buffer.writeln('🎓 *Batch:* Year ${widget.data.year}, Semester ${widget.data.semester}');
+    buffer.writeln('*Department of Computer Science & Engineering, JnU*');
+    buffer.writeln('*Class Routine Notice*');
+    buffer.writeln('');
+    buffer.writeln('*Date:* ${widget.data.tomorrowDateLabel}');
+    buffer.writeln('*Batch:* Year ${widget.data.year}, Semester ${widget.data.semester}');
     buffer.writeln('────────────────────────────────────────');
 
     if (widget.data.tomorrowClasses.isEmpty) {
-      buffer.writeln('🏖️ *No classes scheduled for tomorrow.*');
-      buffer.writeln('Enjoy your study day and prepare for upcoming assignments!');
+      buffer.writeln('Notice: There are no classes scheduled for tomorrow.');
     } else {
+      buffer.writeln('*Scheduled Classes:*');
+      buffer.writeln('');
       for (int i = 0; i < widget.data.tomorrowClasses.length; i++) {
         final slot = widget.data.tomorrowClasses[i];
         buffer.writeln('${i + 1}. *${slot.courseCode}: ${slot.courseTitle}*');
-        buffer.writeln('   ⏰ Time: ${slot.startTime} - ${slot.endTime}');
-        buffer.writeln('   📍 Room: ${slot.room}');
+        buffer.writeln('   Time: ${slot.startTime} - ${slot.endTime}');
+        buffer.writeln('   Room: ${slot.room}');
         if (slot.teacherName.isNotEmpty) {
-          buffer.writeln('   👨‍🏫 Faculty: ${slot.teacherName}');
+          buffer.writeln('   Faculty: ${slot.teacherName}');
         }
         if (slot.isExtraClass) {
-          buffer.writeln('   ⚠️ *Extra Class*');
+          buffer.writeln('   Note: Extra Class');
         }
-        buffer.writeln('');
+        if (i < widget.data.tomorrowClasses.length - 1) {
+          buffer.writeln('');
+        }
       }
     }
-
-    buffer.writeln('────────────────────────────────────────');
-    buffer.writeln('Generated via *JnU EduPortal* CR Terminal.');
 
     final messageText = buffer.toString();
 

@@ -579,26 +579,31 @@ export const getWhatsAppBroadcast = onCall(async (request) => {
   const slots = snap.docs.map((d) => d.data());
   slots.sort((a, b) => parseTimeToMinutes(a.startTime) - parseTimeToMinutes(b.startTime));
 
-  let formattedText = `📚 *CSE Department Class Routine for Tomorrow*\n`;
-  formattedText += `📅 Date: ${tomorrowDate} (${tomorrowDayOfWeek})\n`;
-  formattedText += `🏛️ Year: ${targetYear} · Semester: ${targetSemester}\n\n`;
+  let formattedText = `*Department of Computer Science & Engineering, JnU*\n`;
+  formattedText += `*Class Routine Notice*\n\n`;
+  formattedText += `*Date:* ${tomorrowDate} (${tomorrowDayOfWeek})\n`;
+  formattedText += `*Batch:* Year ${targetYear}, Semester ${targetSemester}\n`;
+  formattedText += `────────────────────────────────────────\n`;
 
   if (slots.length === 0) {
-    formattedText += `🎉 *No classes scheduled for tomorrow!*\nEnjoy your free day.\n\n`;
+    formattedText += `Notice: There are no classes scheduled for tomorrow.\n`;
   } else {
+    formattedText += `*Scheduled Classes:*\n\n`;
     slots.forEach((s, idx) => {
-      formattedText += `${idx + 1}️⃣ *${s.courseCode}: ${s.courseTitle}*\n`;
-      formattedText += `⏰ Time: ${s.startTime} - ${s.endTime}\n`;
-      formattedText += `👨‍🏫 Teacher: ${s.teacherName || "Faculty"}\n`;
-      formattedText += `📍 Room: ${s.room}\n`;
-      if (s.isExtraClass) {
-        formattedText += `⚡ *Note: Extra Class*\n`;
+      formattedText += `${idx + 1}. *${s.courseCode}: ${s.courseTitle}*\n`;
+      formattedText += `   Time: ${s.startTime} - ${s.endTime}\n`;
+      formattedText += `   Room: ${s.room}\n`;
+      if (s.teacherName) {
+        formattedText += `   Faculty: ${s.teacherName}\n`;
       }
-      formattedText += `\n`;
+      if (s.isExtraClass) {
+        formattedText += `   Note: Extra Class\n`;
+      }
+      if (idx < slots.length - 1) {
+        formattedText += `\n`;
+      }
     });
   }
-
-  formattedText += `_Sent via CSE JnU EduPortal_`;
 
   const { recipientPhone } = request.data || {};
   const urls = buildWhatsAppShareUrls(formattedText, recipientPhone);

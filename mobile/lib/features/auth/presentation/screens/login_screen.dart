@@ -10,6 +10,7 @@ import '../../../../shared/widgets/buttons/app_text_button.dart';
 import '../../../../shared/widgets/inputs/app_text_field.dart';
 import '../../../../shared/widgets/dialogs/app_dialog.dart';
 import '../../../../shared/widgets/theme/theme_toggle_button.dart';
+import '../../../../shared/widgets/states/app_minimal_launch_view.dart';
 import '../controllers/auth_controller.dart';
 import '../controllers/auth_state.dart';
 
@@ -84,10 +85,19 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = context.isDarkMode;
+    return ListenableBuilder(
+      listenable: widget.authController,
+      builder: (context, _) {
+        if (widget.authController.state is AuthLoading) {
+          return const AppMinimalLaunchView(
+            statusMessage: 'Signing in to JnU EduPortal...',
+          );
+        }
 
-    return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+        final isDark = context.isDarkMode;
+
+        return Scaffold(
+          backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(kToolbarHeight),
         child: LayoutBuilder(
@@ -437,6 +447,8 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ],
       ),
+    );
+      },
     );
   }
 }

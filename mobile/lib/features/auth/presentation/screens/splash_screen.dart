@@ -31,7 +31,20 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _bootstrap() async {
+    final stopwatch = Stopwatch()..start();
     await widget.authController.checkAuthStatus();
+    stopwatch.stop();
+
+    // Hold for a smooth minimum duration on app boot so the launch screen is clearly shown
+    final isTest = WidgetsBinding.instance.runtimeType.toString().contains('Test');
+    if (!isTest) {
+      const minDuration = Duration(milliseconds: 1400);
+      final remaining = minDuration - stopwatch.elapsed;
+      if (remaining > Duration.zero) {
+        await Future.delayed(remaining);
+      }
+    }
+
     if (!mounted) return;
 
     final state = widget.authController.state;

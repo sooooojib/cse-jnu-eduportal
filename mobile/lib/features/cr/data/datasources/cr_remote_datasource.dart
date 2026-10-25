@@ -36,6 +36,7 @@ class CrRemoteDataSourceImpl implements CrRemoteDataSource {
   }) async {
     try {
       final now = currentTime ?? DateTime.now();
+      final bool isTomorrow = now.hour >= 17 || now.hour < 5;
       final String dayOfWeek = _dayOfWeekFromWeekday(now.weekday);
       final DateTime tomorrow = now.add(const Duration(days: 1));
       final String tomorrowDayOfWeek = _dayOfWeekFromWeekday(tomorrow.weekday);
@@ -102,6 +103,7 @@ class CrRemoteDataSourceImpl implements CrRemoteDataSource {
         targetDateLabel: targetDateLabel,
         dayOfWeek: dayOfWeek,
         tomorrowDateLabel: tomorrowDateLabel,
+        isTomorrow: isTomorrow,
       );
     } catch (e, stack) {
       AppLogger.e('Error fetching CR dashboard data', e, stack);
@@ -116,7 +118,9 @@ class CrRemoteDataSourceImpl implements CrRemoteDataSource {
     required ScheduleSlot slot,
   }) async {
     try {
-      final docRef = await _firestore.collection('scheduleSlots').add({
+      final docRef = _firestore.collection('schedules').doc();
+      final slotMap = {
+        'id': docRef.id,
         'courseId': slot.courseId,
         'courseCode': slot.courseCode,
         'courseTitle': slot.courseTitle,
@@ -129,10 +133,22 @@ class CrRemoteDataSourceImpl implements CrRemoteDataSource {
         'targetYear': crUser.year ?? 1,
         'targetSemester': crUser.semester ?? 1,
         'isExtraClass': slot.isExtraClass,
+        'createdBy': crUser.id,
         'createdByCrId': crUser.id,
+        'creatorRole': 'CR',
+        if (slot.date != null) 'date': slot.date,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      };
+
+      // Atomic batch write to both 'schedules' and 'scheduleSlots' so:
+      // 1. Teachers see it on their dashboard and schedule screens (they query 'schedules')
+      // 2. Students see it on their timetable/schedule screens (they query 'schedules')
+      // 3. CR dashboard sees it in real time
+      final batch = _firestore.batch();
+      batch.set(docRef, slotMap);
+      batch.set(_firestore.collection('scheduleSlots').doc(docRef.id), slotMap);
+      await batch.commit();
 
       AppLogger.i('CR added schedule slot: ${docRef.id} for ${slot.dayOfWeek}');
     } catch (e, stack) {
@@ -266,36 +282,48 @@ class CrRemoteDataSourceImpl implements CrRemoteDataSource {
 
   Future<List<ScheduleSlot>> _fetchClassesForDay(User crUser, String targetDay) async {
     try {
-      final List<ScheduleSlot> results = [];
+      final Map<String, ScheduleSlot> slotMap = {};
+      final normDay = targetDay.trim().toUpperCase();
 
-      // Primary query: scheduleSlots
-      final snap = await _firestore
-          .collection('scheduleSlots')
-          .where('targetYear', isEqualTo: crUser.year ?? 1)
-          .where('targetSemester', isEqualTo: crUser.semester ?? 1)
-          .where('dayOfWeek', isEqualTo: targetDay)
-          .get();
-
-      for (final doc in snap.docs) {
-        results.add(ScheduleSlotModel.fromFirestore(doc));
-      }
-
-      if (results.isEmpty) {
-        // Fallback: check schedules collection or day-only query
-        final fallbackSnap = await _firestore
-            .collection('scheduleSlots')
-            .where('dayOfWeek', isEqualTo: targetDay)
+      // 1. Query 'schedules' collection
+      try {
+        final schedulesSnap = await _firestore
+            .collection('schedules')
+            .where('targetYear', isEqualTo: crUser.year ?? 1)
+            .where('targetSemester', isEqualTo: crUser.semester ?? 1)
+            .where('dayOfWeek', isEqualTo: normDay)
             .get();
 
-        for (final doc in fallbackSnap.docs) {
+        for (final doc in schedulesSnap.docs) {
           final model = ScheduleSlotModel.fromFirestore(doc);
-          if (model.targetYear == (crUser.year ?? 1) && model.targetSemester == (crUser.semester ?? 1)) {
-            results.add(model);
-          }
+          final key = model.id.isNotEmpty ? model.id : doc.id;
+          slotMap[key] = model;
         }
+      } catch (e) {
+        AppLogger.w('Failed to query schedules collection for $normDay: $e');
       }
 
-      // Sort chronologically by startTime
+      // 2. Query 'scheduleSlots' collection
+      try {
+        final slotsSnap = await _firestore
+            .collection('scheduleSlots')
+            .where('targetYear', isEqualTo: crUser.year ?? 1)
+            .where('targetSemester', isEqualTo: crUser.semester ?? 1)
+            .where('dayOfWeek', isEqualTo: normDay)
+            .get();
+
+        for (final doc in slotsSnap.docs) {
+          final model = ScheduleSlotModel.fromFirestore(doc);
+          final key = model.id.isNotEmpty ? model.id : doc.id;
+          if (!slotMap.containsKey(key)) {
+            slotMap[key] = model;
+          }
+        }
+      } catch (e) {
+        AppLogger.w('Failed to query scheduleSlots collection for $normDay: $e');
+      }
+
+      final results = slotMap.values.toList();
       results.sort((a, b) => a.startTime.compareTo(b.startTime));
       return results;
     } catch (e) {

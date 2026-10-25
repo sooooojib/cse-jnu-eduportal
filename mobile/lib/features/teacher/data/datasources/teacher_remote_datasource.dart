@@ -29,12 +29,15 @@ class TeacherRemoteDataSourceImpl implements TeacherRemoteDataSource {
       final now = currentTime ?? DateTime.now();
 
       // 1. Time-aware window calculation
-      // 05:00 to 16:59 -> Today's Classes
-      // 17:00 to 04:59 -> Tomorrow's Classes (Next-day preparation)
       final bool isTomorrow = now.hour >= 17 || now.hour < 5;
-      final DateTime targetDate =
-          isTomorrow ? now.add(const Duration(days: 1)) : now;
-      final String targetDayOfWeek = _dayOfWeekFromWeekday(targetDate.weekday);
+      final String todayDayOfWeek = _dayOfWeekFromWeekday(now.weekday);
+      final DateTime tomorrow = now.add(const Duration(days: 1));
+      final String tomorrowDayOfWeek = _dayOfWeekFromWeekday(tomorrow.weekday);
+
+      final String todayDateLabel = DateFormat('EEEE · MMM d, yyyy').format(now);
+      final String tomorrowDateLabel = DateFormat('EEEE · MMM d, yyyy').format(tomorrow);
+      final DateTime targetDate = isTomorrow ? tomorrow : now;
+      final String targetDayOfWeek = isTomorrow ? tomorrowDayOfWeek : todayDayOfWeek;
       final String formattedDate = DateFormat('MMM d, yyyy').format(targetDate);
       final String targetDateLabel = isTomorrow
           ? 'Tomorrow · $formattedDate'
@@ -49,13 +52,19 @@ class TeacherRemoteDataSourceImpl implements TeacherRemoteDataSource {
       final Set<String> assignedCodes = assignedCourses.map((c) => c.code.toUpperCase()).toSet();
       final Set<String> assignedIds = assignedCourses.map((c) => c.id).toSet();
 
-      // 3. Fetch Time-Aware Routine Classes
-      final List<ScheduleSlot> timeAwareClasses =
-          await _fetchTimeAwareClasses(teacher, targetDayOfWeek, assignedCodes, assignedIds);
+      // 3. Fetch Classes & Exams for Both Today and Tomorrow
+      final List<ScheduleSlot> todayClasses =
+          await _fetchTimeAwareClasses(teacher, todayDayOfWeek, assignedCodes, assignedIds);
+      final List<ScheduleSlot> tomorrowClasses =
+          await _fetchTimeAwareClasses(teacher, tomorrowDayOfWeek, assignedCodes, assignedIds);
 
-      // Fetch Time-Aware Exams
-      final List<Exam> timeAwareExams =
-          await _fetchTimeAwareExams(teacher, targetDate, assignedCodes, assignedIds);
+      final List<Exam> todayExams =
+          await _fetchTimeAwareExams(teacher, now, assignedCodes, assignedIds);
+      final List<Exam> tomorrowExams =
+          await _fetchTimeAwareExams(teacher, tomorrow, assignedCodes, assignedIds);
+
+      final List<ScheduleSlot> timeAwareClasses = isTomorrow ? tomorrowClasses : todayClasses;
+      final List<Exam> timeAwareExams = isTomorrow ? tomorrowExams : todayExams;
 
       // 4. Fetch Key Metrics
       final int pendingCounseling = await _fetchPendingCounselingCount(teacher);
@@ -75,8 +84,14 @@ class TeacherRemoteDataSourceImpl implements TeacherRemoteDataSource {
         assignedCourses: assignedCourses,
         timeAwareClasses: timeAwareClasses,
         timeAwareExams: timeAwareExams,
+        todayClasses: todayClasses,
+        tomorrowClasses: tomorrowClasses,
+        todayExams: todayExams,
+        tomorrowExams: tomorrowExams,
         isTomorrow: isTomorrow,
         targetDateLabel: targetDateLabel,
+        todayDateLabel: todayDateLabel,
+        tomorrowDateLabel: tomorrowDateLabel,
         dayOfWeek: targetDayOfWeek,
       );
     } catch (e, stack) {
@@ -173,19 +188,13 @@ class TeacherRemoteDataSourceImpl implements TeacherRemoteDataSource {
     Set<String> assignedCodes,
     Set<String> assignedIds,
   ) async {
-    final snapshot = await _firestore
-        .collection('schedules')
-        .where('dayOfWeek', isEqualTo: targetDayOfWeek.toUpperCase())
-        .get();
+    final Map<String, ScheduleSlot> slotMap = {};
+    final normDay = targetDayOfWeek.toUpperCase();
 
-    final List<ScheduleSlot> slots = [];
-
-    for (final doc in snapshot.docs) {
+    void processDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
       final model = ScheduleSlotModel.fromFirestore(doc);
-
-      // Business Rule: Do NOT display internal attendance markers as ordinary classes
       if (_isInternalAttendanceMarker(model)) {
-        continue;
+        return;
       }
 
       // Check teacher attribution: by ID, by Name, or by assigned course codes
@@ -198,10 +207,36 @@ class TeacherRemoteDataSourceImpl implements TeacherRemoteDataSource {
           assignedIds.contains(model.courseId);
 
       if (matchesTeacherId || matchesTeacherName || matchesCourse) {
-        slots.add(model);
+        final key = model.id.isNotEmpty ? model.id : doc.id;
+        slotMap[key] = model;
       }
     }
 
+    try {
+      final snapshot = await _firestore
+          .collection('schedules')
+          .where('dayOfWeek', isEqualTo: normDay)
+          .get();
+      for (final doc in snapshot.docs) {
+        processDoc(doc);
+      }
+    } catch (e) {
+      AppLogger.w('Failed to query schedules for teacher: $e');
+    }
+
+    try {
+      final snapshotSlots = await _firestore
+          .collection('scheduleSlots')
+          .where('dayOfWeek', isEqualTo: normDay)
+          .get();
+      for (final doc in snapshotSlots.docs) {
+        processDoc(doc);
+      }
+    } catch (e) {
+      AppLogger.w('Failed to query scheduleSlots for teacher: $e');
+    }
+
+    final slots = slotMap.values.toList();
     // Sort chronologically by start time
     slots.sort((a, b) => a.startTime.compareTo(b.startTime));
     return slots;

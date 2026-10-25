@@ -1,16 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../../../app/theme/app_colors.dart';
+import '../../../../core/communication/whatsapp_share_dialog.dart';
+import '../../../../core/communication/whatsapp_share_service.dart';
+import '../../../../core/di/injection_container.dart';
 import '../../../curriculum/domain/entities/curriculum_entities.dart';
 import '../../domain/entities/cr_dashboard_data.dart';
 
 class CrTodayScheduleCard extends StatefulWidget {
   final CrDashboardData data;
   final VoidCallback onViewFullSchedule;
+  final VoidCallback? onManageTomorrowTap;
 
   const CrTodayScheduleCard({
     super.key,
     required this.data,
     required this.onViewFullSchedule,
+    this.onManageTomorrowTap,
   });
 
   @override
@@ -19,6 +25,71 @@ class CrTodayScheduleCard extends StatefulWidget {
 
 class _CrTodayScheduleCardState extends State<CrTodayScheduleCard> {
   int _selectedTab = 0; // 0 for Classes, 1 for Exams
+  late int _selectedDay; // 0 for Today, 1 for Tomorrow
+
+  @override
+  void initState() {
+    super.initState();
+    // Respect widget.data.isTomorrow calculated by datasource/domain
+    _selectedDay = widget.data.isTomorrow ? 1 : 0;
+  }
+
+  bool get isShowingTomorrow => _selectedDay == 1;
+
+  List<ScheduleSlot> get currentClasses =>
+      isShowingTomorrow ? widget.data.tomorrowClasses : widget.data.todayClasses;
+
+  String get currentDateLabel {
+    final raw = isShowingTomorrow
+        ? widget.data.tomorrowDateLabel
+        : widget.data.targetDateLabel;
+    if (raw.isNotEmpty && !raw.startsWith('Today · ') && !raw.startsWith('Tomorrow · ')) {
+      return raw;
+    }
+    final now = DateTime.now();
+    final date = isShowingTomorrow ? now.add(const Duration(days: 1)) : now;
+    return DateFormat('EEEE · MMM d, yyyy').format(date);
+  }
+
+  void _handleWhatsAppBroadcast(BuildContext context) {
+    final buffer = StringBuffer();
+    buffer.writeln('📢 *CSE JnU EduPortal — Class Routine for Tomorrow*');
+    buffer.writeln('📅 *Date:* ${widget.data.tomorrowDateLabel}');
+    buffer.writeln('🎓 *Batch:* Year ${widget.data.year}, Semester ${widget.data.semester}');
+    buffer.writeln('────────────────────────────────────────');
+
+    if (widget.data.tomorrowClasses.isEmpty) {
+      buffer.writeln('🏖️ *No classes scheduled for tomorrow.*');
+      buffer.writeln('Enjoy your study day and prepare for upcoming assignments!');
+    } else {
+      for (int i = 0; i < widget.data.tomorrowClasses.length; i++) {
+        final slot = widget.data.tomorrowClasses[i];
+        buffer.writeln('${i + 1}. *${slot.courseCode}: ${slot.courseTitle}*');
+        buffer.writeln('   ⏰ Time: ${slot.startTime} - ${slot.endTime}');
+        buffer.writeln('   📍 Room: ${slot.room}');
+        if (slot.teacherName.isNotEmpty) {
+          buffer.writeln('   👨‍🏫 Faculty: ${slot.teacherName}');
+        }
+        if (slot.isExtraClass) {
+          buffer.writeln('   ⚠️ *Extra Class*');
+        }
+        buffer.writeln('');
+      }
+    }
+
+    buffer.writeln('────────────────────────────────────────');
+    buffer.writeln('Generated via *JnU EduPortal* CR Terminal.');
+
+    final messageText = buffer.toString();
+
+    WhatsAppShareDialog.show(
+      context,
+      title: 'WhatsApp Broadcast',
+      subtitle: '${widget.data.tomorrowDateLabel} (Year ${widget.data.year}, Sem ${widget.data.semester})',
+      messageText: messageText,
+      shareService: sl.isRegistered<WhatsAppShareService>() ? sl<WhatsAppShareService>() : null,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +116,7 @@ class _CrTodayScheduleCardState extends State<CrTodayScheduleCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header with Title & Date (Matching Faculty TimeAwareClassesCard)
+          // Header with Title & Date (Time-Aware, Matching Faculty TimeAwareClassesCard)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             decoration: BoxDecoration(
@@ -71,19 +142,47 @@ class _CrTodayScheduleCardState extends State<CrTodayScheduleCard> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            _selectedTab == 0 ? "Today's Schedule" : "Today's Exams",
-                            style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w700,
-                              color: isDark ? Colors.white : const Color(0xFF0F172A),
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  _selectedTab == 0
+                                      ? (isShowingTomorrow ? "Tomorrow's Schedule" : "Today's Schedule")
+                                      : (isShowingTomorrow ? "Tomorrow's Exams" : "Today's Exams"),
+                                  style: TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w700,
+                                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (isShowingTomorrow) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? const Color(0xFF38BDF8).withValues(alpha: 0.15)
+                                        : const Color(0xFFE0F2FE),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    'Next-Day',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: isDark ? const Color(0xFF38BDF8) : const Color(0xFF0284C7),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            widget.data.targetDateLabel,
+                            currentDateLabel,
                             style: TextStyle(
                               fontSize: 13,
                               color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
@@ -95,22 +194,83 @@ class _CrTodayScheduleCardState extends State<CrTodayScheduleCard> {
                       ),
                     ),
                     const SizedBox(width: 8),
+
+                    // Day Switcher Pill (Today | Tomorrow) in the same card
                     Container(
-                      padding: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.all(3),
                       decoration: BoxDecoration(
                         color: isDark
-                            ? AppColors.primary.withValues(alpha: 0.2)
-                            : const Color(0xFFECFDF5),
-                        shape: BoxShape.circle,
+                            ? const Color(0xFF0F1E33)
+                            : const Color(0xFFE2E8F0).withValues(alpha: 0.8),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(
-                        _selectedTab == 0 ? Icons.schedule_rounded : Icons.assignment_rounded,
-                        color: AppColors.primaryLight,
-                        size: 20,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildDayPill(
+                            label: 'Today',
+                            index: 0,
+                            isDark: isDark,
+                          ),
+                          _buildDayPill(
+                            label: 'Tomorrow',
+                            index: 1,
+                            isDark: isDark,
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
+
+                if (isShowingTomorrow && widget.onManageTomorrowTap != null) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: widget.onManageTomorrowTap,
+                          icon: const Icon(Icons.add_rounded, size: 16),
+                          label: const FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'Add Class Slot',
+                              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => _handleWhatsAppBroadcast(context),
+                          icon: const Icon(Icons.forum_rounded, size: 15, color: Color(0xFF075E54)),
+                          label: const FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'Broadcast',
+                              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Color(0xFF075E54)),
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            backgroundColor: const Color(0xFF25D366).withValues(alpha: 0.1),
+                            side: BorderSide(color: const Color(0xFF25D366).withValues(alpha: 0.35)),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+
                 const SizedBox(height: 14),
 
                 // Toggle Segmented Control (Classes vs Exams)
@@ -127,7 +287,7 @@ class _CrTodayScheduleCardState extends State<CrTodayScheduleCard> {
                       Expanded(
                         child: _buildToggleItem(
                           title: "Classes",
-                          count: widget.data.todayClasses.length,
+                          count: currentClasses.length,
                           index: 0,
                           isDark: isDark,
                         ),
@@ -151,7 +311,7 @@ class _CrTodayScheduleCardState extends State<CrTodayScheduleCard> {
           Padding(
             padding: const EdgeInsets.all(20),
             child: _selectedTab == 0
-                ? (widget.data.todayClasses.isEmpty
+                ? (currentClasses.isEmpty
                     ? _buildEmptyState(context, isDark)
                     : _buildClassesTimeline(context, isDark))
                 : (widget.data.upcomingExams.isEmpty
@@ -200,6 +360,49 @@ class _CrTodayScheduleCardState extends State<CrTodayScheduleCard> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildDayPill({
+    required String label,
+    required int index,
+    required bool isDark,
+  }) {
+    final bool isSelected = _selectedDay == index;
+
+    return GestureDetector(
+      onTap: () => setState(() => _selectedDay = index),
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeInOut,
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? (isDark ? const Color(0xFF1E3A8A) : Colors.white)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(9),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.05),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  ),
+                ]
+              : null,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+            color: isSelected
+                ? (isDark ? Colors.white : const Color(0xFF0F172A))
+                : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+          ),
+        ),
       ),
     );
   }
@@ -301,16 +504,20 @@ class _CrTodayScheduleCardState extends State<CrTodayScheduleCard> {
             ),
             const SizedBox(height: 12),
             Text(
-              'No classes scheduled for today',
+              isShowingTomorrow
+                  ? 'No classes scheduled for tomorrow'
+                  : 'No classes scheduled for today',
               style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
                 color: isDark ? Colors.white : const Color(0xFF1E293B),
               ),
             ),
             const SizedBox(height: 4),
             Text(
-              'Check tomorrow’s routine or full weekly timetable.',
+              isShowingTomorrow
+                  ? 'Your next-day timetable is clear for research or self-study.'
+                  : 'Check tomorrow’s routine or full weekly timetable.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
@@ -345,16 +552,20 @@ class _CrTodayScheduleCardState extends State<CrTodayScheduleCard> {
             ),
             const SizedBox(height: 12),
             Text(
-              'No exams scheduled for today',
+              isShowingTomorrow
+                  ? 'No exams scheduled for tomorrow'
+                  : 'No exams scheduled for today',
               style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
                 color: isDark ? Colors.white : const Color(0xFF1E293B),
               ),
             ),
             const SizedBox(height: 4),
             Text(
-              'No upcoming semester examinations scheduled right now.',
+              isShowingTomorrow
+                  ? 'No upcoming semester examinations scheduled for tomorrow.'
+                  : 'No upcoming semester examinations scheduled right now.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
@@ -368,13 +579,15 @@ class _CrTodayScheduleCardState extends State<CrTodayScheduleCard> {
   }
 
   Widget _buildClassesTimeline(BuildContext context, bool isDark) {
+    final classes = currentClasses;
+
     return ListView.separated(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: widget.data.todayClasses.length + 1, // +1 for "End of scheduled classes" footer
+      itemCount: classes.length + 1, // +1 for "End of scheduled classes" footer
       separatorBuilder: (_, __) => const SizedBox(height: 18),
       itemBuilder: (context, index) {
-        if (index == widget.data.todayClasses.length) {
+        if (index == classes.length) {
           // End of scheduled classes footer
           return Row(
             children: [
@@ -406,7 +619,7 @@ class _CrTodayScheduleCardState extends State<CrTodayScheduleCard> {
           );
         }
 
-        final slot = widget.data.todayClasses[index];
+        final slot = classes[index];
         final bool isFirst = index == 0;
         final bool isLab = slot.courseCode.endsWith('2') ||
             slot.courseCode.endsWith('4') ||

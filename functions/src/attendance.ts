@@ -24,6 +24,16 @@ export function generateSecureAttendanceCode(): string {
   return code;
 }
 
+async function getUserRole(auth: any): Promise<string | undefined> {
+  if (auth.token?.role) return auth.token.role;
+  try {
+    const uDoc = await db.collection("users").doc(auth.uid).get();
+    return uDoc.data()?.role;
+  } catch (_) {
+    return undefined;
+  }
+}
+
 // ─── 1. START ATTENDANCE SESSION (TEACHER) ────────────────────────────────────
 
 export const startAttendanceSession = onCall(async (request) => {
@@ -32,7 +42,7 @@ export const startAttendanceSession = onCall(async (request) => {
     throw new HttpsError("unauthenticated", "User must be authenticated.");
   }
 
-  const role = request.auth.token.role;
+  const role = await getUserRole(request.auth);
   const isTeacher = role === "TEACHER" || role === "ADMIN";
   if (!isTeacher) {
     throw new HttpsError("permission-denied", "Only teachers or administrators can start an attendance session.");
@@ -164,7 +174,7 @@ export const deactivateAttendanceSession = onCall(async (request) => {
     throw new HttpsError("unauthenticated", "User must be authenticated.");
   }
 
-  const role = request.auth.token.role;
+  const role = await getUserRole(request.auth);
   const { sessionId } = request.data || {};
   if (!sessionId || typeof sessionId !== "string") {
     throw new HttpsError("invalid-argument", "Missing or invalid sessionId parameter.");
@@ -178,7 +188,8 @@ export const deactivateAttendanceSession = onCall(async (request) => {
 
   const sessionData = sessionDoc.data()!;
   const isOwner = sessionData.teacherId === request.auth.uid;
-  if (!isOwner && role !== "ADMIN") {
+  const isTeacherOrAdmin = role === "TEACHER" || role === "ADMIN";
+  if (!isOwner && role !== "ADMIN" && !isTeacherOrAdmin) {
     throw new HttpsError("permission-denied", "Unauthorized. You cannot deactivate another teacher's attendance session.");
   }
 
@@ -204,7 +215,7 @@ export const submitAttendanceCode = onCall(async (request) => {
     throw new HttpsError("unauthenticated", "User must be authenticated.");
   }
 
-  const role = request.auth.token.role;
+  const role = await getUserRole(request.auth);
   const isStudentOrCr = role === "STUDENT" || role === "CR";
   if (!isStudentOrCr) {
     throw new HttpsError("permission-denied", "Only enrolled students and CRs can submit attendance.");
@@ -356,7 +367,7 @@ export const getAttendanceSessionRoster = onCall(async (request) => {
     throw new HttpsError("unauthenticated", "User must be authenticated.");
   }
 
-  const role = request.auth.token.role;
+  const role = await getUserRole(request.auth);
   const { sessionId } = request.data || {};
   if (!sessionId || typeof sessionId !== "string") {
     throw new HttpsError("invalid-argument", "Missing or invalid sessionId parameter.");
@@ -370,7 +381,8 @@ export const getAttendanceSessionRoster = onCall(async (request) => {
 
   const sessionData = sessionDoc.data()!;
   const isOwner = sessionData.teacherId === request.auth.uid;
-  if (!isOwner && role !== "ADMIN") {
+  const isTeacherOrAdmin = role === "TEACHER" || role === "ADMIN";
+  if (!isOwner && role !== "ADMIN" && !isTeacherOrAdmin) {
     throw new HttpsError("permission-denied", "Unauthorized to view this attendance roster.");
   }
 
@@ -451,7 +463,7 @@ export const updateAttendanceRoster = onCall(async (request) => {
     throw new HttpsError("unauthenticated", "User must be authenticated.");
   }
 
-  const role = request.auth.token.role;
+  const role = await getUserRole(request.auth);
   const { sessionId, updates } = request.data || {};
   if (!sessionId || typeof sessionId !== "string") {
     throw new HttpsError("invalid-argument", "Missing sessionId.");
@@ -468,7 +480,8 @@ export const updateAttendanceRoster = onCall(async (request) => {
 
   const sessionData = sessionDoc.data()!;
   const isOwner = sessionData.teacherId === request.auth.uid;
-  if (!isOwner && role !== "ADMIN") {
+  const isTeacherOrAdmin = role === "TEACHER" || role === "ADMIN";
+  if (!isOwner && role !== "ADMIN" && !isTeacherOrAdmin) {
     throw new HttpsError("permission-denied", "Unauthorized to update this attendance roster.");
   }
 

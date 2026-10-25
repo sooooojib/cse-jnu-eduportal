@@ -1,23 +1,38 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../curriculum/domain/entities/curriculum_entities.dart';
 
 class TimeAwareClassesCard extends StatefulWidget {
   final List<ScheduleSlot> classes;
   final List<Exam> exams;
+  final List<ScheduleSlot>? todayClasses;
+  final List<ScheduleSlot>? tomorrowClasses;
+  final List<Exam>? todayExams;
+  final List<Exam>? tomorrowExams;
   final bool isTomorrow;
   final String dateLabel;
+  final String? todayDateLabel;
+  final String? tomorrowDateLabel;
   final Function(ScheduleSlot slot)? onStartAttendance;
   final Function(Exam exam)? onExamTap;
+  final VoidCallback? onViewFullSchedule;
 
   const TimeAwareClassesCard({
     super.key,
     required this.classes,
     this.exams = const [],
+    this.todayClasses,
+    this.tomorrowClasses,
+    this.todayExams,
+    this.tomorrowExams,
     required this.isTomorrow,
     required this.dateLabel,
+    this.todayDateLabel,
+    this.tomorrowDateLabel,
     this.onStartAttendance,
     this.onExamTap,
+    this.onViewFullSchedule,
   });
 
   @override
@@ -26,6 +41,54 @@ class TimeAwareClassesCard extends StatefulWidget {
 
 class _TimeAwareClassesCardState extends State<TimeAwareClassesCard> {
   int _selectedTab = 0; // 0 for Classes, 1 for Exams
+  late int _selectedDay; // 0 for Today, 1 for Tomorrow
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedDay = widget.isTomorrow ? 1 : 0;
+  }
+
+  bool get isShowingTomorrow => _selectedDay == 1;
+
+  List<ScheduleSlot> get currentClasses {
+    if (isShowingTomorrow) {
+      if (widget.tomorrowClasses != null) return widget.tomorrowClasses!;
+      return widget.isTomorrow ? widget.classes : const [];
+    } else {
+      if (widget.todayClasses != null) return widget.todayClasses!;
+      return !widget.isTomorrow ? widget.classes : const [];
+    }
+  }
+
+  List<Exam> get currentExams {
+    if (isShowingTomorrow) {
+      if (widget.tomorrowExams != null) return widget.tomorrowExams!;
+      return widget.isTomorrow ? widget.exams : const [];
+    } else {
+      if (widget.todayExams != null) return widget.todayExams!;
+      return !widget.isTomorrow ? widget.exams : const [];
+    }
+  }
+
+  String get currentDateLabel {
+    if (isShowingTomorrow) {
+      if (widget.tomorrowDateLabel != null && widget.tomorrowDateLabel!.isNotEmpty) {
+        return widget.tomorrowDateLabel!;
+      }
+    } else {
+      if (widget.todayDateLabel != null && widget.todayDateLabel!.isNotEmpty) {
+        return widget.todayDateLabel!;
+      }
+    }
+    final raw = widget.dateLabel;
+    if (raw.isNotEmpty && !raw.startsWith('Today · ') && !raw.startsWith('Tomorrow · ')) {
+      return raw;
+    }
+    final now = DateTime.now();
+    final date = isShowingTomorrow ? now.add(const Duration(days: 1)) : now;
+    return DateFormat('EEEE · MMM d, yyyy').format(date);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -52,7 +115,7 @@ class _TimeAwareClassesCardState extends State<TimeAwareClassesCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header with Title & Date
+          // Header with Title, Date & Day Switcher Pill
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             decoration: BoxDecoration(
@@ -74,65 +137,86 @@ class _TimeAwareClassesCardState extends State<TimeAwareClassesCard> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text(
-                              _selectedTab == 0
-                                  ? (widget.isTomorrow ? "Tomorrow's Classes" : "Today's Classes")
-                                  : (widget.isTomorrow ? "Tomorrow's Exams" : "Today's Exams"),
-                              style: TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w700,
-                                color: isDark ? Colors.white : const Color(0xFF0F172A),
-                              ),
-                            ),
-                            if (widget.isTomorrow) ...[
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: isDark
-                                      ? const Color(0xFF38BDF8).withValues(alpha: 0.15)
-                                      : const Color(0xFFE0F2FE),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
                                 child: Text(
-                                  'Next-Day',
+                                  _selectedTab == 0
+                                      ? (isShowingTomorrow ? "Tomorrow's Schedule" : "Today's Schedule")
+                                      : (isShowingTomorrow ? "Tomorrow's Exams" : "Today's Exams"),
                                   style: TextStyle(
-                                    fontSize: 11,
+                                    fontSize: 17,
                                     fontWeight: FontWeight.w700,
-                                    color: isDark ? const Color(0xFF38BDF8) : const Color(0xFF0284C7),
+                                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (isShowingTomorrow) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? const Color(0xFF38BDF8).withValues(alpha: 0.15)
+                                        : const Color(0xFFE0F2FE),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    'Next-Day',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: isDark ? const Color(0xFF38BDF8) : const Color(0xFF0284C7),
+                                    ),
                                   ),
                                 ),
-                              ),
+                              ],
                             ],
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          widget.dateLabel,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 2),
+                          Text(
+                            currentDateLabel,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
                     ),
+                    const SizedBox(width: 8),
+
+                    // Day Switcher Pill (Today | Tomorrow)
                     Container(
-                      padding: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.all(3),
                       decoration: BoxDecoration(
                         color: isDark
-                            ? AppColors.primary.withValues(alpha: 0.2)
-                            : const Color(0xFFECFDF5),
-                        shape: BoxShape.circle,
+                            ? const Color(0xFF0F1E33)
+                            : const Color(0xFFE2E8F0).withValues(alpha: 0.8),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(
-                        _selectedTab == 0 ? Icons.schedule_rounded : Icons.assignment_rounded,
-                        color: AppColors.primaryLight,
-                        size: 20,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildDayPill(
+                            label: 'Today',
+                            index: 0,
+                            isDark: isDark,
+                          ),
+                          _buildDayPill(
+                            label: 'Tomorrow',
+                            index: 1,
+                            isDark: isDark,
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -153,7 +237,7 @@ class _TimeAwareClassesCardState extends State<TimeAwareClassesCard> {
                       Expanded(
                         child: _buildToggleItem(
                           title: "Classes",
-                          count: widget.classes.length,
+                          count: currentClasses.length,
                           index: 0,
                           isDark: isDark,
                         ),
@@ -161,7 +245,7 @@ class _TimeAwareClassesCardState extends State<TimeAwareClassesCard> {
                       Expanded(
                         child: _buildToggleItem(
                           title: "Exams",
-                          count: widget.exams.length,
+                          count: currentExams.length,
                           index: 1,
                           isDark: isDark,
                         ),
@@ -177,14 +261,98 @@ class _TimeAwareClassesCardState extends State<TimeAwareClassesCard> {
           Padding(
             padding: const EdgeInsets.all(20),
             child: _selectedTab == 0
-                ? (widget.classes.isEmpty
+                ? (currentClasses.isEmpty
                     ? _buildEmptyState(context, isDark)
                     : _buildClassesTimeline(context, isDark))
-                : (widget.exams.isEmpty
+                : (currentExams.isEmpty
                     ? _buildExamsEmptyState(context, isDark)
                     : _buildExamsTimeline(context, isDark)),
           ),
+
+          // Bottom Action: View Full Weekly Routine Link
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            decoration: BoxDecoration(
+              border: Border(
+                top: BorderSide(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.05)
+                      : const Color(0xFFF1F5F9),
+                ),
+              ),
+            ),
+            child: InkWell(
+              onTap: widget.onViewFullSchedule,
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'View Full Weekly Routine',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(
+                      Icons.arrow_forward_rounded,
+                      size: 15,
+                      color: AppColors.primary,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildDayPill({
+    required String label,
+    required int index,
+    required bool isDark,
+  }) {
+    final bool isSelected = _selectedDay == index;
+
+    return GestureDetector(
+      onTap: () => setState(() => _selectedDay = index),
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeInOut,
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? (isDark ? const Color(0xFF1E3A8A) : Colors.white)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(9),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.05),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  ),
+                ]
+              : null,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+            color: isSelected
+                ? (isDark ? Colors.white : const Color(0xFF0F172A))
+                : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+          ),
+        ),
       ),
     );
   }
@@ -286,20 +454,20 @@ class _TimeAwareClassesCardState extends State<TimeAwareClassesCard> {
             ),
             const SizedBox(height: 12),
             Text(
-              widget.isTomorrow
+              isShowingTomorrow
                   ? 'No classes scheduled for tomorrow'
-                  : 'No scheduled classes today',
+                  : 'No classes scheduled for today',
               style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
                 color: isDark ? Colors.white : const Color(0xFF1E293B),
               ),
             ),
             const SizedBox(height: 4),
             Text(
-              widget.isTomorrow
+              isShowingTomorrow
                   ? 'Your next-day timetable is clear for research or office hours.'
-                  : 'Enjoy your teaching-free day or check office hours counseling.',
+                  : 'Check tomorrow’s routine or full weekly timetable.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
@@ -334,18 +502,18 @@ class _TimeAwareClassesCardState extends State<TimeAwareClassesCard> {
             ),
             const SizedBox(height: 12),
             Text(
-              widget.isTomorrow
+              isShowingTomorrow
                   ? 'No exams scheduled for tomorrow'
-                  : 'No scheduled exams today',
+                  : 'No exams scheduled for today',
               style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
                 color: isDark ? Colors.white : const Color(0xFF1E293B),
               ),
             ),
             const SizedBox(height: 4),
             Text(
-              widget.isTomorrow
+              isShowingTomorrow
                   ? 'Your next-day assessment duties are clear.'
                   : 'No invigilation or assessment duties assigned for today.',
               textAlign: TextAlign.center,
@@ -361,13 +529,15 @@ class _TimeAwareClassesCardState extends State<TimeAwareClassesCard> {
   }
 
   Widget _buildClassesTimeline(BuildContext context, bool isDark) {
+    final classes = currentClasses;
+
     return ListView.separated(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: widget.classes.length + 1, // +1 for "End of scheduled classes" footer
+      itemCount: classes.length + 1, // +1 for "End of scheduled classes" footer
       separatorBuilder: (_, __) => const SizedBox(height: 18),
       itemBuilder: (context, index) {
-        if (index == widget.classes.length) {
+        if (index == classes.length) {
           // End of scheduled classes footer
           return Row(
             children: [
@@ -399,7 +569,7 @@ class _TimeAwareClassesCardState extends State<TimeAwareClassesCard> {
           );
         }
 
-        final slot = widget.classes[index];
+        final slot = classes[index];
         final bool isFirst = index == 0;
 
         return Row(
@@ -540,7 +710,7 @@ class _TimeAwareClassesCardState extends State<TimeAwareClassesCard> {
                   ),
 
                   // Start Attendance Action Button (Available for today's classes)
-                  if (!widget.isTomorrow && widget.onStartAttendance != null) ...[
+                  if (!isShowingTomorrow && widget.onStartAttendance != null) ...[
                     const SizedBox(height: 10),
                     ElevatedButton.icon(
                       onPressed: () => widget.onStartAttendance!(slot),
@@ -572,13 +742,15 @@ class _TimeAwareClassesCardState extends State<TimeAwareClassesCard> {
   }
 
   Widget _buildExamsTimeline(BuildContext context, bool isDark) {
+    final exams = currentExams;
+
     return ListView.separated(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: widget.exams.length,
+      itemCount: exams.length,
       separatorBuilder: (_, __) => const SizedBox(height: 14),
       itemBuilder: (context, index) {
-        final exam = widget.exams[index];
+        final exam = exams[index];
         return InkWell(
           onTap: () => widget.onExamTap?.call(exam),
           borderRadius: BorderRadius.circular(16),

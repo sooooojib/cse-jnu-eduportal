@@ -19,7 +19,7 @@ import '../widgets/cr_metrics_grid.dart';
 import '../widgets/cr_semester_courses_card.dart';
 import '../widgets/cr_today_schedule_card.dart';
 import '../widgets/cr_tomorrow_schedule_card.dart';
-import '../../../dashboard/presentation/widgets/app_settings_bottom_sheet.dart';
+import '../../../../core/utils/avatar_image_resolver.dart';
 import '../../../profile/presentation/widgets/student_profile_dialog.dart';
 import '../../../../core/constants/role_constants.dart';
 import '../../../curriculum/presentation/widgets/exam_details_dialog.dart';
@@ -427,6 +427,13 @@ class _CrDashboardScreenState extends State<CrDashboardScreen> {
                     onViewFullSchedule: () => widget.onNavigateTab != null
                         ? widget.onNavigateTab!(2)
                         : context.push(RouteNames.schedule),
+                    onManageTomorrowTap: () {
+                      CrAddSlotDialog.show(
+                        context,
+                        data: data,
+                        onAddSlot: (slot) => _controller.addTomorrowSlot(slot),
+                      );
+                    },
                   ),
 
                   const SizedBox(height: 20),
@@ -472,16 +479,25 @@ class _CrDashboardScreenState extends State<CrDashboardScreen> {
                 );
               }
             },
-            child: CircleAvatar(
-              backgroundColor: isDark ? const Color(0xFF451A03) : const Color(0xFFFFEDD5),
-              child: Text(
-                initials,
-                style: TextStyle(
-                  color: isDark ? const Color(0xFFFDBA74) : const Color(0xFFC2410C),
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                ),
-              ),
+            child: Builder(
+              builder: (context) {
+                final avatarProvider = AvatarImageResolver.resolve(currentUser?.avatarUrl);
+                return CircleAvatar(
+                  backgroundColor: isDark ? const Color(0xFF451A03) : const Color(0xFFFFEDD5),
+                  backgroundImage: avatarProvider,
+                  onBackgroundImageError: avatarProvider != null ? (_, __) {} : null,
+                  child: avatarProvider == null
+                      ? Text(
+                          initials,
+                          style: TextStyle(
+                            color: isDark ? const Color(0xFFFDBA74) : const Color(0xFFC2410C),
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
+                        )
+                      : null,
+                );
+              },
             ),
           ),
         ),

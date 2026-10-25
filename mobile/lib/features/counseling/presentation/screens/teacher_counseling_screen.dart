@@ -292,6 +292,7 @@ class _TeacherCounselingScreenState extends State<TeacherCounselingScreen> with 
             )
           : null,
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: null,
         onPressed: _openCreateSlotDialog,
         backgroundColor: AppColors.primaryLight,
         foregroundColor: Colors.white,

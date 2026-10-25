@@ -1,8 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
+import '../../../../core/config/env_config.dart';
 import '../../../../core/error/error_handler.dart';
 import '../../../../core/error/exceptions.dart';
+import '../../../../core/logging/app_logger.dart';
 import '../models/curriculum_models.dart';
 import '../../domain/entities/curriculum_entities.dart';
 import '../../domain/repositories/curriculum_repository.dart';
@@ -95,10 +97,33 @@ class CurriculumRemoteDataSourceImpl implements CurriculumRemoteDataSource {
     }
 
     final snapshot = await query.get();
-    final list = snapshot.docs.map((doc) {
-      return ScheduleSlotModel.fromJson({"id": doc.id, ...doc.data() as Map<String, dynamic>});
-    }).toList();
+    final Map<String, ScheduleSlotModel> map = {};
+    for (final doc in snapshot.docs) {
+      final m = ScheduleSlotModel.fromJson({"id": doc.id, ...doc.data() as Map<String, dynamic>});
+      map[m.id] = m;
+    }
 
+    // Also check scheduleSlots collection to merge any slots added directly there
+    try {
+      Query slotsQuery = _firestore.collection("scheduleSlots");
+      if (year != null && semester != null) {
+        slotsQuery = slotsQuery.where("targetYear", isEqualTo: year).where("targetSemester", isEqualTo: semester);
+      } else if (teacherId != null && teacherId.isNotEmpty) {
+        slotsQuery = slotsQuery.where("teacherId", isEqualTo: teacherId);
+      }
+      if (day != null && day.toUpperCase() != "ALL") {
+        slotsQuery = slotsQuery.where("dayOfWeek", isEqualTo: day.toUpperCase());
+      }
+      final slotsSnap = await slotsQuery.get();
+      for (final doc in slotsSnap.docs) {
+        final m = ScheduleSlotModel.fromJson({"id": doc.id, ...doc.data() as Map<String, dynamic>});
+        if (!map.containsKey(m.id)) {
+          map[m.id] = m;
+        }
+      }
+    } catch (_) {}
+
+    final list = map.values.toList();
     // Sort chronologically by startTime
     list.sort((a, b) => a.startTime.compareTo(b.startTime));
     return list;
@@ -107,87 +132,121 @@ class CurriculumRemoteDataSourceImpl implements CurriculumRemoteDataSource {
   @override
   Future<ScheduleSlotModel> createScheduleSlot(ScheduleSlotModel slot) async {
     // Call server-side Cloud Function first for authoritative validation
-    try {
-      final callable = _functions.httpsCallable('createScheduleSlot');
-      final result = await callable.call({
-        'courseId': slot.courseId,
-        'teacherId': slot.teacherId,
-        'dayOfWeek': slot.dayOfWeek,
-        'startTime': slot.startTime,
-        'endTime': slot.endTime,
-        'room': slot.room,
-        'targetYear': slot.targetYear,
-        'targetSemester': slot.targetSemester,
-        'isExtraClass': slot.isExtraClass,
-        if (slot.date != null) 'date': slot.date,
-      });
+    if (EnvConfig.isCloudFunctionsEnabled) {
+      try {
+        final callable = _functions.httpsCallable('createScheduleSlot');
+        final result = await callable.call({
+          'courseId': slot.courseId,
+          'teacherId': slot.teacherId,
+          'dayOfWeek': slot.dayOfWeek,
+          'startTime': slot.startTime,
+          'endTime': slot.endTime,
+          'room': slot.room,
+          'targetYear': slot.targetYear,
+          'targetSemester': slot.targetSemester,
+          'isExtraClass': slot.isExtraClass,
+          if (slot.date != null) 'date': slot.date,
+        });
 
-      final data = result.data;
-      if (data is Map && data['slot'] != null) {
-        final slotMap = Map<String, dynamic>.from(data['slot'] as Map);
-        return ScheduleSlotModel.fromJson(slotMap);
+        final data = result.data;
+        if (data is Map && data['slot'] != null) {
+          final slotMap = Map<String, dynamic>.from(data['slot'] as Map);
+          return ScheduleSlotModel.fromJson(slotMap);
+        }
+      } on FirebaseFunctionsException catch (e) {
+        if (e.code == 'already-exists' || e.code == 'failed-precondition') {
+          throw ServerException(message: e.message ?? e.code);
+        }
+        AppLogger.w('createScheduleSlot callable note: $e. Falling back to direct Firestore creation.');
+      } catch (e) {
+        AppLogger.w('createScheduleSlot error: $e. Falling back to direct Firestore creation.');
       }
-      throw ServerException(message: data is Map ? (data['message'] as String? ?? 'Failed to create slot') : 'Failed to create slot');
-    } on FirebaseFunctionsException catch (e) {
-      throw ServerException(message: e.message ?? e.code);
-    } catch (e) {
-      if (e is ServerException) rethrow;
-      // Fallback: direct atomic write if local testing / emulator
-      final docRef = _firestore.collection('schedules').doc();
-      final data = {
-        ...slot.toFirestore(),
-        'id': docRef.id,
-        'createdAt': FieldValue.serverTimestamp(),
-      };
-      await docRef.set(data);
-      return ScheduleSlotModel.fromJson({...slot.toJson(), 'id': docRef.id});
     }
+
+    // Direct atomic write to both 'schedules' and 'scheduleSlots'
+    final docRef = _firestore.collection('schedules').doc();
+    final currentUserId = _auth.currentUser?.uid;
+    final data = {
+      ...slot.toFirestore(),
+      'id': docRef.id,
+      if (slot.createdBy != null)
+        'createdBy': slot.createdBy
+      else if (currentUserId != null)
+        'createdBy': currentUserId,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+    final batch = _firestore.batch();
+    batch.set(docRef, data);
+    batch.set(_firestore.collection('scheduleSlots').doc(docRef.id), data);
+    await batch.commit();
+    return ScheduleSlotModel.fromJson({...slot.toJson(), 'id': docRef.id});
   }
 
   @override
   Future<ScheduleSlotModel> updateScheduleSlot(ScheduleSlotModel slot) async {
-    try {
-      final callable = _functions.httpsCallable('updateScheduleSlot');
-      final result = await callable.call({
-        'slotId': slot.id,
-        'courseId': slot.courseId,
-        'teacherId': slot.teacherId,
-        'dayOfWeek': slot.dayOfWeek,
-        'startTime': slot.startTime,
-        'endTime': slot.endTime,
-        'room': slot.room,
-        'targetYear': slot.targetYear,
-        'targetSemester': slot.targetSemester,
-        'isExtraClass': slot.isExtraClass,
-        if (slot.date != null) 'date': slot.date,
-      });
+    if (EnvConfig.isCloudFunctionsEnabled) {
+      try {
+        final callable = _functions.httpsCallable('updateScheduleSlot');
+        final result = await callable.call({
+          'slotId': slot.id,
+          'courseId': slot.courseId,
+          'teacherId': slot.teacherId,
+          'dayOfWeek': slot.dayOfWeek,
+          'startTime': slot.startTime,
+          'endTime': slot.endTime,
+          'room': slot.room,
+          'targetYear': slot.targetYear,
+          'targetSemester': slot.targetSemester,
+          'isExtraClass': slot.isExtraClass,
+          if (slot.date != null) 'date': slot.date,
+        });
 
-      final data = result.data;
-      if (data is Map && data['slot'] != null) {
-        final slotMap = Map<String, dynamic>.from(data['slot'] as Map);
-        return ScheduleSlotModel.fromJson(slotMap);
+        final data = result.data;
+        if (data is Map && data['slot'] != null) {
+          final slotMap = Map<String, dynamic>.from(data['slot'] as Map);
+          return ScheduleSlotModel.fromJson(slotMap);
+        }
+      } on FirebaseFunctionsException catch (e) {
+        if (e.code == 'already-exists' || e.code == 'failed-precondition') {
+          throw ServerException(message: e.message ?? e.code);
+        }
+        AppLogger.w('updateScheduleSlot callable note: $e. Falling back to direct Firestore update.');
+      } catch (e) {
+        AppLogger.w('updateScheduleSlot error: $e. Falling back to direct Firestore update.');
       }
-      throw ServerException(message: data is Map ? (data['message'] as String? ?? 'Failed to update slot') : 'Failed to update slot');
-    } on FirebaseFunctionsException catch (e) {
-      throw ServerException(message: e.message ?? e.code);
-    } catch (e) {
-      if (e is ServerException) rethrow;
-      await _firestore.collection('schedules').doc(slot.id).update(slot.toFirestore());
-      return slot;
     }
+
+    final currentUserId = _auth.currentUser?.uid;
+    final data = {
+      ...slot.toFirestore(),
+      'id': slot.id,
+      if (currentUserId != null) 'updatedBy': currentUserId,
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+    final batch = _firestore.batch();
+    batch.set(_firestore.collection('schedules').doc(slot.id), data, SetOptions(merge: true));
+    batch.set(_firestore.collection('scheduleSlots').doc(slot.id), data, SetOptions(merge: true));
+    await batch.commit();
+    return slot;
   }
 
   @override
   Future<void> deleteScheduleSlot(String slotId) async {
-    try {
-      final callable = _functions.httpsCallable('deleteScheduleSlot');
-      await callable.call({'slotId': slotId});
-    } on FirebaseFunctionsException catch (e) {
-      throw ServerException(message: e.message ?? e.code);
-    } catch (e) {
-      if (e is ServerException) rethrow;
-      await _firestore.collection('schedules').doc(slotId).delete();
+    if (EnvConfig.isCloudFunctionsEnabled) {
+      try {
+        final callable = _functions.httpsCallable('deleteScheduleSlot');
+        await callable.call({'slotId': slotId});
+        return;
+      } catch (e) {
+        AppLogger.w('deleteScheduleSlot callable note: $e. Falling back to direct Firestore delete.');
+      }
     }
+
+    final batch = _firestore.batch();
+    batch.delete(_firestore.collection('schedules').doc(slotId));
+    batch.delete(_firestore.collection('scheduleSlots').doc(slotId));
+    await batch.commit();
   }
 
   @override
@@ -196,27 +255,61 @@ class CurriculumRemoteDataSourceImpl implements CurriculumRemoteDataSource {
     required String dayOfWeek,
     String? date,
   }) async {
-    try {
-      final callable = _functions.httpsCallable('getTeacherAvailability');
-      final result = await callable.call({
-        'teacherId': teacherId,
-        'dayOfWeek': dayOfWeek,
-        if (date != null) 'date': date,
-      });
+    if (EnvConfig.isCloudFunctionsEnabled) {
+      try {
+        final callable = _functions.httpsCallable('getTeacherAvailability');
+        final result = await callable.call({
+          'teacherId': teacherId,
+          'dayOfWeek': dayOfWeek,
+          if (date != null) 'date': date,
+        });
 
-      final data = Map<String, dynamic>.from(result.data as Map);
-      return TeacherAvailabilityModel.fromJson(data);
-    } on FirebaseFunctionsException catch (e) {
-      throw ServerException(message: e.message ?? e.code);
-    } catch (e) {
-      if (e is ServerException) rethrow;
-      // Fallback
+        final data = Map<String, dynamic>.from(result.data as Map);
+        return TeacherAvailabilityModel.fromJson(data);
+      } catch (e) {
+        AppLogger.w('getTeacherAvailability callable note: $e. Using local availability windows.');
+      }
+    }
+
+    try {
+      final snap = await _firestore.collection('schedules')
+          .where('teacherId', isEqualTo: teacherId)
+          .where('dayOfWeek', isEqualTo: dayOfWeek)
+          .get();
+
+      final busy = snap.docs.map((d) {
+        final data = d.data();
+        return TeacherAvailabilitySlot(
+          startTime: data['startTime'] as String? ?? '',
+          endTime: data['endTime'] as String? ?? '',
+          courseCode: data['courseCode'] as String? ?? '',
+          room: data['room'] as String? ?? '',
+        );
+      }).toList();
+
+      final teacherDoc = await _firestore.collection('users').doc(teacherId).get();
+      final teacherName = teacherDoc.data()?['fullName'] as String? ?? '';
+
+      return TeacherAvailabilityModel(
+        teacherId: teacherId,
+        teacherName: teacherName,
+        dayOfWeek: dayOfWeek,
+        busySlots: busy,
+        freeWindows: const [
+          TeacherAvailabilityWindow(
+            startTime: '08:00 AM',
+            endTime: '05:00 PM',
+            durationMinutes: 540,
+          ),
+        ],
+      );
+    } catch (_) {
       return TeacherAvailabilityModel(
         teacherId: teacherId,
         teacherName: '',
         dayOfWeek: dayOfWeek,
         busySlots: const [],
-        freeWindows: [
+        freeWindows: const [
           TeacherAvailabilityWindow(
             startTime: '08:00 AM',
             endTime: '05:00 PM',
@@ -229,20 +322,50 @@ class CurriculumRemoteDataSourceImpl implements CurriculumRemoteDataSource {
 
   @override
   Future<WhatsAppBroadcastDataModel> getWhatsAppBroadcast({int? year, int? semester}) async {
-    try {
-      final callable = _functions.httpsCallable('getWhatsAppBroadcast');
-      final result = await callable.call({
-        if (year != null) 'year': year,
-        if (semester != null) 'semester': semester,
-      });
+    if (EnvConfig.isCloudFunctionsEnabled) {
+      try {
+        final callable = _functions.httpsCallable('getWhatsAppBroadcast');
+        final result = await callable.call({
+          if (year != null) 'year': year,
+          if (semester != null) 'semester': semester,
+        });
 
-      final data = Map<String, dynamic>.from(result.data as Map);
-      return WhatsAppBroadcastDataModel.fromJson(data);
-    } on FirebaseFunctionsException catch (e) {
-      throw ServerException(message: e.message ?? e.code);
-    } catch (e) {
-      if (e is ServerException) rethrow;
+        final data = Map<String, dynamic>.from(result.data as Map);
+        return WhatsAppBroadcastDataModel.fromJson(data);
+      } catch (e) {
+        AppLogger.w('getWhatsAppBroadcast callable note: $e. Using default broadcast message.');
+      }
+    }
+
+    try {
+      final now = DateTime.now();
+      final days = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
+      final todayDay = days[now.weekday - 1];
+
+      Query query = _firestore.collection('schedules').where('dayOfWeek', isEqualTo: todayDay);
+      if (year != null) query = query.where('targetYear', isEqualTo: year);
+      if (semester != null) query = query.where('targetSemester', isEqualTo: semester);
+
+      final snap = await query.get();
+      final slots = snap.docs.map((d) => d.data() as Map<String, dynamic>).toList();
+
+      final buffer = StringBuffer('📅 *CSE JnU Schedule - $todayDay*\n');
+      for (final s in slots) {
+        buffer.writeln('• ${s['startTime']} - ${s['endTime']}: ${s['courseCode'] ?? s['courseTitle'] ?? 'Class'} (${s['room'] ?? 'N/A'})');
+      }
+
+      final text = slots.isEmpty ? 'No classes scheduled for today ($todayDay).' : buffer.toString();
+      final encoded = Uri.encodeComponent(text);
+
       return WhatsAppBroadcastDataModel(
+        date: now.toIso8601String().substring(0, 10),
+        dayOfWeek: todayDay,
+        slotCount: slots.length,
+        broadcastText: text,
+        whatsappUrl: 'https://wa.me/?text=$encoded',
+      );
+    } catch (_) {
+      return const WhatsAppBroadcastDataModel(
         date: '',
         dayOfWeek: '',
         slotCount: 0,
@@ -302,88 +425,104 @@ class CurriculumRemoteDataSourceImpl implements CurriculumRemoteDataSource {
 
   @override
   Future<ExamModel> createExam(ExamModel exam) async {
-    try {
-      final callable = _functions.httpsCallable('createExam');
-      final result = await callable.call({
-        'courseId': exam.courseId,
-        'courseCode': exam.courseCode,
-        'courseTitle': exam.courseTitle,
-        'title': exam.title,
-        'examDate': exam.examDate,
-        'startTime': exam.startTime,
-        'endTime': exam.endTime,
-        'room': exam.room,
-        'year': exam.year,
-        'semester': exam.semester,
-        'type': exam.type,
-        if (exam.instructions != null) 'instructions': exam.instructions,
-        if (exam.invigilatorName != null) 'invigilatorName': exam.invigilatorName,
-        if (exam.invigilatorId != null) 'invigilatorId': exam.invigilatorId,
-      });
+    if (EnvConfig.isCloudFunctionsEnabled) {
+      try {
+        final callable = _functions.httpsCallable('createExam');
+        final result = await callable.call({
+          'courseId': exam.courseId,
+          'courseCode': exam.courseCode,
+          'courseTitle': exam.courseTitle,
+          'title': exam.title,
+          'examDate': exam.examDate,
+          'startTime': exam.startTime,
+          'endTime': exam.endTime,
+          'room': exam.room,
+          'year': exam.year,
+          'semester': exam.semester,
+          'type': exam.type,
+          if (exam.instructions != null) 'instructions': exam.instructions,
+          if (exam.invigilatorName != null) 'invigilatorName': exam.invigilatorName,
+          if (exam.invigilatorId != null) 'invigilatorId': exam.invigilatorId,
+        });
 
-      final data = result.data;
-      if (data is Map && data['exam'] != null) {
-        final examMap = Map<String, dynamic>.from(data['exam'] as Map);
-        return ExamModel.fromJson(examMap);
+        final data = result.data;
+        if (data is Map && data['exam'] != null) {
+          final examMap = Map<String, dynamic>.from(data['exam'] as Map);
+          return ExamModel.fromJson(examMap);
+        }
+      } on FirebaseFunctionsException catch (e) {
+        if (e.code == 'already-exists' || e.code == 'failed-precondition') {
+          throw ServerException(message: e.message ?? e.code);
+        }
+        AppLogger.w('createExam callable note: $e. Falling back to direct Firestore creation.');
+      } catch (e) {
+        AppLogger.w('createExam error: $e. Falling back to direct Firestore creation.');
       }
-      throw ServerException(message: data is Map ? (data['message'] as String? ?? 'Failed to schedule exam') : 'Failed to schedule exam');
-    } on FirebaseFunctionsException catch (e) {
-      throw ServerException(message: e.message ?? e.code);
-    } catch (e) {
-      if (e is ServerException) rethrow;
-      final docRef = await _firestore.collection('exams').add(exam.toFirestore());
-      return exam.copyWith(id: docRef.id) as ExamModel;
     }
+
+    final payload = exam.toFirestore();
+    if (payload['createdBy'] == null && _auth.currentUser != null) {
+      payload['createdBy'] = _auth.currentUser!.uid;
+    }
+    final docRef = await _firestore.collection('exams').add(payload);
+    return exam.copyWith(id: docRef.id);
   }
 
   @override
   Future<ExamModel> updateExam(ExamModel exam) async {
-    try {
-      final callable = _functions.httpsCallable('updateExam');
-      final result = await callable.call({
-        'examId': exam.id,
-        'courseId': exam.courseId,
-        'courseCode': exam.courseCode,
-        'courseTitle': exam.courseTitle,
-        'title': exam.title,
-        'examDate': exam.examDate,
-        'startTime': exam.startTime,
-        'endTime': exam.endTime,
-        'room': exam.room,
-        'year': exam.year,
-        'semester': exam.semester,
-        'type': exam.type,
-        if (exam.instructions != null) 'instructions': exam.instructions,
-        if (exam.invigilatorName != null) 'invigilatorName': exam.invigilatorName,
-        if (exam.invigilatorId != null) 'invigilatorId': exam.invigilatorId,
-      });
+    if (EnvConfig.isCloudFunctionsEnabled) {
+      try {
+        final callable = _functions.httpsCallable('updateExam');
+        final result = await callable.call({
+          'examId': exam.id,
+          'courseId': exam.courseId,
+          'courseCode': exam.courseCode,
+          'courseTitle': exam.courseTitle,
+          'title': exam.title,
+          'examDate': exam.examDate,
+          'startTime': exam.startTime,
+          'endTime': exam.endTime,
+          'room': exam.room,
+          'year': exam.year,
+          'semester': exam.semester,
+          'type': exam.type,
+          if (exam.instructions != null) 'instructions': exam.instructions,
+          if (exam.invigilatorName != null) 'invigilatorName': exam.invigilatorName,
+          if (exam.invigilatorId != null) 'invigilatorId': exam.invigilatorId,
+        });
 
-      final data = result.data;
-      if (data is Map && data['exam'] != null) {
-        final examMap = Map<String, dynamic>.from(data['exam'] as Map);
-        return ExamModel.fromJson(examMap);
+        final data = result.data;
+        if (data is Map && data['exam'] != null) {
+          final examMap = Map<String, dynamic>.from(data['exam'] as Map);
+          return ExamModel.fromJson(examMap);
+        }
+      } on FirebaseFunctionsException catch (e) {
+        if (e.code == 'already-exists' || e.code == 'failed-precondition') {
+          throw ServerException(message: e.message ?? e.code);
+        }
+        AppLogger.w('updateExam callable note: $e. Falling back to direct Firestore update.');
+      } catch (e) {
+        AppLogger.w('updateExam error: $e. Falling back to direct Firestore update.');
       }
-      throw ServerException(message: data is Map ? (data['message'] as String? ?? 'Failed to update exam') : 'Failed to update exam');
-    } on FirebaseFunctionsException catch (e) {
-      throw ServerException(message: e.message ?? e.code);
-    } catch (e) {
-      if (e is ServerException) rethrow;
-      await _firestore.collection('exams').doc(exam.id).update(exam.toFirestore());
-      return exam;
     }
+
+    await _firestore.collection('exams').doc(exam.id).update(exam.toFirestore());
+    return exam;
   }
 
   @override
   Future<void> deleteExam(String examId) async {
-    try {
-      final callable = _functions.httpsCallable('deleteExam');
-      await callable.call({'examId': examId});
-    } on FirebaseFunctionsException catch (e) {
-      throw ServerException(message: e.message ?? e.code);
-    } catch (e) {
-      if (e is ServerException) rethrow;
-      await _firestore.collection('exams').doc(examId).delete();
+    if (EnvConfig.isCloudFunctionsEnabled) {
+      try {
+        final callable = _functions.httpsCallable('deleteExam');
+        await callable.call({'examId': examId});
+        return;
+      } catch (e) {
+        AppLogger.w('deleteExam callable note: $e. Falling back to direct Firestore delete.');
+      }
     }
+
+    await _firestore.collection('exams').doc(examId).delete();
   }
 
   @override

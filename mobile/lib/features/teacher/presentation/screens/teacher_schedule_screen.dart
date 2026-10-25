@@ -266,6 +266,7 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
               ],
             ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: null,
         onPressed: () => _openScheduleDialog(),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,

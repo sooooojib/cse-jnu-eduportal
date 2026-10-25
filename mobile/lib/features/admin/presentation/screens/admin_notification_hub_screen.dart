@@ -1039,6 +1039,7 @@ class _AdminNotificationHubScreenState extends State<AdminNotificationHubScreen>
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: null,
         backgroundColor: const Color(0xFF6366F1),
         foregroundColor: Colors.white,
         icon: const Icon(Icons.campaign_rounded),

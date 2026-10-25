@@ -491,7 +491,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(TimeAwareClassesCard), findsOneWidget);
-      expect(find.text("Today's Classes"), findsOneWidget);
+      expect(find.text("Today's Schedule"), findsOneWidget);
       expect(find.text("Today · Oct 19, 2026"), findsOneWidget);
 
       // Classes details
@@ -589,7 +589,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Initially on Classes tab
-      expect(find.text("Today's Classes"), findsOneWidget);
+      expect(find.text("Today's Schedule"), findsOneWidget);
       expect(find.text('Operating Systems'), findsWidgets);
 
       // Tap Exams toggle
@@ -613,7 +613,7 @@ void main() {
       );
       await tester.tap(classesTabFinder);
       await tester.pumpAndSettle();
-      expect(find.text("Today's Classes"), findsOneWidget);
+      expect(find.text("Today's Schedule"), findsOneWidget);
     });
 
     testWidgets('Renders empty state when classes list is empty', (tester) async {
@@ -646,7 +646,7 @@ void main() {
       await tester.pumpWidget(buildTestableWidget(TeacherDashboardScreen(controller: controller)));
       await tester.pumpAndSettle();
 
-      expect(find.text("Tomorrow's Classes"), findsOneWidget);
+      expect(find.text("Tomorrow's Schedule"), findsOneWidget);
       expect(find.text('Next-Day'), findsOneWidget);
       expect(find.text('No classes scheduled for tomorrow'), findsOneWidget);
     });

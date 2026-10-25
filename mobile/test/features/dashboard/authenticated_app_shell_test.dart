@@ -16,8 +16,8 @@ import 'package:cse_jnu_eduportal/features/auth/presentation/controllers/auth_co
 import 'package:cse_jnu_eduportal/features/auth/presentation/controllers/auth_state.dart';
 
 import 'package:cse_jnu_eduportal/features/dashboard/presentation/screens/authenticated_app_shell.dart';
-import 'package:cse_jnu_eduportal/features/dashboard/presentation/widgets/app_settings_bottom_sheet.dart';
 import 'package:cse_jnu_eduportal/features/profile/presentation/widgets/student_profile_dialog.dart';
+import 'package:cse_jnu_eduportal/features/teacher/presentation/widgets/teacher_profile_dialog.dart';
 
 import 'package:cse_jnu_eduportal/features/attendance/domain/repositories/attendance_repository.dart';
 import 'package:cse_jnu_eduportal/features/attendance/presentation/controllers/attendance_controller.dart';
@@ -397,7 +397,7 @@ void main() {
       expect(find.byType(AdminUserDirectoryScreen), findsOneWidget);
     });
 
-    testWidgets('5. Settings is accessible via profile avatar and dialog', (tester) async {
+    testWidgets('5. Profile menu opens on avatar tap with details and sign out; App Settings & Preferences is totally removed', (tester) async {
       when(() => mockAuthController.state).thenReturn(const Authenticated(user: studentUser));
       when(() => mockAuthController.currentUser).thenReturn(studentUser);
 
@@ -418,30 +418,58 @@ void main() {
       await tester.tap(avatar);
       await tester.pumpAndSettle();
 
-      // Profile dialog appears with App Settings tile
+      // Profile dialog appears with unified menu layout
       expect(find.byType(StudentProfileDialog), findsOneWidget);
+      expect(find.text('Computer Science & Engineering'), findsOneWidget);
+      expect(find.text('Year 3, Semester 1'), findsOneWidget);
+      expect(find.text('Theme Mode'), findsOneWidget);
+
+      // App Settings & Preferences is completely removed for all users
+      expect(find.text('App Settings & Preferences'), findsNothing);
+
+      // Sign Out button is present directly in the profile menu
       await tester.scrollUntilVisible(
-        find.text('App Settings & Preferences'),
+        find.text('Sign Out Student Session'),
         100,
         scrollable: find.descendant(of: find.byType(StudentProfileDialog), matching: find.byType(Scrollable)).first,
       );
-      expect(find.text('App Settings & Preferences'), findsOneWidget);
-      await tester.tap(find.text('App Settings & Preferences'));
+      expect(find.text('Sign Out Student Session'), findsOneWidget);
+    });
+
+    testWidgets('5b. Admin avatar tap opens unified profile menu without App Settings & Preferences', (tester) async {
+      when(() => mockAuthController.state).thenReturn(const Authenticated(user: adminUser));
+      when(() => mockAuthController.currentUser).thenReturn(adminUser);
+
+      await tester.pumpWidget(MaterialApp(
+        home: AuthenticatedAppShell(
+          role: UserRole.admin,
+          authController: mockAuthController,
+          themeModeNotifier: themeModeNotifier,
+        ),
+      ));
       await tester.pumpAndSettle();
 
-      // Verifies AppSettingsBottomSheet popped up with user info and system details
-      expect(find.byType(AppSettingsBottomSheet), findsOneWidget);
-      expect(find.text('Settings & Preferences'), findsOneWidget);
-      expect(find.text('Student User'), findsWidgets);
-      expect(find.text('Appearance'), findsOneWidget);
-      expect(find.text('Institutional System'), findsOneWidget);
+      // Tap profile avatar in top bar
+      final avatar = find.byType(CircleAvatar).first;
+      await tester.tap(avatar);
+      await tester.pumpAndSettle();
 
+      // Admin profile dialog appears with unified menu layout
+      expect(find.byType(TeacherProfileDialog), findsOneWidget);
+      expect(find.text('Computer Science & Engineering'), findsOneWidget);
+      expect(find.text('Full System Control'), findsOneWidget);
+      expect(find.text('Theme Mode'), findsOneWidget);
+
+      // App Settings & Preferences is completely removed
+      expect(find.text('App Settings & Preferences'), findsNothing);
+
+      // Sign Out Admin Session is present
       await tester.scrollUntilVisible(
-        find.text('Sign Out of Session'),
+        find.text('Sign Out Admin Session'),
         100,
-        scrollable: find.descendant(of: find.byType(AppSettingsBottomSheet), matching: find.byType(Scrollable)).first,
+        scrollable: find.descendant(of: find.byType(TeacherProfileDialog), matching: find.byType(Scrollable)).first,
       );
-      expect(find.text('Sign Out of Session'), findsOneWidget);
+      expect(find.text('Sign Out Admin Session'), findsOneWidget);
     });
 
     testWidgets('6. Sign Out action prompts AppConfirmationDialog and completes logout', (tester) async {

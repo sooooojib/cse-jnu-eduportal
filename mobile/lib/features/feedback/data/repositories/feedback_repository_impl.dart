@@ -1,8 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
+import '../../../../core/config/env_config.dart';
 import '../../../../core/error/error_handler.dart';
 import '../../../../core/error/exceptions.dart';
+import '../../../../core/logging/app_logger.dart';
 import '../models/feedback_models.dart';
 import '../../domain/entities/feedback_entities.dart';
 import '../../domain/repositories/feedback_repository.dart';
@@ -90,27 +92,32 @@ class FeedbackRemoteDataSourceImpl implements FeedbackRemoteDataSource {
         .toList();
 
     // 1. Attempt Cloud Function call
-    try {
-      final callable = _functions.httpsCallable('submitFeedback');
-      final res = await callable.call({
-        'teacherId': teacherId,
-        if (courseId != null) 'courseId': courseId,
-        if (courseCode != null) 'courseCode': courseCode,
-        if (courseTitle != null) 'courseTitle': courseTitle,
-        'rating': rating,
-        'comments': comments,
-        'isAnonymous': isAnonymous,
-        'attachments': mappedAttachments,
-      });
+    if (EnvConfig.isCloudFunctionsEnabled) {
+      try {
+        final callable = _functions.httpsCallable('submitFeedback');
+        final res = await callable.call({
+          'teacherId': teacherId,
+          if (courseId != null) 'courseId': courseId,
+          if (courseCode != null) 'courseCode': courseCode,
+          if (courseTitle != null) 'courseTitle': courseTitle,
+          'rating': rating,
+          'comments': comments,
+          'isAnonymous': isAnonymous,
+          'attachments': mappedAttachments,
+        });
 
-      final data = res.data;
-      if (data is Map && data['feedback'] != null) {
-        return FeedbackItemModel.fromJson(Map<String, dynamic>.from(data['feedback'] as Map));
+        final data = res.data;
+        if (data is Map && data['feedback'] != null) {
+          return FeedbackItemModel.fromJson(Map<String, dynamic>.from(data['feedback'] as Map));
+        }
+      } on FirebaseFunctionsException catch (e) {
+        if (e.code == 'already-exists' || e.code == 'failed-precondition') {
+          throw ServerException(message: e.message ?? 'Failed to submit feedback.');
+        }
+        AppLogger.w('submitFeedback callable note: $e. Falling back to direct Firestore operation.');
+      } catch (e) {
+        AppLogger.w('submitFeedback error: $e. Falling back to direct Firestore operation.');
       }
-    } on FirebaseFunctionsException catch (e) {
-      throw ServerException(message: e.message ?? 'Failed to submit feedback.');
-    } catch (_) {
-      // Fallback to direct Firestore below
     }
 
     // 2. Direct Firestore fallback
@@ -203,24 +210,29 @@ class FeedbackRemoteDataSourceImpl implements FeedbackRemoteDataSource {
     }
 
     // 1. Try Cloud Function
-    try {
-      final callable = _functions.httpsCallable('editFeedback');
-      final res = await callable.call({
-        'feedbackId': feedbackId,
-        if (rating != null) 'rating': rating,
-        if (comments != null) 'comments': comments,
-        if (isAnonymous != null) 'isAnonymous': isAnonymous,
-        if (mappedAttachments != null) 'attachments': mappedAttachments,
-      });
+    if (EnvConfig.isCloudFunctionsEnabled) {
+      try {
+        final callable = _functions.httpsCallable('editFeedback');
+        final res = await callable.call({
+          'feedbackId': feedbackId,
+          if (rating != null) 'rating': rating,
+          if (comments != null) 'comments': comments,
+          if (isAnonymous != null) 'isAnonymous': isAnonymous,
+          if (mappedAttachments != null) 'attachments': mappedAttachments,
+        });
 
-      final data = res.data;
-      if (data is Map && data['feedback'] != null) {
-        return FeedbackItemModel.fromJson(Map<String, dynamic>.from(data['feedback'] as Map));
+        final data = res.data;
+        if (data is Map && data['feedback'] != null) {
+          return FeedbackItemModel.fromJson(Map<String, dynamic>.from(data['feedback'] as Map));
+        }
+      } on FirebaseFunctionsException catch (e) {
+        if (e.code == 'failed-precondition') {
+          throw ServerException(message: e.message ?? 'Failed to edit feedback.');
+        }
+        AppLogger.w('editFeedback callable note: $e. Falling back to direct Firestore update.');
+      } catch (e) {
+        AppLogger.w('editFeedback error: $e. Falling back to direct Firestore update.');
       }
-    } on FirebaseFunctionsException catch (e) {
-      throw ServerException(message: e.message ?? 'Failed to edit feedback.');
-    } catch (_) {
-      // Fallback to Firestore direct update
     }
 
     // 2. Direct Firestore fallback
@@ -351,22 +363,27 @@ class FeedbackRemoteDataSourceImpl implements FeedbackRemoteDataSource {
         .toList();
 
     // 1. Try Cloud Function
-    try {
-      final callable = _functions.httpsCallable('replyToFeedback');
-      final res = await callable.call({
-        'feedbackId': feedbackId,
-        'replyText': replyText,
-        'attachments': mappedAttachments,
-      });
+    if (EnvConfig.isCloudFunctionsEnabled) {
+      try {
+        final callable = _functions.httpsCallable('replyToFeedback');
+        final res = await callable.call({
+          'feedbackId': feedbackId,
+          'replyText': replyText,
+          'attachments': mappedAttachments,
+        });
 
-      final data = res.data;
-      if (data is Map && data['feedback'] != null) {
-        return FeedbackItemModel.fromJson(Map<String, dynamic>.from(data['feedback'] as Map));
+        final data = res.data;
+        if (data is Map && data['feedback'] != null) {
+          return FeedbackItemModel.fromJson(Map<String, dynamic>.from(data['feedback'] as Map));
+        }
+      } on FirebaseFunctionsException catch (e) {
+        if (e.code == 'failed-precondition') {
+          throw ServerException(message: e.message ?? 'Failed to reply to feedback.');
+        }
+        AppLogger.w('replyToFeedback callable note: $e. Falling back to direct Firestore creation.');
+      } catch (e) {
+        AppLogger.w('replyToFeedback error: $e. Falling back to direct Firestore creation.');
       }
-    } on FirebaseFunctionsException catch (e) {
-      throw ServerException(message: e.message ?? 'Failed to reply to feedback.');
-    } catch (_) {
-      // Fallback
     }
 
     // 2. Direct Firestore fallback
@@ -427,23 +444,28 @@ class FeedbackRemoteDataSourceImpl implements FeedbackRemoteDataSource {
     }
 
     // 1. Try Cloud Function
-    try {
-      final callable = _functions.httpsCallable('editFeedbackReply');
-      final res = await callable.call({
-        'feedbackId': feedbackId,
-        'replyId': replyId,
-        'replyText': replyText,
-        if (mappedAttachments != null) 'attachments': mappedAttachments,
-      });
+    if (EnvConfig.isCloudFunctionsEnabled) {
+      try {
+        final callable = _functions.httpsCallable('editFeedbackReply');
+        final res = await callable.call({
+          'feedbackId': feedbackId,
+          'replyId': replyId,
+          'replyText': replyText,
+          if (mappedAttachments != null) 'attachments': mappedAttachments,
+        });
 
-      final data = res.data;
-      if (data is Map && data['feedback'] != null) {
-        return FeedbackItemModel.fromJson(Map<String, dynamic>.from(data['feedback'] as Map));
+        final data = res.data;
+        if (data is Map && data['feedback'] != null) {
+          return FeedbackItemModel.fromJson(Map<String, dynamic>.from(data['feedback'] as Map));
+        }
+      } on FirebaseFunctionsException catch (e) {
+        if (e.code == 'failed-precondition') {
+          throw ServerException(message: e.message ?? 'Failed to edit reply.');
+        }
+        AppLogger.w('editFeedbackReply callable note: $e. Falling back to direct Firestore update.');
+      } catch (e) {
+        AppLogger.w('editFeedbackReply error: $e. Falling back to direct Firestore update.');
       }
-    } on FirebaseFunctionsException catch (e) {
-      throw ServerException(message: e.message ?? 'Failed to edit reply.');
-    } catch (_) {
-      // Fallback
     }
 
     // 2. Direct Firestore fallback

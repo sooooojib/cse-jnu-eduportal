@@ -125,19 +125,24 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
     );
 
     if (confirmed == true && mounted) {
+      final messenger = ScaffoldMessenger.of(context);
       try {
         await _repository.deleteUser(userId: user.id);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${user.fullName} deleted successfully.'),
-            backgroundColor: const Color(0xFF047857),
-          ),
-        );
-        _loadUsers();
+        if (mounted) {
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text('${user.fullName} deleted successfully.'),
+              backgroundColor: const Color(0xFF047857),
+            ),
+          );
+          _loadUsers();
+        }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to delete: $e'), backgroundColor: const Color(0xFFDC2626)),
-        );
+        if (mounted) {
+          messenger.showSnackBar(
+            SnackBar(content: Text('Failed to delete: $e'), backgroundColor: const Color(0xFFDC2626)),
+          );
+        }
       }
     }
   }
@@ -412,6 +417,7 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
             )
           : null,
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: null,
         backgroundColor: const Color(0xFF7E22CE),
         foregroundColor: Colors.white,
         icon: const Icon(Icons.person_add_rounded),
@@ -962,6 +968,7 @@ class _AdminSemesterRequestsScreenState extends State<AdminSemesterRequestsScree
   }
 
   Future<void> _approve(SemesterUpgradeRequest req) async {
+    final messenger = ScaffoldMessenger.of(context);
     final confirmed = await AppConfirmationDialog.show(
       context: context,
       title: 'Approve Semester Upgrade?',
@@ -971,12 +978,12 @@ class _AdminSemesterRequestsScreenState extends State<AdminSemesterRequestsScree
     if (confirmed == true && mounted) {
       try {
         await _repository.approveSemesterUpgrade(requestId: req.id);
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(content: Text('${req.studentName} promoted successfully.'), backgroundColor: const Color(0xFF047857)),
         );
         _loadRequests();
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(content: Text('Failed: $e'), backgroundColor: const Color(0xFFDC2626)),
         );
       }
@@ -984,6 +991,7 @@ class _AdminSemesterRequestsScreenState extends State<AdminSemesterRequestsScree
   }
 
   Future<void> _reject(SemesterUpgradeRequest req) async {
+    final messenger = ScaffoldMessenger.of(context);
     final ctrl = TextEditingController(text: 'Academic eligibility requirements not met.');
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1008,12 +1016,12 @@ class _AdminSemesterRequestsScreenState extends State<AdminSemesterRequestsScree
     if (confirmed == true && mounted) {
       try {
         await _repository.rejectSemesterUpgrade(requestId: req.id, reason: ctrl.text.trim());
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(content: Text('Rejected request for ${req.studentName}'), backgroundColor: const Color(0xFFDC2626)),
         );
         _loadRequests();
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(content: Text('Error: $e'), backgroundColor: const Color(0xFFDC2626)),
         );
       }
@@ -1515,6 +1523,7 @@ class _AdminCourseManagementScreenState extends State<AdminCourseManagementScree
             )
           : null,
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: null,
         backgroundColor: const Color(0xFF047857),
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add_rounded),

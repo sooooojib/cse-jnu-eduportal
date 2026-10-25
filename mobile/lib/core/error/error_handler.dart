@@ -48,7 +48,12 @@ class ErrorHandler {
       return _handleFirestoreError(error);
     }
 
-    return ServerFailure(message: error.toString());
+    final str = error.toString();
+    if (str.contains('Dart exception thrown from converted Future') || str.contains('boxed error')) {
+      return const ServerFailure(message: 'Operation failed. Please check your connection and try again.');
+    }
+
+    return ServerFailure(message: str);
   }
 
   static Failure _handleFirebaseAuthError(fb.FirebaseAuthException e) {

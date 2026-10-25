@@ -97,16 +97,9 @@ describe("STAGE 21: Server-Side Schedule System & Conflict Protection Tests", ()
       if (startMins >= endMins) throw new Error("INVALID_ARGUMENT: startTime must precede endTime.");
 
       const normDay = dayOfWeek.trim().toUpperCase();
-      const { tomorrowDate, tomorrowDayOfWeek } = getTomorrowInfo();
 
-      // CR Tomorrow-Only Rule
+      // CR Cohort Lock Rule (can schedule for any day in their cohort)
       if (userRole === "CR") {
-        if (normDay !== tomorrowDayOfWeek) {
-          throw new Error(`CR_TOMORROW_ONLY: CR can only schedule for tomorrow (${tomorrowDayOfWeek}).`);
-        }
-        if (date && date !== tomorrowDate) {
-          throw new Error(`CR_TOMORROW_ONLY: CR can only schedule for tomorrow (${tomorrowDate}).`);
-        }
         if (user.year !== targetYear || user.semester !== targetSemester) {
           throw new Error(`CR_COHORT_MISMATCH: Cannot schedule for other cohorts.`);
         }
@@ -167,7 +160,7 @@ describe("STAGE 21: Server-Side Schedule System & Conflict Protection Tests", ()
         targetYear,
         targetSemester,
         isExtraClass: Boolean(payload.isExtraClass),
-        date: date || (userRole === "CR" ? tomorrowDate : null),
+        date: date || null,
         createdBy: auth.uid,
       };
 
@@ -334,24 +327,22 @@ describe("STAGE 21: Server-Side Schedule System & Conflict Protection Tests", ()
     assert.strictEqual(result.slot.courseCode, "CSE-3101");
   });
 
-  it("6. CR Tomorrow-Only Rule: Rejects CR scheduling for today or past days", async () => {
+  it("6. CR Routine Freedom: CR can schedule routine for any day of the week for their cohort", async () => {
     seedDb();
-    const { todayDate } = getTomorrowInfo();
 
-    await assert.rejects(
-      service.createSlot({ uid: "cr_tanvir", role: "CR" }, {
-        courseId: "CSE-3101",
-        dayOfWeek: "SUNDAY",
-        date: todayDate, // Not tomorrow
-        startTime: "10:30",
-        endTime: "12:00",
-        room: "Room 402",
-        targetYear: 3,
-        targetSemester: 1,
-      }),
-      /CR_TOMORROW_ONLY/,
-      "Server-side check must reject any day other than tomorrow"
-    );
+    const result = await service.createSlot({ uid: "cr_tanvir", role: "CR" }, {
+      courseId: "CSE-3101",
+      dayOfWeek: "SUNDAY",
+      startTime: "10:30",
+      endTime: "12:00",
+      room: "Room 402",
+      targetYear: 3,
+      targetSemester: 1,
+    });
+
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(result.slot.dayOfWeek, "SUNDAY");
+    assert.strictEqual(result.slot.room, "Room 402");
   });
 
   it("7. CR Cohort Lock: Rejects CR scheduling for a different year or semester", async () => {

@@ -538,7 +538,7 @@ void main() {
 
       expect(find.text("Manage Tomorrow's Schedule"), findsOneWidget);
       expect(find.text('Broadcast'), findsOneWidget);
-      expect(find.text('Add Class Slot'), findsOneWidget);
+      expect(find.text('Add Class Slot'), findsAtLeastNWidgets(1));
 
       // Tap Broadcast on WhatsApp
       await tester.ensureVisible(find.text('Broadcast'));
@@ -569,9 +569,9 @@ void main() {
       await tester.pumpWidget(buildTestableWidget(CrDashboardScreen(controller: controller)));
       await tester.pumpAndSettle();
 
-      await tester.ensureVisible(find.text('Add Class Slot'));
+      await tester.ensureVisible(find.text('Add Class Slot').first);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Add Class Slot'));
+      await tester.tap(find.text('Add Class Slot').first);
       await tester.pumpAndSettle();
 
       expect(find.text('Add Class for Tomorrow'), findsOneWidget);

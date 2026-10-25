@@ -163,6 +163,7 @@ class _StudentCounselingScreenState extends State<StudentCounselingScreen> with 
                             );
                             return;
                           }
+                          final messenger = ScaffoldMessenger.of(context);
                           Navigator.pop(modalContext);
                           try {
                             await _controller.bookSlot(
@@ -171,7 +172,7 @@ class _StudentCounselingScreenState extends State<StudentCounselingScreen> with 
                               notes: notes,
                             );
                             if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
+                              messenger.showSnackBar(
                                 const SnackBar(
                                   content: Text('Counseling request submitted for review!'),
                                   backgroundColor: Colors.green,
@@ -180,9 +181,9 @@ class _StudentCounselingScreenState extends State<StudentCounselingScreen> with 
                             }
                           } catch (e) {
                             if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
+                              messenger.showSnackBar(
                                 SnackBar(
-                                  content: Text(e.toString().replaceAll('Exception: ', '')),
+                                  content: Text(e.toString().replaceAll('Exception: ', '').replaceAll('ServerException: ', '')),
                                   backgroundColor: Colors.redAccent,
                                 ),
                               );
@@ -544,16 +545,17 @@ class _StudentCounselingScreenState extends State<StudentCounselingScreen> with 
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                       onPressed: () async {
+                        final messenger = ScaffoldMessenger.of(context);
                         try {
                           await _controller.cancelBooking(booking.id);
                           if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            messenger.showSnackBar(
                               const SnackBar(content: Text('Appointment request cancelled.')),
                             );
                           }
                         } catch (e) {
                           if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            messenger.showSnackBar(
                               SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
                             );
                           }

@@ -45,6 +45,12 @@ class CrDashboardData extends Equatable {
   final String targetDateLabel;
   final String dayOfWeek;
   final String tomorrowDateLabel;
+  final bool isTomorrow;
+
+  List<ScheduleSlot> get timeAwareClasses =>
+      isTomorrow ? tomorrowClasses : todayClasses;
+  String get activeDateLabel =>
+      isTomorrow ? tomorrowDateLabel : targetDateLabel;
 
   const CrDashboardData({
     required this.crId,
@@ -74,6 +80,7 @@ class CrDashboardData extends Equatable {
     required this.targetDateLabel,
     required this.dayOfWeek,
     required this.tomorrowDateLabel,
+    this.isTomorrow = false,
   });
 
   @override
@@ -105,5 +112,6 @@ class CrDashboardData extends Equatable {
         targetDateLabel,
         dayOfWeek,
         tomorrowDateLabel,
+        isTomorrow,
       ];
 }

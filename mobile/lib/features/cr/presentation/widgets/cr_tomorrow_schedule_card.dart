@@ -77,15 +77,12 @@ class _CrTomorrowScheduleCardState extends State<CrTomorrowScheduleCard> {
       // ───────────────────────────────────────────────────────────────────────
       return Container(
         decoration: BoxDecoration(
-          color: isDark
-              ? const Color(0xFF13263E)
-              : Colors.white,
+          color: isDark ? const Color(0xFF13263E) : Colors.white,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isDark
                 ? Colors.white.withValues(alpha: 0.08)
                 : const Color(0xFFE2E8F0),
-            width: 1.2,
           ),
           boxShadow: [
             BoxShadow(
@@ -95,32 +92,31 @@ class _CrTomorrowScheduleCardState extends State<CrTomorrowScheduleCard> {
             ),
           ],
         ),
-        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Row(
+            // Header with Title, Date & Action Controls
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? const Color(0xFF1D3552).withValues(alpha: 0.6)
+                    : const Color(0xFFF8FAFC),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                border: Border(
+                  bottom: BorderSide(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.06)
+                        : const Color(0xFFE2E8F0),
+                  ),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Container(
-                        width: 38,
-                        height: 38,
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? crColors.primary.withValues(alpha: 0.2)
-                              : const Color(0xFFFFEDD5),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.edit_calendar_rounded,
-                          size: 20,
-                          color: crColors.primary,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -133,7 +129,7 @@ class _CrTomorrowScheduleCardState extends State<CrTomorrowScheduleCard> {
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
-                                      fontSize: 16,
+                                      fontSize: 17,
                                       fontWeight: FontWeight.w700,
                                       color: isDark ? Colors.white : const Color(0xFF0F172A),
                                     ),
@@ -141,17 +137,17 @@ class _CrTomorrowScheduleCardState extends State<CrTomorrowScheduleCard> {
                                 ),
                                 const SizedBox(width: 8),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                   decoration: BoxDecoration(
                                     color: isDark
                                         ? const Color(0xFF38BDF8).withValues(alpha: 0.15)
                                         : const Color(0xFFE0F2FE),
-                                    borderRadius: BorderRadius.circular(8),
+                                    borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: Text(
                                     'Next-Day',
                                     style: TextStyle(
-                                      fontSize: 10.5,
+                                      fontSize: 11,
                                       fontWeight: FontWeight.w700,
                                       color: isDark ? const Color(0xFF38BDF8) : const Color(0xFF0284C7),
                                     ),
@@ -161,106 +157,109 @@ class _CrTomorrowScheduleCardState extends State<CrTomorrowScheduleCard> {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'Target: ${widget.data.tomorrowDateLabel}',
+                              widget.data.tomorrowDateLabel,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                fontSize: 12.5,
+                                fontSize: 13,
                                 color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                               ),
                             ),
                           ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? crColors.primary.withValues(alpha: 0.2)
-                        : const Color(0xFFFFEDD5),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    '${widget.data.tomorrowClasses.length} Slots',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w700,
-                      color: crColors.primary,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Adjust tomorrow’s class timings, rooms, or add extra sessions and broadcast directly to your batch group.',
-              style: TextStyle(
-                fontSize: 13,
-                height: 1.4,
-                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                // Add / Edit Slot Button
-                Expanded(
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: crColors.primary,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    icon: const Icon(Icons.add_rounded, size: 18),
-                    label: const FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        'Add Class Slot',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                    onPressed: widget.onManageTomorrowTap,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                // Broadcast on WhatsApp
-                Expanded(
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      backgroundColor: const Color(0xFF25D366).withValues(alpha: 0.1),
-                      foregroundColor: const Color(0xFF075E54),
-                      side: BorderSide(
-                        color: const Color(0xFF25D366).withValues(alpha: 0.35),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    icon: const Icon(Icons.forum_rounded, size: 16, color: Color(0xFF075E54)),
-                    label: const FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        'Broadcast',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF075E54),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? crColors.primary.withValues(alpha: 0.2)
+                              : const Color(0xFFFFEDD5),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '${widget.data.tomorrowClasses.length} Slots',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: crColors.primary,
+                          ),
                         ),
                       ),
-                    ),
-                    onPressed: () => _handleWhatsAppBroadcast(context),
+                    ],
                   ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      // Add / Edit Slot Button
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: crColors.primary,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          icon: const Icon(Icons.add_rounded, size: 18),
+                          label: const FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'Add Class Slot',
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                          onPressed: widget.onManageTomorrowTap,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      // Broadcast on WhatsApp
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            backgroundColor: const Color(0xFF25D366).withValues(alpha: 0.1),
+                            foregroundColor: const Color(0xFF075E54),
+                            side: BorderSide(
+                              color: const Color(0xFF25D366).withValues(alpha: 0.35),
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          icon: const Icon(Icons.forum_rounded, size: 16, color: Color(0xFF075E54)),
+                          label: const FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'Broadcast',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF075E54),
+                              ),
+                            ),
+                          ),
+                          onPressed: () => _handleWhatsAppBroadcast(context),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            // Body Description
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Text(
+                'Adjust tomorrow’s class timings, rooms, or add extra sessions and broadcast directly to your batch group.',
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.4,
+                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                 ),
-              ],
+              ),
             ),
           ],
         ),

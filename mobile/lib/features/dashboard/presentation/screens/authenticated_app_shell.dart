@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -31,7 +33,7 @@ import '../../../teacher/presentation/widgets/teacher_profile_dialog.dart';
 import '../../../attendance/presentation/screens/teacher_attendance_terminal_screen.dart';
 import '../../../counseling/presentation/screens/teacher_counseling_screen.dart';
 import '../../../feedback/presentation/screens/teacher_feedback_screen.dart';
-import '../widgets/app_settings_bottom_sheet.dart';
+import '../../../../core/utils/avatar_image_resolver.dart';
 import 'student_dashboard_shell.dart';
 
 /// Unified Authenticated Application Shell
@@ -104,6 +106,8 @@ class _AuthenticatedAppShellState extends State<AuthenticatedAppShell> {
   ImageProvider? _resolveAvatar(String? url) {
     if (url == null || url.trim().isEmpty) return null;
     final trimmed = url.trim();
+
+    // 1. Base64
     if (trimmed.startsWith('data:image')) {
       final commaIdx = trimmed.indexOf(',');
       if (commaIdx != -1) {
@@ -115,7 +119,35 @@ class _AuthenticatedAppShellState extends State<AuthenticatedAppShell> {
         }
       }
     }
-    return NetworkImage(trimmed);
+
+    // 2. Prevent local paths (/data/... or file:///...) from being treated as NetworkImage
+    if (trimmed.startsWith('/') || trimmed.startsWith('file:')) {
+      if (!kIsWeb) {
+        try {
+          String cleanPath = trimmed;
+          if (trimmed.startsWith('file:')) {
+            final uri = Uri.tryParse(trimmed);
+            cleanPath = uri != null && uri.isScheme('file') ? uri.toFilePath() : trimmed.replaceFirst(RegExp(r'^file:\/{1,3}'), '/');
+          }
+          final file = File(cleanPath);
+          if (file.existsSync()) {
+            return FileImage(file);
+          }
+        } catch (_) {}
+      }
+      return null;
+    }
+
+    // 3. Remote HTTP/HTTPS URLs with non-empty host
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      final uri = Uri.tryParse(trimmed);
+      if (uri != null && uri.hasAuthority && uri.host.isNotEmpty) {
+        return NetworkImage(trimmed);
+      }
+      return null;
+    }
+
+    return null;
   }
 
   Future<void> _handleLogout(BuildContext context) async {
@@ -334,43 +366,52 @@ class _AuthenticatedAppShellState extends State<AuthenticatedAppShell> {
             padding: const EdgeInsets.only(left: 12.0),
             child: GestureDetector(
               onTap: () {
+                final user = currentUser ?? _authController.currentUser;
+                if (user == null) return;
                 if (role == UserRole.admin) {
-                  AppSettingsBottomSheet.show(
-                    context: context,
-                    user: currentUser,
-                    authController: _authController,
-                  );
-                } else if (role == UserRole.teacher && currentUser != null) {
                   TeacherProfileDialog.show(
                     context: context,
-                    teacher: currentUser,
-                    assignedCoursesCount: currentUser.assignedCourseIds.length,
+                    teacher: user,
+                    assignedCoursesCount: 0,
                     onLogout: () => _handleLogout(context),
                   );
-                } else if (currentUser != null) {
+                } else if (role == UserRole.teacher) {
+                  TeacherProfileDialog.show(
+                    context: context,
+                    teacher: user,
+                    assignedCoursesCount: user.assignedCourseIds.length,
+                    onLogout: () => _handleLogout(context),
+                  );
+                } else {
                   StudentProfileDialog.show(
                     context: context,
-                    student: currentUser,
+                    student: user,
                     onLogout: () => _handleLogout(context),
                   );
                 }
               },
-              child: CircleAvatar(
-                radius: 18,
-                backgroundColor: roleColor.withValues(alpha: 0.15),
-                backgroundImage: _resolveAvatar(currentUser?.avatarUrl),
-                child: _resolveAvatar(currentUser?.avatarUrl) == null
-                    ? Text(
-                        currentUser != null && currentUser.fullName.isNotEmpty
-                            ? currentUser.fullName.substring(0, 1).toUpperCase()
-                            : (role == UserRole.admin ? 'A' : (role == UserRole.teacher ? 'T' : (role == UserRole.cr ? 'C' : 'S'))),
-                        style: TextStyle(
-                          color: roleColor,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 15,
-                        ),
-                      )
-                    : null,
+              child: Builder(
+                builder: (context) {
+                  final avatarProvider = _resolveAvatar(currentUser?.avatarUrl);
+                  return CircleAvatar(
+                    radius: 18,
+                    backgroundColor: roleColor.withValues(alpha: 0.15),
+                    backgroundImage: avatarProvider,
+                    onBackgroundImageError: avatarProvider != null ? (_, __) {} : null,
+                    child: avatarProvider == null
+                        ? Text(
+                            currentUser != null && currentUser.fullName.isNotEmpty
+                                ? currentUser.fullName.substring(0, 1).toUpperCase()
+                                : (role == UserRole.admin ? 'A' : (role == UserRole.teacher ? 'T' : (role == UserRole.cr ? 'C' : 'S'))),
+                            style: TextStyle(
+                              color: roleColor,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                            ),
+                          )
+                        : null,
+                  );
+                },
               ),
             ),
           ),

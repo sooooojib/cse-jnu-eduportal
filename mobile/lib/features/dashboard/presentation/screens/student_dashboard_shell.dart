@@ -21,11 +21,10 @@ import '../../../cr/presentation/widgets/cr_header_section.dart';
 import '../../../cr/presentation/widgets/cr_metrics_grid.dart';
 import '../../../cr/presentation/widgets/cr_semester_courses_card.dart';
 import '../../../cr/presentation/widgets/cr_today_schedule_card.dart';
-import '../../../cr/presentation/widgets/cr_tomorrow_schedule_card.dart';
 import '../../../curriculum/domain/entities/curriculum_entities.dart';
 import '../../../curriculum/presentation/widgets/exam_details_dialog.dart';
 import '../../../profile/presentation/widgets/student_profile_dialog.dart';
-import '../widgets/app_settings_bottom_sheet.dart';
+import '../../../../core/utils/avatar_image_resolver.dart';
 
 /// Student Dashboard Screen
 ///
@@ -396,21 +395,12 @@ class _StudentDashboardShellState extends State<StudentDashboardShell> {
 
                   const SizedBox(height: 20),
 
-                  // 3. Today's Schedule Card
+                  // 3. Time-Aware Schedule Card (Today & Tomorrow in One Place)
                   CrTodayScheduleCard(
                     data: data,
                     onViewFullSchedule: () => widget.onNavigateTab != null
                         ? widget.onNavigateTab!(2)
                         : context.push(RouteNames.schedule),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // 4. Tomorrow's Schedule Card (Next-Day Timeline)
-                  CrTomorrowScheduleCard(
-                    data: data,
-                    isCr: false,
-                    onManageTomorrowTap: () {},
                   ),
 
                   const SizedBox(height: 20),
@@ -458,18 +448,27 @@ class _StudentDashboardShellState extends State<StudentDashboardShell> {
                 );
               }
             },
-            child: CircleAvatar(
-              backgroundColor: isDark
-                  ? roleColors.primary.withValues(alpha: 0.2)
-                  : roleColors.background,
-              child: Text(
-                initials,
-                style: TextStyle(
-                  color: isDark ? roleColors.text : roleColors.primary,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                ),
-              ),
+            child: Builder(
+              builder: (context) {
+                final avatarProvider = AvatarImageResolver.resolve(currentUser?.avatarUrl);
+                return CircleAvatar(
+                  backgroundColor: isDark
+                      ? roleColors.primary.withValues(alpha: 0.2)
+                      : roleColors.background,
+                  backgroundImage: avatarProvider,
+                  onBackgroundImageError: avatarProvider != null ? (_, __) {} : null,
+                  child: avatarProvider == null
+                      ? Text(
+                          initials,
+                          style: TextStyle(
+                            color: isDark ? roleColors.text : roleColors.primary,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
+                        )
+                      : null,
+                );
+              },
             ),
           ),
         ),

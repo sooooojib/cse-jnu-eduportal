@@ -51,6 +51,14 @@ class PushNotificationServiceImpl implements PushNotificationService {
 
       debugPrint('FCM Authorization status: ${settings.authorizationStatus}');
 
+      // On Web, if user hasn't granted notification permission, skip fetching token gracefully
+      if (kIsWeb &&
+          settings.authorizationStatus != AuthorizationStatus.authorized &&
+          settings.authorizationStatus != AuthorizationStatus.provisional) {
+        debugPrint('Web FCM: Notification permission not granted (${settings.authorizationStatus}). Skipping token registration.');
+        return;
+      }
+
       // 2. Fetch initial device token and register
       await registerCurrentToken();
 

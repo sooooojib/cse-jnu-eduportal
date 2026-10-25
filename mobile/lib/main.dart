@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -27,6 +28,19 @@ void main() async {
       AppLogger.i('Firestore offline persistence enabled.');
     } catch (e) {
       AppLogger.w('Firestore offline settings note: $e');
+    }
+
+    // Activate Firebase App Check
+    try {
+      if (!kIsWeb) {
+        await FirebaseAppCheck.instance.activate(
+          androidProvider: kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
+          appleProvider: kDebugMode ? AppleProvider.debug : AppleProvider.deviceCheck,
+        );
+        AppLogger.i('Firebase App Check activated.');
+      }
+    } catch (e) {
+      AppLogger.w('Firebase App Check activation note: $e');
     }
 
     AppLogger.i('Bootstrapping CSE JnU EduPortal dependency container...');

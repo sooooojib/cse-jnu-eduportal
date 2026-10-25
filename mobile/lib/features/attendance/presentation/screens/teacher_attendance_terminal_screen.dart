@@ -169,9 +169,13 @@ class _TeacherAttendanceTerminalScreenState extends State<TeacherAttendanceTermi
       }
     } catch (e) {
       if (mounted) {
+        final rawMsg = e.toString().replaceAll('Exception: ', '').replaceAll('ServerException: ', '').trim();
+        final displayMsg = (rawMsg.isEmpty || rawMsg.toLowerCase() == 'internal')
+            ? 'Failed to start attendance session. Please try again.'
+            : rawMsg;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
+            content: Text(displayMsg),
             backgroundColor: const Color(0xFFDC2626),
           ),
         );
@@ -205,9 +209,13 @@ class _TeacherAttendanceTerminalScreenState extends State<TeacherAttendanceTermi
         }
       } catch (e) {
         if (mounted) {
+          final rawMsg = e.toString().replaceAll('Exception: ', '').replaceAll('ServerException: ', '').trim();
+          final displayMsg = (rawMsg.isEmpty || rawMsg.toLowerCase() == 'internal')
+              ? 'Failed to deactivate attendance session. Please try again.'
+              : rawMsg;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(e.toString().replaceAll('Exception: ', '')),
+              content: Text(displayMsg),
               backgroundColor: const Color(0xFFDC2626),
             ),
           );
@@ -229,9 +237,13 @@ class _TeacherAttendanceTerminalScreenState extends State<TeacherAttendanceTermi
       }
     } catch (e) {
       if (mounted) {
+        final rawMsg = e.toString().replaceAll('Exception: ', '').replaceAll('ServerException: ', '').trim();
+        final displayMsg = (rawMsg.isEmpty || rawMsg.toLowerCase() == 'internal')
+            ? 'Failed to save attendance roster. Please try again.'
+            : rawMsg;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
+            content: Text(displayMsg),
             backgroundColor: const Color(0xFFDC2626),
           ),
         );

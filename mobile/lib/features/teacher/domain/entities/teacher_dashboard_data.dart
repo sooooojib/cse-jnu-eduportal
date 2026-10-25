@@ -21,10 +21,30 @@ class TeacherDashboardData extends Equatable {
   final List<ScheduleSlot> timeAwareClasses;
   final List<Exam> timeAwareExams;
 
+  // Today & Tomorrow Data (Time-Aware)
+  final List<ScheduleSlot> todayClasses;
+  final List<ScheduleSlot> tomorrowClasses;
+  final List<Exam> todayExams;
+  final List<Exam> tomorrowExams;
+
   // Time-Aware Schedule Metadata
   final bool isTomorrow;
   final String targetDateLabel;
+  final String todayDateLabel;
+  final String tomorrowDateLabel;
   final String dayOfWeek;
+
+  List<ScheduleSlot> get effectiveTodayClasses =>
+      todayClasses.isNotEmpty ? todayClasses : (!isTomorrow ? timeAwareClasses : const []);
+
+  List<ScheduleSlot> get effectiveTomorrowClasses =>
+      tomorrowClasses.isNotEmpty ? tomorrowClasses : (isTomorrow ? timeAwareClasses : const []);
+
+  List<Exam> get effectiveTodayExams =>
+      todayExams.isNotEmpty ? todayExams : (!isTomorrow ? timeAwareExams : const []);
+
+  List<Exam> get effectiveTomorrowExams =>
+      tomorrowExams.isNotEmpty ? tomorrowExams : (isTomorrow ? timeAwareExams : const []);
 
   const TeacherDashboardData({
     required this.teacherId,
@@ -39,8 +59,14 @@ class TeacherDashboardData extends Equatable {
     required this.assignedCourses,
     required this.timeAwareClasses,
     this.timeAwareExams = const [],
+    this.todayClasses = const [],
+    this.tomorrowClasses = const [],
+    this.todayExams = const [],
+    this.tomorrowExams = const [],
     required this.isTomorrow,
     required this.targetDateLabel,
+    this.todayDateLabel = '',
+    this.tomorrowDateLabel = '',
     required this.dayOfWeek,
   });
 
@@ -58,8 +84,14 @@ class TeacherDashboardData extends Equatable {
         assignedCourses,
         timeAwareClasses,
         timeAwareExams,
+        todayClasses,
+        tomorrowClasses,
+        todayExams,
+        tomorrowExams,
         isTomorrow,
         targetDateLabel,
+        todayDateLabel,
+        tomorrowDateLabel,
         dayOfWeek,
       ];
 }

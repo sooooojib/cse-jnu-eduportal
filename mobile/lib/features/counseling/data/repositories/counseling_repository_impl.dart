@@ -1,8 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
+import '../../../../core/config/env_config.dart';
 import '../../../../core/error/error_handler.dart';
 import '../../../../core/error/exceptions.dart';
+import '../../../../core/logging/app_logger.dart';
 import '../models/counseling_models.dart';
 import '../../domain/entities/counseling_entities.dart';
 import '../../domain/repositories/counseling_repository.dart';
@@ -67,21 +69,26 @@ class CounselingRemoteDataSourceImpl implements CounselingRemoteDataSource {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw const ServerException(message: "Not authenticated.");
 
-    try {
-      final callable = _functions.httpsCallable('requestCounselingBooking');
-      final res = await callable.call({
-        'slotId': slotId,
-        'category': category,
-        'notes': notes,
-      });
-      final data = res.data;
-      if (data is Map && data['booking'] != null) {
-        return CounselingBookingModel.fromJson(Map<String, dynamic>.from(data['booking'] as Map));
+    if (EnvConfig.isCloudFunctionsEnabled) {
+      try {
+        final callable = _functions.httpsCallable('requestCounselingBooking');
+        final res = await callable.call({
+          'slotId': slotId,
+          'category': category,
+          'notes': notes,
+        });
+        final data = res.data;
+        if (data is Map && data['booking'] != null) {
+          return CounselingBookingModel.fromJson(Map<String, dynamic>.from(data['booking'] as Map));
+        }
+      } on FirebaseFunctionsException catch (e) {
+        if (e.code == 'already-exists' || e.code == 'failed-precondition') {
+          throw ServerException(message: e.message ?? 'Failed to request counseling slot.');
+        }
+        AppLogger.w('requestCounselingBooking callable note: $e. Falling back to direct Firestore operation.');
+      } catch (e) {
+        AppLogger.w('requestCounselingBooking error: $e. Falling back to direct Firestore operation.');
       }
-    } on FirebaseFunctionsException catch (e) {
-      throw ServerException(message: e.message ?? 'Failed to request counseling slot.');
-    } catch (_) {
-      // Fallback: direct Firestore operation
     }
 
     // Fetch slot to verify availability
@@ -151,13 +158,15 @@ class CounselingRemoteDataSourceImpl implements CounselingRemoteDataSource {
 
   @override
   Future<void> cancelBooking(String requestId) async {
-    try {
-      final callable = _functions.httpsCallable('cancelCounselingBooking');
-      await callable.call({'bookingId': requestId});
-      return;
-    } on FirebaseFunctionsException catch (e) {
-      throw ServerException(message: e.message ?? 'Failed to cancel booking.');
-    } catch (_) {
+    if (EnvConfig.isCloudFunctionsEnabled) {
+      try {
+        final callable = _functions.httpsCallable('cancelCounselingBooking');
+        await callable.call({'bookingId': requestId});
+        return;
+      } catch (e) {
+        AppLogger.w('cancelCounselingBooking callable note: $e. Falling back to direct Firestore cancellation.');
+      }
+    }
       // Fallback: direct Firestore cancellation
       final bookingRef = _firestore.collection("counselingBookings").doc(requestId);
       final booking = await bookingRef.get();
@@ -173,7 +182,6 @@ class CounselingRemoteDataSourceImpl implements CounselingRemoteDataSource {
         });
       }
       await bookingRef.update({"status": "CANCELLED"});
-    }
   }
 
   @override
@@ -186,22 +194,27 @@ class CounselingRemoteDataSourceImpl implements CounselingRemoteDataSource {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw const ServerException(message: "Not authenticated.");
 
-    try {
-      final callable = _functions.httpsCallable('createCounselingSlot');
-      final res = await callable.call({
-        'slotDate': slotDate,
-        'startTime': startTime,
-        'endTime': endTime,
-        if (notes != null) 'notes': notes,
-      });
-      final data = res.data;
-      if (data is Map && data['slot'] != null) {
-        return CounselingSlotModel.fromJson(Map<String, dynamic>.from(data['slot'] as Map));
+    if (EnvConfig.isCloudFunctionsEnabled) {
+      try {
+        final callable = _functions.httpsCallable('createCounselingSlot');
+        final res = await callable.call({
+          'slotDate': slotDate,
+          'startTime': startTime,
+          'endTime': endTime,
+          if (notes != null) 'notes': notes,
+        });
+        final data = res.data;
+        if (data is Map && data['slot'] != null) {
+          return CounselingSlotModel.fromJson(Map<String, dynamic>.from(data['slot'] as Map));
+        }
+      } on FirebaseFunctionsException catch (e) {
+        if (e.code == 'already-exists' || e.code == 'failed-precondition') {
+          throw ServerException(message: e.message ?? 'Failed to create counseling slot.');
+        }
+        AppLogger.w('createCounselingSlot callable note: $e. Falling back to direct Firestore creation.');
+      } catch (e) {
+        AppLogger.w('createCounselingSlot error: $e. Falling back to direct Firestore creation.');
       }
-    } on FirebaseFunctionsException catch (e) {
-      throw ServerException(message: e.message ?? 'Failed to create counseling slot.');
-    } catch (_) {
-      // Fallback
     }
 
     final userDoc = await _firestore.collection("users").doc(uid).get();
@@ -262,13 +275,20 @@ class CounselingRemoteDataSourceImpl implements CounselingRemoteDataSource {
 
   @override
   Future<void> approveBooking(String bookingId) async {
-    try {
-      final callable = _functions.httpsCallable('approveCounselingBooking');
-      await callable.call({'bookingId': bookingId});
-      return;
-    } on FirebaseFunctionsException catch (e) {
-      throw ServerException(message: e.message ?? 'Failed to approve booking.');
-    } catch (_) {
+    if (EnvConfig.isCloudFunctionsEnabled) {
+      try {
+        final callable = _functions.httpsCallable('approveCounselingBooking');
+        await callable.call({'bookingId': bookingId});
+        return;
+      } on FirebaseFunctionsException catch (e) {
+        if (e.code == 'already-exists' || e.code == 'failed-precondition') {
+          throw ServerException(message: e.message ?? 'Failed to approve booking.');
+        }
+        AppLogger.w('approveCounselingBooking callable note: $e. Falling back to direct Firestore transaction.');
+      } catch (e) {
+        AppLogger.w('approveCounselingBooking error: $e. Falling back to direct Firestore transaction.');
+      }
+    }
       // Fallback: Atomic Firestore transaction
       final bookingRef = _firestore.collection('counselingBookings').doc(bookingId);
       await _firestore.runTransaction((transaction) async {
@@ -328,39 +348,46 @@ class CounselingRemoteDataSourceImpl implements CounselingRemoteDataSource {
           }
         }
       });
-    }
   }
 
   @override
   Future<void> rejectBooking(String bookingId, {String? reason}) async {
-    try {
-      final callable = _functions.httpsCallable('rejectCounselingBooking');
-      await callable.call({
-        'bookingId': bookingId,
-        if (reason != null) 'reason': reason,
-      });
-      return;
-    } on FirebaseFunctionsException catch (e) {
-      throw ServerException(message: e.message ?? 'Failed to reject booking.');
-    } catch (_) {
+    if (EnvConfig.isCloudFunctionsEnabled) {
+      try {
+        final callable = _functions.httpsCallable('rejectCounselingBooking');
+        await callable.call({
+          'bookingId': bookingId,
+          if (reason != null) 'reason': reason,
+        });
+        return;
+      } on FirebaseFunctionsException catch (e) {
+        if (e.code == 'failed-precondition') {
+          throw ServerException(message: e.message ?? 'Failed to reject booking.');
+        }
+        AppLogger.w('rejectCounselingBooking callable note: $e. Falling back to direct Firestore update.');
+      } catch (e) {
+        AppLogger.w('rejectCounselingBooking error: $e. Falling back to direct Firestore update.');
+      }
+    }
       // Fallback
       await _firestore.collection('counselingBookings').doc(bookingId).update({
         'status': 'REJECTED',
         'rejectionReason': reason ?? 'Declined by faculty.',
         'reviewedAt': FieldValue.serverTimestamp(),
       });
-    }
   }
 
   @override
   Future<void> deleteSlot(String slotId) async {
-    try {
-      final callable = _functions.httpsCallable('deleteCounselingSlot');
-      await callable.call({'slotId': slotId});
-      return;
-    } on FirebaseFunctionsException catch (e) {
-      throw ServerException(message: e.message ?? 'Failed to delete counseling slot.');
-    } catch (_) {
+    if (EnvConfig.isCloudFunctionsEnabled) {
+      try {
+        final callable = _functions.httpsCallable('deleteCounselingSlot');
+        await callable.call({'slotId': slotId});
+        return;
+      } catch (e) {
+        AppLogger.w('deleteCounselingSlot callable note: $e. Falling back to direct Firestore delete.');
+      }
+    }
       // Fallback
       final slotDoc = await _firestore.collection('counselingSlots').doc(slotId).get();
       if (!slotDoc.exists) throw const ServerException(message: 'Slot not found.');
@@ -368,7 +395,6 @@ class CounselingRemoteDataSourceImpl implements CounselingRemoteDataSource {
         throw const ServerException(message: 'Cannot delete a booked counseling slot.');
       }
       await _firestore.collection('counselingSlots').doc(slotId).delete();
-    }
   }
 }
 

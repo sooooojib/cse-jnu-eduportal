@@ -178,6 +178,7 @@ class _StudentFeedbackScreenState extends State<StudentFeedbackScreen> with Sing
       return;
     }
 
+    final messenger = ScaffoldMessenger.of(context);
     try {
       await _controller.submitFeedback(
         teacherId: teacherId,
@@ -195,7 +196,7 @@ class _StudentFeedbackScreenState extends State<StudentFeedbackScreen> with Sing
       _tabController.animateTo(1);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           const SnackBar(
             content: Text('Feedback submitted successfully!'),
             backgroundColor: Colors.green,
@@ -204,9 +205,9 @@ class _StudentFeedbackScreenState extends State<StudentFeedbackScreen> with Sing
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
+            content: Text(e.toString().replaceAll('Exception: ', '').replaceAll('ServerException: ', '')),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -356,6 +357,7 @@ class _StudentFeedbackScreenState extends State<StudentFeedbackScreen> with Sing
                       return;
                     }
 
+                    final messenger = ScaffoldMessenger.of(context);
                     Navigator.pop(dialogCtx);
                     try {
                       await _controller.editFeedback(
@@ -366,13 +368,13 @@ class _StudentFeedbackScreenState extends State<StudentFeedbackScreen> with Sing
                         attachments: editAttachments,
                       );
                       if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        messenger.showSnackBar(
                           const SnackBar(content: Text('Feedback updated successfully!'), backgroundColor: Colors.green),
                         );
                       }
                     } catch (e) {
                       if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        messenger.showSnackBar(
                           SnackBar(content: Text('Failed to update: $e'), backgroundColor: Colors.redAccent),
                         );
                       }

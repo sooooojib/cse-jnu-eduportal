@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -210,19 +212,48 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   ImageProvider? _resolveAvatar(String? url) {
     if (url == null || url.trim().isEmpty) return null;
     final trimmed = url.trim();
+
+    // 1. Base64
     if (trimmed.startsWith('data:image')) {
       final commaIdx = trimmed.indexOf(',');
       if (commaIdx != -1) {
         try {
           final base64Str = trimmed.substring(commaIdx + 1);
-          final bytes = base64Decode(base64Str);
-          return MemoryImage(bytes);
+          return MemoryImage(base64Decode(base64Str));
         } catch (_) {
           return null;
         }
       }
     }
-    return NetworkImage(trimmed);
+
+    // 2. Prevent local paths (/data/... or file:///...) from being treated as NetworkImage
+    if (trimmed.startsWith('/') || trimmed.startsWith('file:')) {
+      if (!kIsWeb) {
+        try {
+          String cleanPath = trimmed;
+          if (trimmed.startsWith('file:')) {
+            final uri = Uri.tryParse(trimmed);
+            cleanPath = uri != null && uri.isScheme('file') ? uri.toFilePath() : trimmed.replaceFirst(RegExp(r'^file:\/{1,3}'), '/');
+          }
+          final file = File(cleanPath);
+          if (file.existsSync()) {
+            return FileImage(file);
+          }
+        } catch (_) {}
+      }
+      return null;
+    }
+
+    // 3. Remote HTTP/HTTPS URLs with non-empty host
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      final uri = Uri.tryParse(trimmed);
+      if (uri != null && uri.hasAuthority && uri.host.isNotEmpty) {
+        return NetworkImage(trimmed);
+      }
+      return null;
+    }
+
+    return null;
   }
 
   @override
@@ -261,6 +292,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   ? const Color(0xFF1E3A8A).withValues(alpha: 0.35)
                   : const Color(0xFFEFF6FF),
               backgroundImage: avatarProvider,
+              onBackgroundImageError: avatarProvider != null ? (_, __) {} : null,
               child: avatarProvider == null
                   ? Text(
                       currentUser != null && currentUser.fullName.isNotEmpty
@@ -353,10 +385,27 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               TimeAwareClassesCard(
                 classes: data.timeAwareClasses,
                 exams: data.timeAwareExams,
+                todayClasses: data.effectiveTodayClasses,
+                tomorrowClasses: data.effectiveTomorrowClasses,
+                todayExams: data.effectiveTodayExams,
+                tomorrowExams: data.effectiveTomorrowExams,
+                todayDateLabel: data.todayDateLabel.isNotEmpty ? data.todayDateLabel : data.targetDateLabel,
+                tomorrowDateLabel: data.tomorrowDateLabel.isNotEmpty ? data.tomorrowDateLabel : data.targetDateLabel,
                 isTomorrow: data.isTomorrow,
                 dateLabel: data.targetDateLabel,
                 onStartAttendance: _handleStartAttendance,
                 onExamTap: (exam) => _showModuleComingSoon('Exam Invigilation (${exam.courseCode})'),
+                onViewFullSchedule: () {
+                  if (widget.onNavigateTab != null) {
+                    widget.onNavigateTab!(2);
+                    return;
+                  }
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const TeacherScheduleScreen(),
+                    ),
+                  );
+                },
               ),
 
               const SizedBox(height: 24),

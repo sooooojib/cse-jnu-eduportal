@@ -82,6 +82,8 @@ class _ScheduleSlotFormDialogState extends State<ScheduleSlotFormDialog> {
     'TUESDAY',
     'WEDNESDAY',
     'THURSDAY',
+    'FRIDAY',
+    'SATURDAY',
   ];
 
   final List<String> _availableRooms = [
@@ -89,8 +91,12 @@ class _ScheduleSlotFormDialogState extends State<ScheduleSlotFormDialog> {
     'Room 402',
     'Room 403',
     'Room 501',
+    'Room 501 (Academic Complex)',
+    'Room 601',
+    'Room 602',
     'Lab 1 (Networking)',
     'Lab 2 (Software)',
+    'Lab 3 (AI & Data)',
     'Lab 4 (Systems)',
   ];
 
@@ -112,14 +118,19 @@ class _ScheduleSlotFormDialogState extends State<ScheduleSlotFormDialog> {
     _targetSemester = widget.existingSlot?.targetSemester ?? widget.defaultSemester ?? 1;
     _isExtraClass = widget.existingSlot?.isExtraClass ?? (widget.userRole == UserRole.cr);
 
-    if (widget.userRole == UserRole.cr) {
+    if (widget.existingSlot != null) {
+      _selectedDay = widget.existingSlot!.dayOfWeek;
+    } else if (widget.userRole == UserRole.cr) {
       _selectedDay = _tomorrowDayOfWeek;
     } else {
-      _selectedDay = widget.existingSlot?.dayOfWeek ?? 'SUNDAY';
+      _selectedDay = 'SUNDAY';
     }
 
     if (widget.existingSlot != null) {
       _selectedRoom = widget.existingSlot!.room;
+      if (_selectedRoom.isNotEmpty && !_availableRooms.contains(_selectedRoom)) {
+        _availableRooms.insert(0, _selectedRoom);
+      }
       _startTime = _parseTimeOfDay(widget.existingSlot!.startTime) ?? const TimeOfDay(hour: 9, minute: 0);
       _endTime = _parseTimeOfDay(widget.existingSlot!.endTime) ?? const TimeOfDay(hour: 10, minute: 30);
     }
@@ -173,24 +184,46 @@ class _ScheduleSlotFormDialogState extends State<ScheduleSlotFormDialog> {
               (c) => c?.id == widget.existingSlot!.courseId || c?.code == widget.existingSlot!.courseCode,
               orElse: () => null,
             );
+        if (_selectedCourse == null && widget.existingSlot!.courseCode.isNotEmpty) {
+          final fallbackCourse = Course(
+            id: widget.existingSlot!.courseId.isNotEmpty ? widget.existingSlot!.courseId : widget.existingSlot!.courseCode,
+            code: widget.existingSlot!.courseCode,
+            title: widget.existingSlot!.courseTitle.isNotEmpty ? widget.existingSlot!.courseTitle : widget.existingSlot!.courseCode,
+            credit: 3.0,
+            year: _targetYear,
+            semester: _targetSemester,
+            courseType: 'THEORY',
+          );
+          _availableCourses = [fallbackCourse, ..._availableCourses];
+          _selectedCourse = fallbackCourse;
+        }
+
         _selectedTeacher = teachers.cast<Map<String, String>?>().firstWhere(
               (t) => t?['id'] == widget.existingSlot!.teacherId,
               orElse: () => null,
             );
+        if (_selectedTeacher == null && widget.existingSlot!.teacherId.isNotEmpty) {
+          final fallbackTeacher = {
+            'id': widget.existingSlot!.teacherId,
+            'name': widget.existingSlot!.teacherName.isNotEmpty ? widget.existingSlot!.teacherName : 'Assigned Faculty',
+          };
+          _availableTeachers = [fallbackTeacher, ..._availableTeachers];
+          _selectedTeacher = fallbackTeacher;
+        }
       }
 
-      if (_selectedCourse == null && courses.isNotEmpty) {
-        _selectedCourse = courses.first;
+      if (_selectedCourse == null && _availableCourses.isNotEmpty) {
+        _selectedCourse = _availableCourses.first;
       }
 
       if (_selectedTeacher == null) {
         if (widget.preselectedTeacherId != null) {
-          _selectedTeacher = teachers.cast<Map<String, String>?>().firstWhere(
+          _selectedTeacher = _availableTeachers.cast<Map<String, String>?>().firstWhere(
                 (t) => t?['id'] == widget.preselectedTeacherId,
-                orElse: () => teachers.isNotEmpty ? teachers.first : null,
+                orElse: () => _availableTeachers.isNotEmpty ? _availableTeachers.first : null,
               );
-        } else if (teachers.isNotEmpty) {
-          _selectedTeacher = teachers.first;
+        } else if (_availableTeachers.isNotEmpty) {
+          _selectedTeacher = _availableTeachers.first;
         }
       }
     });
@@ -388,7 +421,11 @@ class _ScheduleSlotFormDialogState extends State<ScheduleSlotFormDialog> {
       targetYear: _targetYear,
       targetSemester: _targetSemester,
       isExtraClass: _isExtraClass,
-      date: widget.userRole == UserRole.cr ? _tomorrowDateString : widget.existingSlot?.date,
+      date: _selectedDay == _tomorrowDayOfWeek
+          ? (widget.userRole == UserRole.cr ? _tomorrowDateString : widget.existingSlot?.date)
+          : widget.existingSlot?.date,
+      createdBy: widget.existingSlot?.createdBy,
+      status: widget.existingSlot?.status ?? 'SCHEDULED',
     );
 
     setState(() => _isSubmitting = true);
@@ -407,7 +444,22 @@ class _ScheduleSlotFormDialogState extends State<ScheduleSlotFormDialog> {
     } else {
       setState(() {
         _isSubmitting = false;
-        _formError = _scheduleController.actionError ?? 'Failed to save schedule slot.';
+        final rawErr = _scheduleController.actionError ?? 'Failed to save schedule slot.';
+        final cleanErr = rawErr
+            .replaceAll('Exception: ', '')
+            .replaceAll('ServerException: ', '')
+            .replaceAll('Failure: ', '')
+            .trim();
+        if (cleanErr.isEmpty ||
+            cleanErr.toUpperCase() == 'NOT_FOUND' ||
+            cleanErr.toLowerCase().contains('not_found') ||
+            cleanErr.toLowerCase().contains('internal')) {
+          _formError = 'Unable to save schedule slot. Please try again.';
+        } else if (cleanErr.contains('permission-denied')) {
+          _formError = 'Permission denied. Only authorized CR, Teacher, or Admin can modify this slot.';
+        } else {
+          _formError = cleanErr;
+        }
       });
     }
   }
@@ -458,10 +510,10 @@ class _ScheduleSlotFormDialogState extends State<ScheduleSlotFormDialog> {
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
                         ),
                         Text(
-                          isCr ? 'CR Mode — Approved Tomorrow-Only Rule' : 'Academic Scheduling Terminal',
+                          isCr ? 'CR Routine Mode (Year $_targetYear · Sem $_targetSemester)' : 'Academic Scheduling Terminal',
                           style: TextStyle(
                             fontSize: 12,
-                            color: isCr ? const Color(0xFFC2410C) : (isDark ? Colors.white60 : Colors.black54),
+                            color: isCr ? const Color(0xFF2563EB) : (isDark ? Colors.white60 : Colors.black54),
                           ),
                         ),
                       ],
@@ -486,25 +538,25 @@ class _ScheduleSlotFormDialogState extends State<ScheduleSlotFormDialog> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Server-side CR Tomorrow rule callout
+                            // CR Routine Helper Banner
                             if (isCr)
                               Container(
                                 margin: const EdgeInsets.only(bottom: 16),
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFFFF7ED),
-                                  border: Border.all(color: const Color(0xFFFED7AA)),
+                                  color: isDark ? const Color(0xFF1E293B) : const Color(0xFFEFF6FF),
+                                  border: Border.all(color: const Color(0xFF3B82F6).withOpacity(0.3)),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Row(
                                   children: [
-                                    const Icon(Icons.info_outline, color: Color(0xFFC2410C), size: 20),
+                                    const Icon(Icons.calendar_month_rounded, color: Color(0xFF2563EB), size: 20),
                                     const SizedBox(width: 10),
                                     Expanded(
                                       child: Text(
-                                        'CR Rule: Scheduling is strictly restricted to tomorrow ($_tomorrowDayOfWeek, $_tomorrowDateString) for Year $_targetYear Sem $_targetSemester.',
-                                        style: const TextStyle(
-                                          color: Color(0xFFC2410C),
+                                        'CR Routine Editor · Defaulted to tomorrow ($_tomorrowDayOfWeek) · Select any day to set future routine for Year $_targetYear, Sem $_targetSemester.',
+                                        style: TextStyle(
+                                          color: isDark ? const Color(0xFF93C5FD) : const Color(0xFF1E40AF),
                                           fontSize: 12,
                                           fontWeight: FontWeight.w600,
                                         ),
@@ -539,131 +591,211 @@ class _ScheduleSlotFormDialogState extends State<ScheduleSlotFormDialog> {
                               ),
 
                             // Course Selection Dropdown
-                            const Text('Course *', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                            const SizedBox(height: 6),
-                            DropdownButtonFormField<Course>(
-                              value: _selectedCourse,
-                              isExpanded: true,
-                              decoration: InputDecoration(
-                                filled: true,
-                                fillColor: isDark ? AppColors.surfaceContainerDark : const Color(0xFFF8FAFC),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                              ),
-                              items: _availableCourses.map((c) {
-                                return DropdownMenuItem<Course>(
-                                  value: c,
-                                  child: Text('${c.code}: ${c.title}', overflow: TextOverflow.ellipsis),
+                            Builder(
+                              builder: (context) {
+                                final Map<String, Course> courseMap = {};
+                                if (_selectedCourse != null) {
+                                  courseMap[_selectedCourse!.id] = _selectedCourse!;
+                                }
+                                for (final c in _availableCourses) {
+                                  courseMap[c.id] = c;
+                                }
+                                final effectiveCourses = courseMap.values.toList();
+                                final currentCourse = _selectedCourse != null ? courseMap[_selectedCourse!.id] : (effectiveCourses.isNotEmpty ? effectiveCourses.first : null);
+
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Course *', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                    const SizedBox(height: 6),
+                                    DropdownButtonFormField<Course>(
+                                      value: currentCourse,
+                                      isExpanded: true,
+                                      decoration: InputDecoration(
+                                        filled: true,
+                                        fillColor: isDark ? AppColors.surfaceContainerDark : const Color(0xFFF8FAFC),
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                      ),
+                                      items: effectiveCourses.map((c) {
+                                        return DropdownMenuItem<Course>(
+                                          value: c,
+                                          child: Text('${c.code}: ${c.title}', overflow: TextOverflow.ellipsis),
+                                        );
+                                      }).toList(),
+                                      onChanged: (val) {
+                                        if (val != null) setState(() => _selectedCourse = val);
+                                      },
+                                    ),
+                                  ],
                                 );
-                              }).toList(),
-                              onChanged: (val) {
-                                if (val != null) setState(() => _selectedCourse = val);
                               },
                             ),
                             const SizedBox(height: 16),
 
                             // Teacher Selection + Availability Check
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Flexible(
-                                  child: Text(
-                                    'Faculty / Teacher *',
-                                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                TextButton.icon(
-                                  onPressed: _checkTeacherAvailability,
-                                  icon: const Icon(Icons.event_available, size: 16),
-                                  label: const Text('Check Availability', style: TextStyle(fontSize: 12)),
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: AppColors.primary,
-                                    visualDensity: VisualDensity.compact,
-                                    padding: EdgeInsets.zero,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            DropdownButtonFormField<Map<String, String>>(
-                              value: _selectedTeacher,
-                              isExpanded: true,
-                              decoration: InputDecoration(
-                                filled: true,
-                                fillColor: isDark ? AppColors.surfaceContainerDark : const Color(0xFFF8FAFC),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                              ),
-                              items: _availableTeachers.map((t) {
-                                return DropdownMenuItem<Map<String, String>>(
-                                  value: t,
-                                  child: Text(t['name'] ?? '', overflow: TextOverflow.ellipsis),
+                            Builder(
+                              builder: (context) {
+                                final Map<String, Map<String, String>> teacherMap = {};
+                                if (_selectedTeacher != null && (_selectedTeacher!['id']?.isNotEmpty ?? false)) {
+                                  teacherMap[_selectedTeacher!['id']!] = _selectedTeacher!;
+                                }
+                                for (final t in _availableTeachers) {
+                                  final id = t['id'];
+                                  if (id != null && id.isNotEmpty) {
+                                    teacherMap[id] = t;
+                                  }
+                                }
+                                final effectiveTeachers = teacherMap.values.toList();
+                                final currentTeacher = _selectedTeacher != null ? teacherMap[_selectedTeacher!['id']] : (effectiveTeachers.isNotEmpty ? effectiveTeachers.first : null);
+
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        const Flexible(
+                                          child: Text(
+                                            'Faculty / Teacher *',
+                                            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        TextButton.icon(
+                                          onPressed: _checkTeacherAvailability,
+                                          icon: const Icon(Icons.event_available, size: 16),
+                                          label: const Text('Check Availability', style: TextStyle(fontSize: 12)),
+                                          style: TextButton.styleFrom(
+                                            foregroundColor: AppColors.primary,
+                                            visualDensity: VisualDensity.compact,
+                                            padding: EdgeInsets.zero,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    DropdownButtonFormField<Map<String, String>>(
+                                      value: currentTeacher,
+                                      isExpanded: true,
+                                      decoration: InputDecoration(
+                                        filled: true,
+                                        fillColor: isDark ? AppColors.surfaceContainerDark : const Color(0xFFF8FAFC),
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                      ),
+                                      items: effectiveTeachers.map((t) {
+                                        return DropdownMenuItem<Map<String, String>>(
+                                          value: t,
+                                          child: Text(t['name'] ?? '', overflow: TextOverflow.ellipsis),
+                                        );
+                                      }).toList(),
+                                      onChanged: (val) {
+                                        if (val != null) setState(() => _selectedTeacher = val);
+                                      },
+                                    ),
+                                  ],
                                 );
-                              }).toList(),
-                              onChanged: (val) {
-                                if (val != null) setState(() => _selectedTeacher = val);
                               },
                             ),
                             const SizedBox(height: 16),
 
                             // Day of Week
-                            const Text('Day of Week *', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                            const SizedBox(height: 6),
-                            if (isCr)
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                                decoration: BoxDecoration(
-                                  color: isDark ? AppColors.surfaceContainerDark : const Color(0xFFF1F5F9),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.grey.withOpacity(0.3)),
-                                ),
-                                child: Text(
-                                  '$_tomorrowDayOfWeek (Tomorrow, $_tomorrowDateString)',
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                              )
-                            else
-                              DropdownButtonFormField<String>(
-                                value: _selectedDay,
-                                decoration: InputDecoration(
-                                  filled: true,
-                                  fillColor: isDark ? AppColors.surfaceContainerDark : const Color(0xFFF8FAFC),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                                ),
-                                items: _daysOfWeek.map((d) {
-                                  return DropdownMenuItem<String>(
-                                    value: d,
-                                    child: Text(d),
-                                  );
-                                }).toList(),
-                                onChanged: (val) {
-                                  if (val != null) setState(() => _selectedDay = val);
-                                },
-                              ),
+                            Builder(
+                              builder: (context) {
+                                final effectiveDays = <String>{
+                                  if (_selectedDay.isNotEmpty) _selectedDay,
+                                  ..._daysOfWeek,
+                                }.toList();
+                                final currentDay = effectiveDays.contains(_selectedDay) ? _selectedDay : effectiveDays.first;
+
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Day of Week *', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                    const SizedBox(height: 6),
+                                    DropdownButtonFormField<String>(
+                                      value: currentDay,
+                                      isExpanded: true,
+                                      decoration: InputDecoration(
+                                        filled: true,
+                                        fillColor: isDark ? AppColors.surfaceContainerDark : const Color(0xFFF8FAFC),
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                      ),
+                                      items: effectiveDays.map((d) {
+                                        final isTomorrow = d == _tomorrowDayOfWeek;
+                                        return DropdownMenuItem<String>(
+                                          value: d,
+                                          child: Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Text(d),
+                                              if (isTomorrow)
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFF0284C7).withOpacity(0.12),
+                                                    borderRadius: BorderRadius.circular(8),
+                                                  ),
+                                                  child: const Text(
+                                                    'Tomorrow',
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      color: Color(0xFF0284C7),
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        );
+                                      }).toList(),
+                                      onChanged: (val) {
+                                        if (val != null) setState(() => _selectedDay = val);
+                                      },
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
                             const SizedBox(height: 16),
 
                             // Room Selection
-                            const Text('Classroom / Lab *', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                            const SizedBox(height: 6),
-                            DropdownButtonFormField<String>(
-                              value: _selectedRoom,
-                              decoration: InputDecoration(
-                                filled: true,
-                                fillColor: isDark ? AppColors.surfaceContainerDark : const Color(0xFFF8FAFC),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                              ),
-                              items: _availableRooms.map((r) {
-                                return DropdownMenuItem<String>(
-                                  value: r,
-                                  child: Text(r),
+                            Builder(
+                              builder: (context) {
+                                final effectiveRooms = <String>{
+                                  if (_selectedRoom.isNotEmpty) _selectedRoom,
+                                  ..._availableRooms,
+                                }.toList();
+                                final currentRoom = effectiveRooms.contains(_selectedRoom) ? _selectedRoom : effectiveRooms.first;
+
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Classroom / Lab *', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                    const SizedBox(height: 6),
+                                    DropdownButtonFormField<String>(
+                                      value: currentRoom,
+                                      isExpanded: true,
+                                      decoration: InputDecoration(
+                                        filled: true,
+                                        fillColor: isDark ? AppColors.surfaceContainerDark : const Color(0xFFF8FAFC),
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                      ),
+                                      items: effectiveRooms.map((r) {
+                                        return DropdownMenuItem<String>(
+                                          value: r,
+                                          child: Text(r),
+                                        );
+                                      }).toList(),
+                                      onChanged: (val) {
+                                        if (val != null) setState(() => _selectedRoom = val);
+                                      },
+                                    ),
+                                  ],
                                 );
-                              }).toList(),
-                              onChanged: (val) {
-                                if (val != null) setState(() => _selectedRoom = val);
                               },
                             ),
                             const SizedBox(height: 16),
@@ -789,7 +921,7 @@ class _ScheduleSlotFormDialogState extends State<ScheduleSlotFormDialog> {
                               width: 20,
                               child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                             )
-                          : Text(isEditing ? 'Save Changes' : (isCr ? 'Schedule for Tomorrow' : 'Schedule Class')),
+                          : Text(isEditing ? 'Save Changes' : (isCr && _selectedDay == _tomorrowDayOfWeek ? 'Schedule for Tomorrow' : 'Schedule Class')),
                     ),
                   ),
                 ],

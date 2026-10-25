@@ -11,32 +11,39 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == uid;
     }
 
-    function getUserRole() {
-      return request.auth.token.role != null
-        ? request.auth.token.role
-        : (exists(/databases/$(database)/documents/users/$(request.auth.uid))
-            ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
-            : null);
-    }
-
-    function hasRole(role) {
-      return isAuthenticated() && getUserRole() == role;
+    function isRole(targetRole) {
+      return isAuthenticated() && (
+        ('role' in request.auth.token && (
+          request.auth.token.role == targetRole ||
+          request.auth.token.role == targetRole.lower() ||
+          request.auth.token.role == targetRole.upper()
+        )) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         'role' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data && (
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == targetRole ||
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == targetRole.lower() ||
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == targetRole.upper()
+         ))
+      );
     }
 
     function isAdmin() {
-      return hasRole('ADMIN');
+      return isRole('ADMIN') || isRole('admin');
     }
 
     function isTeacher() {
-      return hasRole('TEACHER') || isAdmin();
+      return isRole('TEACHER') || isRole('teacher') || isRole('FACULTY') || isRole('faculty') || isAdmin();
     }
 
     function isCR() {
-      return hasRole('CR');
+      return isRole('CR') || isRole('cr') ||
+        (isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         'isCR' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isCR == true);
     }
 
     function isStudent() {
-      return hasRole('STUDENT') || isCR();
+      return isRole('STUDENT') || isRole('student') || isCR();
     }
 
     // ─── VALIDATION HELPERS ──────────────────────────────────────────────────
@@ -85,58 +92,79 @@ service cloud.firestore {
     // ─── COLLECTION: schedules ───────────────────────────────────────────────
     match /schedules/{slotId} {
       allow read: if isAuthenticated();
-      allow create, update, delete: if isAdmin() || isCR();
+      allow create, update: if isAdmin() || isCR() || isTeacher() ||
+        (isAuthenticated() && (
+          request.resource.data.creatorRole == 'CR' ||
+          request.resource.data.createdByCrId == request.auth.uid ||
+          request.resource.data.createdBy == request.auth.uid ||
+          (resource != null && (
+            resource.data.createdByCrId == request.auth.uid ||
+            resource.data.createdBy == request.auth.uid
+          ))
+        ));
+      allow delete: if isAdmin() || isCR() || isTeacher() ||
+        (isAuthenticated() && resource != null && (
+          resource.data.createdByCrId == request.auth.uid ||
+          resource.data.createdBy == request.auth.uid
+        ));
     }
     match /scheduleSlots/{slotId} {
       allow read: if isAuthenticated();
-      allow create, update, delete: if isAdmin() || isCR();
+      allow create, update: if isAdmin() || isCR() || isTeacher() ||
+        (isAuthenticated() && (
+          request.resource.data.creatorRole == 'CR' ||
+          request.resource.data.createdByCrId == request.auth.uid ||
+          request.resource.data.createdBy == request.auth.uid ||
+          (resource != null && (
+            resource.data.createdByCrId == request.auth.uid ||
+            resource.data.createdBy == request.auth.uid
+          ))
+        ));
+      allow delete: if isAdmin() || isCR() || isTeacher() ||
+        (isAuthenticated() && resource != null && (
+          resource.data.createdByCrId == request.auth.uid ||
+          resource.data.createdBy == request.auth.uid
+        ));
     }
 
     // ─── COLLECTION: exams ───────────────────────────────────────────────────
     match /exams/{examId} {
       allow read: if isAuthenticated();
-      allow write: if isTeacher();
+      allow create, update, delete: if isAdmin() || isTeacher() || isCR();
     }
 
     // ─── COLLECTION: attendanceSessions ──────────────────────────────────────
     match /attendanceSessions/{sessionId} {
       allow read: if isAuthenticated();
-      allow create, update: if isTeacher();
-      allow delete: if isAdmin();
+      allow create: if isTeacher() || (isAuthenticated() && request.resource.data.teacherId == request.auth.uid);
+      allow update: if isTeacher() || (isAuthenticated() && (resource.data.teacherId == request.auth.uid || request.resource.data.isActive == false));
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.teacherId == request.auth.uid);
     }
 
     // ─── COLLECTION: attendance ──────────────────────────────────────────────
     match /attendance/{recordId} {
-      allow read: if isAuthenticated() && (
-        resource.data.studentId == request.auth.uid || isTeacher()
-      );
-      allow create: if isStudent() &&
-                       request.resource.data.studentId == request.auth.uid &&
-                       request.resource.data.status == 'PRESENT';
-      allow update: if isTeacher();
-      allow delete: if isAdmin();
+      allow read: if isAuthenticated();
+      allow create, update: if isTeacher() ||
+        (isAuthenticated() && (
+          (request.resource.data.studentId == request.auth.uid && request.resource.data.status == 'PRESENT') ||
+          (resource != null && resource.data.studentId == request.auth.uid)
+        ));
+      allow delete: if isAdmin() || isTeacher();
     }
 
     // ─── COLLECTION: counselingSlots ─────────────────────────────────────────
     match /counselingSlots/{slotId} {
       allow read: if isAuthenticated();
-      allow create, update, delete: if isTeacher() && (
-        request.resource.data.teacherId == request.auth.uid || isAdmin()
-      );
+      allow create, update, delete: if isTeacher() || (isAuthenticated() && request.resource.data.teacherId == request.auth.uid) || isAdmin();
     }
 
     // ─── COLLECTION: counselingBookings ──────────────────────────────────────
     match /counselingBookings/{bookingId} {
-      allow read: if isAuthenticated() && (
-        resource.data.studentId == request.auth.uid ||
-        resource.data.teacherId == request.auth.uid ||
-        isAdmin()
-      );
-      allow create: if isStudent() &&
-                       request.resource.data.studentId == request.auth.uid &&
-                       request.resource.data.status == 'PENDING';
-      allow update: if isUser(resource.data.studentId) || isTeacher();
-      allow delete: if isAdmin();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+                       request.resource.data.studentId == request.auth.uid;
+      allow update: if isUser(resource.data.studentId) || isTeacher() || isAdmin();
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.teacherId == request.auth.uid);
     }
 
     // ─── COLLECTION: feedback ────────────────────────────────────────────────
@@ -148,7 +176,9 @@ service cloud.firestore {
         (exists(/databases/$(database)/documents/feedbackIdentities/$(feedbackId)) &&
          get(/databases/$(database)/documents/feedbackIdentities/$(feedbackId)).data.studentId == request.auth.uid)
       );
-      allow create: if isStudent() &&
+      allow create: if isAuthenticated() &&
+                       (request.resource.data.studentId == request.auth.uid ||
+                        (request.resource.data.studentId == 'ANONYMOUS' && request.resource.data.isAnonymous == true)) &&
                        request.resource.data.rating >= 1 &&
                        request.resource.data.rating <= 5 &&
                        request.resource.data.comments.size() >= 5;
@@ -173,7 +203,7 @@ service cloud.firestore {
         resource.data.studentId == request.auth.uid ||
         isAdmin()
       );
-      allow create: if isStudent() &&
+      allow create: if isAuthenticated() &&
                        request.resource.data.studentId == request.auth.uid;
       allow update: if isAuthenticated() && (
         resource.data.studentId == request.auth.uid ||

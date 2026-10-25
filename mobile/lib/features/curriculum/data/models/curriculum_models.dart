@@ -333,6 +333,51 @@ class ExamModel extends Exam {
     return ExamModel.fromJson({'id': doc.id, ...data});
   }
 
+  @override
+  ExamModel copyWith({
+    String? id,
+    String? courseId,
+    String? courseCode,
+    String? courseTitle,
+    String? title,
+    String? examDate,
+    String? startTime,
+    String? endTime,
+    String? room,
+    int? year,
+    int? semester,
+    String? type,
+    String? instructions,
+    String? invigilatorName,
+    String? invigilatorId,
+    String? createdBy,
+    String? creatorRole,
+    String? createdAt,
+    String? updatedAt,
+  }) {
+    return ExamModel(
+      id: id ?? this.id,
+      courseId: courseId ?? this.courseId,
+      courseCode: courseCode ?? this.courseCode,
+      courseTitle: courseTitle ?? this.courseTitle,
+      title: title ?? this.title,
+      examDate: examDate ?? this.examDate,
+      startTime: startTime ?? this.startTime,
+      endTime: endTime ?? this.endTime,
+      room: room ?? this.room,
+      year: year ?? this.year,
+      semester: semester ?? this.semester,
+      type: type ?? this.type,
+      instructions: instructions ?? this.instructions,
+      invigilatorName: invigilatorName ?? this.invigilatorName,
+      invigilatorId: invigilatorId ?? this.invigilatorId,
+      createdBy: createdBy ?? this.createdBy,
+      creatorRole: creatorRole ?? this.creatorRole,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,

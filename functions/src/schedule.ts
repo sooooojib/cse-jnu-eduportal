@@ -165,27 +165,9 @@ export const createScheduleSlot = onCall(async (request) => {
     throw new HttpsError("invalid-argument", `Invalid day of week: ${dayOfWeek}`);
   }
 
-  // ─── CR TOMORROW-ONLY SCHEDULING RULE ───
-  const { tomorrowDate, tomorrowDayOfWeek } = getTomorrowInfo();
-
+  // ─── CR COHORT LOCK RULE ───
   if (isCR) {
-    // 1. Must match tomorrow's day of week
-    if (normDayOfWeek !== tomorrowDayOfWeek) {
-      throw new HttpsError(
-        "failed-precondition",
-        `CR_TOMORROW_ONLY: Class Representatives are strictly restricted to scheduling classes for tomorrow (${tomorrowDayOfWeek}, ${tomorrowDate}).`
-      );
-    }
-
-    // 2. If explicit date is supplied, it must strictly be tomorrow's date
-    if (date && typeof date === "string" && date.trim() !== tomorrowDate) {
-      throw new HttpsError(
-        "failed-precondition",
-        `CR_TOMORROW_ONLY: Class Representatives can only schedule for tomorrow (${tomorrowDate}). Specified date "${date}" is invalid.`
-      );
-    }
-
-    // 3. Cohort Lock: CR can only schedule for their own registered academic year and semester
+    // Cohort Lock: CR can schedule routine for any day of the week, but only for their own registered academic year and semester
     if (userData.year !== targetYear || userData.semester !== targetSemester) {
       throw new HttpsError(
         "permission-denied",
@@ -231,7 +213,7 @@ export const createScheduleSlot = onCall(async (request) => {
 
   // ─── CONFLICT DETECTION & ATOMIC INSERTION TRANSACTION ───
   const cleanRoom = room.trim();
-  const effectiveDate = date ? date.trim() : (isCR ? tomorrowDate : null);
+  const effectiveDate = date && typeof date === "string" && date.trim().length > 0 ? date.trim() : null;
 
   const newSlotRef = db.collection("schedules").doc();
 
@@ -358,13 +340,9 @@ export const updateScheduleSlot = onCall(async (request) => {
       }
     }
 
-    const { tomorrowDate } = getTomorrowInfo();
     if (isCR) {
       if (current.createdBy !== callerUid && current.targetYear !== userData.year) {
         throw new HttpsError("permission-denied", "CR can only edit slots created for their cohort.");
-      }
-      if (current.date && current.date !== tomorrowDate) {
-        throw new HttpsError("failed-precondition", "CR can only edit slots scheduled for tomorrow.");
       }
     }
 
@@ -469,12 +447,8 @@ export const deleteScheduleSlot = onCall(async (request) => {
   }
 
   if (isCR) {
-    const { tomorrowDate } = getTomorrowInfo();
     if (slot.createdBy !== callerUid && slot.targetYear !== userData.year) {
       throw new HttpsError("permission-denied", "CR can only delete slots within their cohort.");
-    }
-    if (slot.date && slot.date !== tomorrowDate) {
-      throw new HttpsError("failed-precondition", "CR can only delete slots scheduled for tomorrow.");
     }
   }
 

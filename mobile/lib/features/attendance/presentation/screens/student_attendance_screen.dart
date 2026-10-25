@@ -45,11 +45,12 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
       return;
     }
 
+    final messenger = ScaffoldMessenger.of(context);
     try {
       await _controller.submitVerificationCode(code, courseId: _selectedCourseId);
       _codeController.clear();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           const SnackBar(
             content: Text('Attendance marked successfully!'),
             backgroundColor: Colors.green,
@@ -58,9 +59,18 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        String msg = e.toString()
+            .replaceAll('Exception: ', '')
+            .replaceAll('ServerException: ', '')
+            .replaceAll('Failure: ', '')
+            .replaceAll('ServerFailure: ', '')
+            .trim();
+        if (msg.contains('Dart exception thrown from converted Future') || msg.contains('boxed error')) {
+          msg = 'Unable to verify code at this time. Please check your network and try again.';
+        }
+        messenger.showSnackBar(
           SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
+            content: Text(msg.isEmpty ? 'Failed to verify attendance code.' : msg),
             backgroundColor: Colors.redAccent,
           ),
         );

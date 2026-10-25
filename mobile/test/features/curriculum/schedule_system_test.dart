@@ -397,7 +397,7 @@ void main() {
   // 4. SCHEDULE SLOT FORM DIALOG WIDGET TESTS
   // ═══════════════════════════════════════════════════════════════════════════
   group('ScheduleSlotFormDialog Widget Tests', () {
-    testWidgets('For CR role, locks day to tomorrow and displays CR tomorrow-only rule', (tester) async {
+    testWidgets('For CR role, defaults to tomorrow but allows selecting any day for routine', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -411,9 +411,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('CR Mode — Approved Tomorrow-Only Rule'), findsOneWidget);
-      expect(find.textContaining('CR Rule: Scheduling is strictly restricted to tomorrow'), findsOneWidget);
+      expect(find.textContaining('CR Routine Mode'), findsOneWidget);
+      expect(find.textContaining('CR Routine Editor'), findsOneWidget);
       expect(find.text('Schedule for Tomorrow'), findsOneWidget);
+      expect(find.text('Day of Week *'), findsOneWidget);
       expect(find.text('Course *'), findsOneWidget);
       expect(find.text('Faculty / Teacher *'), findsOneWidget);
       expect(find.text('Classroom / Lab *'), findsOneWidget);

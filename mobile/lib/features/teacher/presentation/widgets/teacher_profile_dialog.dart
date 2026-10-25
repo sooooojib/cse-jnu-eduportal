@@ -12,7 +12,9 @@ import '../../../../shared/widgets/theme/theme_toggle_button.dart';
 import '../../../auth/domain/entities/user.dart';
 import '../../../auth/domain/repositories/user_repository.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
-import '../../../dashboard/presentation/widgets/app_settings_bottom_sheet.dart';
+import 'package:flutter/foundation.dart';
+import '../../../../core/constants/role_constants.dart';
+import '../../../../core/utils/avatar_image_resolver.dart';
 
 class TeacherProfileDialog extends StatefulWidget {
   final User teacher;
@@ -77,19 +79,7 @@ class _TeacherProfileDialogState extends State<TeacherProfileDialog> {
   }
 
   ImageProvider? _resolveAvatarImage(String? url, String? localPath) {
-    if (localPath != null && localPath.isNotEmpty && File(localPath).existsSync()) {
-      return FileImage(File(localPath));
-    }
-    if (url == null || url.isEmpty) return null;
-    if (url.startsWith('data:image')) {
-      try {
-        final base64Str = url.split(',').last;
-        return MemoryImage(base64Decode(base64Str));
-      } catch (_) {
-        return null;
-      }
-    }
-    return NetworkImage(url);
+    return AvatarImageResolver.resolve(url, localPath);
   }
 
   Future<void> _showPhotoPickerSheet(BuildContext context, bool isDark) async {
@@ -260,7 +250,7 @@ class _TeacherProfileDialogState extends State<TeacherProfileDialog> {
       );
 
       if (picked != null) {
-        await _uploadImageFile(File(picked.path));
+        await _uploadImageFile(picked);
       }
     } catch (e) {
       if (mounted) {
@@ -285,7 +275,7 @@ class _TeacherProfileDialogState extends State<TeacherProfileDialog> {
       );
 
       if (picked != null) {
-        await _uploadImageFile(File(picked.path));
+        await _uploadImageFile(picked);
       }
     } catch (e) {
       if (mounted) {
@@ -300,10 +290,10 @@ class _TeacherProfileDialogState extends State<TeacherProfileDialog> {
     }
   }
 
-  Future<void> _uploadImageFile(File file) async {
+  Future<void> _uploadImageFile(XFile pickedFile) async {
     setState(() {
       _isUploadingPhoto = true;
-      _localPhotoPath = file.path;
+      _localPhotoPath = kIsWeb ? null : pickedFile.path;
     });
 
     String? uploadedUrl;
@@ -313,12 +303,17 @@ class _TeacherProfileDialogState extends State<TeacherProfileDialog> {
       fileName: fileName,
     );
 
+    Uint8List? fileBytes;
+    try {
+      fileBytes = await pickedFile.readAsBytes();
+    } catch (_) {}
+
     // 1. Upload via CloudStorageService
     try {
-      if (sl.isRegistered<CloudStorageService>()) {
+      if (!kIsWeb && sl.isRegistered<CloudStorageService>()) {
         final storageService = sl<CloudStorageService>();
         final uploadResult = await storageService.uploadFile(
-          file: file,
+          file: File(pickedFile.path),
           storagePath: storagePath,
           uploadedBy: widget.teacher.id,
           isImageOnly: true,
@@ -326,19 +321,35 @@ class _TeacherProfileDialogState extends State<TeacherProfileDialog> {
         uploadedUrl = uploadResult.downloadUrl;
       } else {
         final storageRef = FirebaseStorage.instance.ref(storagePath);
-        final uploadTask = storageRef.putFile(
-          file,
-          SettableMetadata(
-            contentType: 'image/jpeg',
-            customMetadata: {'uploadedBy': widget.teacher.id},
-          ),
-        );
+        UploadTask uploadTask;
+        if (kIsWeb && fileBytes != null) {
+          uploadTask = storageRef.putData(
+            fileBytes,
+            SettableMetadata(
+              contentType: 'image/jpeg',
+              customMetadata: {'uploadedBy': widget.teacher.id},
+            ),
+          );
+        } else {
+          uploadTask = storageRef.putFile(
+            File(pickedFile.path),
+            SettableMetadata(
+              contentType: 'image/jpeg',
+              customMetadata: {'uploadedBy': widget.teacher.id},
+            ),
+          );
+        }
         await uploadTask.timeout(const Duration(milliseconds: 3000));
         uploadedUrl = await storageRef.getDownloadURL();
       }
     } catch (e) {
       debugPrint('Cloud storage avatar upload error: $e');
-      uploadedUrl = file.path;
+      fileBytes ??= await pickedFile.readAsBytes().catchError((_) => Uint8List(0));
+      if (fileBytes.isNotEmpty) {
+        uploadedUrl = 'data:image/jpeg;base64,${base64Encode(fileBytes)}';
+      } else {
+        uploadedUrl = null;
+      }
     }
 
     // 3. Persist to Firestore and state
@@ -567,11 +578,12 @@ class _TeacherProfileDialogState extends State<TeacherProfileDialog> {
                             ? const Color(0xFF1E3A8A).withValues(alpha: 0.4)
                             : const Color(0xFFEFF6FF),
                         backgroundImage: avatarProvider,
+                        onBackgroundImageError: avatarProvider != null ? (_, __) {} : null,
                         child: (avatarProvider == null)
                             ? Text(
                                 _currentTeacher.fullName.isNotEmpty
                                     ? _currentTeacher.fullName.substring(0, 1).toUpperCase()
-                                    : 'P',
+                                    : (_currentTeacher.role == UserRole.admin ? 'A' : 'P'),
                                 style: const TextStyle(
                                   fontSize: 32,
                                   fontWeight: FontWeight.w800,
@@ -701,12 +713,21 @@ class _TeacherProfileDialogState extends State<TeacherProfileDialog> {
                 isDark: isDark,
               ),
               const Divider(height: 20),
-              _buildDetailRow(
-                icon: Icons.menu_book_outlined,
-                label: 'Assigned Courses',
-                value: '${widget.assignedCoursesCount} Courses',
-                isDark: isDark,
-              ),
+              if (_currentTeacher.role == UserRole.admin) ...[
+                _buildDetailRow(
+                  icon: Icons.admin_panel_settings_outlined,
+                  label: 'Access Level',
+                  value: 'Full System Control',
+                  isDark: isDark,
+                ),
+              ] else ...[
+                _buildDetailRow(
+                  icon: Icons.menu_book_outlined,
+                  label: 'Assigned Courses',
+                  value: '${widget.assignedCoursesCount} Courses',
+                  isDark: isDark,
+                ),
+              ],
               const Divider(height: 20),
               _buildDetailRow(
                 icon: Icons.phone_outlined,
@@ -745,80 +766,33 @@ class _TeacherProfileDialogState extends State<TeacherProfileDialog> {
           ),
         ),
 
-        const SizedBox(height: 12),
-
-        // App Settings Tile
-        InkWell(
-          onTap: () {
-            Navigator.pop(context);
-            AppSettingsBottomSheet.show(
-              context: context,
-              user: _currentTeacher,
-              authController: sl<AuthController>(),
-            );
-          },
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.tune_rounded,
-                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                  size: 20,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'App Settings & Preferences',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? Colors.white : const Color(0xFF0F172A),
-                    ),
-                  ),
-                ),
-                Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  size: 14,
-                  color: isDark ? Colors.white54 : Colors.black45,
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
 
         // Logout Action
         SizedBox(
           width: double.infinity,
           child: OutlinedButton.icon(
             onPressed: () async {
+              final isAdm = _currentTeacher.role == UserRole.admin;
               final confirmed = await AppConfirmationDialog.show(
                 context: context,
                 title: 'Sign Out?',
-                message: 'Are you sure you want to end your faculty session and sign out?',
+                message: 'Are you sure you want to end your ${isAdm ? "administrator" : "faculty"} session and sign out?',
                 confirmText: 'Sign Out',
                 isDestructive: true,
                 icon: Icons.logout_rounded,
               );
-              if (confirmed == true && context.mounted) {
+              if (confirmed == true && mounted) {
                 Navigator.pop(context);
                 await widget.onLogout();
               }
             },
             icon: const Icon(Icons.logout_rounded, color: Color(0xFFEF4444)),
-            label: const Text(
-              'Sign Out Faculty Session',
-              style: TextStyle(
+            label: Text(
+              _currentTeacher.role == UserRole.admin
+                  ? 'Sign Out Admin Session'
+                  : 'Sign Out Faculty Session',
+              style: const TextStyle(
                 color: Color(0xFFEF4444),
                 fontWeight: FontWeight.w700,
               ),
@@ -842,7 +816,9 @@ class _TeacherProfileDialogState extends State<TeacherProfileDialog> {
       children: [
         Center(
           child: Text(
-            'Edit Faculty Profile',
+            _currentTeacher.role == UserRole.admin
+                ? 'Edit Administrator Profile'
+                : 'Edit Faculty Profile',
             style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w800,

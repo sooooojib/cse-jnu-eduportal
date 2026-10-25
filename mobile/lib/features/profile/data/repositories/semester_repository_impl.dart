@@ -1,8 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
+import '../../../../core/config/env_config.dart';
 import '../../../../core/error/error_handler.dart';
 import '../../../../core/error/exceptions.dart';
+import '../../../../core/logging/app_logger.dart';
 import '../models/semester_upgrade_request_model.dart';
 import '../../domain/entities/semester_status.dart';
 import '../../domain/repositories/semester_repository.dart';
@@ -97,21 +99,26 @@ class SemesterRemoteDataSourceImpl implements SemesterRemoteDataSource {
     if (uid == null) throw const ServerException(message: "Not authenticated.");
 
     // 1. Try Cloud Function
-    try {
-      final callable = _functions.httpsCallable('requestSemesterUpgrade');
-      final res = await callable.call({
-        'requestedYear': requestedYear,
-        'requestedSemester': requestedSemester,
-      });
+    if (EnvConfig.isCloudFunctionsEnabled) {
+      try {
+        final callable = _functions.httpsCallable('requestSemesterUpgrade');
+        final res = await callable.call({
+          'requestedYear': requestedYear,
+          'requestedSemester': requestedSemester,
+        });
 
-      final data = res.data;
-      if (data is Map) {
-        return SemesterStatusModel.fromJson(Map<String, dynamic>.from(data));
+        final data = res.data;
+        if (data is Map) {
+          return SemesterStatusModel.fromJson(Map<String, dynamic>.from(data));
+        }
+      } on FirebaseFunctionsException catch (e) {
+        if (e.code == 'already-exists' || e.code == 'failed-precondition') {
+          throw ServerException(message: e.message ?? 'Failed to submit semester upgrade request.');
+        }
+        AppLogger.w('requestSemesterUpgrade callable note: $e. Falling back to direct Firestore creation.');
+      } catch (e) {
+        AppLogger.w('requestSemesterUpgrade error: $e. Falling back to direct Firestore creation.');
       }
-    } on FirebaseFunctionsException catch (e) {
-      throw ServerException(message: e.message ?? 'Failed to submit semester upgrade request.');
-    } catch (_) {
-      // Fallback to direct Firestore
     }
 
     // 2. Direct Firestore fallback
@@ -172,22 +179,27 @@ class SemesterRemoteDataSourceImpl implements SemesterRemoteDataSource {
     if (uid == null) throw const ServerException(message: "Not authenticated.");
 
     // 1. Try Cloud Function
-    try {
-      final callable = _functions.httpsCallable('changeSemesterUpgradeRequest');
-      final res = await callable.call({
-        'requestId': requestId,
-        'requestedYear': requestedYear,
-        'requestedSemester': requestedSemester,
-      });
+    if (EnvConfig.isCloudFunctionsEnabled) {
+      try {
+        final callable = _functions.httpsCallable('changeSemesterUpgradeRequest');
+        final res = await callable.call({
+          'requestId': requestId,
+          'requestedYear': requestedYear,
+          'requestedSemester': requestedSemester,
+        });
 
-      final data = res.data;
-      if (data is Map) {
-        return SemesterStatusModel.fromJson(Map<String, dynamic>.from(data));
+        final data = res.data;
+        if (data is Map) {
+          return SemesterStatusModel.fromJson(Map<String, dynamic>.from(data));
+        }
+      } on FirebaseFunctionsException catch (e) {
+        if (e.code == 'failed-precondition') {
+          throw ServerException(message: e.message ?? 'Failed to update semester request.');
+        }
+        AppLogger.w('changeSemesterUpgradeRequest callable note: $e. Falling back to direct Firestore update.');
+      } catch (e) {
+        AppLogger.w('changeSemesterUpgradeRequest error: $e. Falling back to direct Firestore update.');
       }
-    } on FirebaseFunctionsException catch (e) {
-      throw ServerException(message: e.message ?? 'Failed to update semester request.');
-    } catch (_) {
-      // Fallback
     }
 
     // 2. Direct Firestore fallback
@@ -221,14 +233,14 @@ class SemesterRemoteDataSourceImpl implements SemesterRemoteDataSource {
     if (uid == null) throw const ServerException(message: "Not authenticated.");
 
     // 1. Try Cloud Function
-    try {
-      final callable = _functions.httpsCallable('dismissSemesterRejection');
-      await callable.call({'requestId': requestId});
-      return;
-    } on FirebaseFunctionsException catch (e) {
-      throw ServerException(message: e.message ?? 'Failed to dismiss rejection.');
-    } catch (_) {
-      // Fallback
+    if (EnvConfig.isCloudFunctionsEnabled) {
+      try {
+        final callable = _functions.httpsCallable('dismissSemesterRejection');
+        await callable.call({'requestId': requestId});
+        return;
+      } catch (e) {
+        AppLogger.w('dismissSemesterRejection callable note: $e. Falling back to direct Firestore update.');
+      }
     }
 
     // 2. Direct Firestore fallback

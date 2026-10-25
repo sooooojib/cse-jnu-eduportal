@@ -1,19 +1,19 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import '../../../../app/theme/app_colors.dart';
 import '../../../../core/constants/role_constants.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/storage/cloud_storage_service.dart';
+import '../../../../core/utils/avatar_image_resolver.dart';
 import '../../../../shared/widgets/cards/role_badge_chip.dart';
 import '../../../../shared/widgets/dialogs/app_confirmation_dialog.dart';
 import '../../../../shared/widgets/theme/theme_toggle_button.dart';
 import '../../../auth/domain/entities/user.dart';
 import '../../../auth/domain/repositories/user_repository.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
-import '../../../dashboard/presentation/widgets/app_settings_bottom_sheet.dart';
 import '../controllers/profile_controller.dart';
 
 class StudentProfileDialog extends StatefulWidget {
@@ -72,23 +72,7 @@ class _StudentProfileDialogState extends State<StudentProfileDialog> {
   }
 
   ImageProvider? _resolveAvatarImage(String? url, String? localPath) {
-    if (localPath != null && localPath.isNotEmpty && File(localPath).existsSync()) {
-      return FileImage(File(localPath));
-    }
-    if (url == null || url.trim().isEmpty) return null;
-    final trimmed = url.trim();
-    if (trimmed.startsWith('data:image')) {
-      final commaIdx = trimmed.indexOf(',');
-      if (commaIdx != -1) {
-        try {
-          final base64Str = trimmed.substring(commaIdx + 1);
-          return MemoryImage(base64Decode(base64Str));
-        } catch (_) {
-          return null;
-        }
-      }
-    }
-    return NetworkImage(trimmed);
+    return AvatarImageResolver.resolve(url, localPath);
   }
 
   Future<void> _showPhotoPickerSheet(BuildContext context, bool isDark) async {
@@ -259,7 +243,7 @@ class _StudentProfileDialogState extends State<StudentProfileDialog> {
       );
 
       if (picked != null) {
-        await _uploadImageFile(File(picked.path));
+        await _uploadImageFile(picked);
       }
     } catch (e) {
       if (mounted) {
@@ -284,7 +268,7 @@ class _StudentProfileDialogState extends State<StudentProfileDialog> {
       );
 
       if (picked != null) {
-        await _uploadImageFile(File(picked.path));
+        await _uploadImageFile(picked);
       }
     } catch (e) {
       if (mounted) {
@@ -299,10 +283,10 @@ class _StudentProfileDialogState extends State<StudentProfileDialog> {
     }
   }
 
-  Future<void> _uploadImageFile(File file) async {
+  Future<void> _uploadImageFile(XFile pickedFile) async {
     setState(() {
       _isUploadingPhoto = true;
-      _localPhotoPath = file.path;
+      _localPhotoPath = kIsWeb ? null : pickedFile.path;
     });
 
     String? uploadedUrl;
@@ -312,12 +296,17 @@ class _StudentProfileDialogState extends State<StudentProfileDialog> {
       fileName: fileName,
     );
 
+    Uint8List? fileBytes;
+    try {
+      fileBytes = await pickedFile.readAsBytes();
+    } catch (_) {}
+
     // 1. Upload via CloudStorageService
     try {
-      if (sl.isRegistered<CloudStorageService>()) {
+      if (!kIsWeb && sl.isRegistered<CloudStorageService>()) {
         final storageService = sl<CloudStorageService>();
         final uploadResult = await storageService.uploadFile(
-          file: file,
+          file: File(pickedFile.path),
           storagePath: storagePath,
           uploadedBy: widget.student.id,
           isImageOnly: true,
@@ -325,19 +314,35 @@ class _StudentProfileDialogState extends State<StudentProfileDialog> {
         uploadedUrl = uploadResult.downloadUrl;
       } else {
         final storageRef = FirebaseStorage.instance.ref(storagePath);
-        final uploadTask = storageRef.putFile(
-          file,
-          SettableMetadata(
-            contentType: 'image/jpeg',
-            customMetadata: {'uploadedBy': widget.student.id},
-          ),
-        );
+        UploadTask uploadTask;
+        if (kIsWeb && fileBytes != null) {
+          uploadTask = storageRef.putData(
+            fileBytes,
+            SettableMetadata(
+              contentType: 'image/jpeg',
+              customMetadata: {'uploadedBy': widget.student.id},
+            ),
+          );
+        } else {
+          uploadTask = storageRef.putFile(
+            File(pickedFile.path),
+            SettableMetadata(
+              contentType: 'image/jpeg',
+              customMetadata: {'uploadedBy': widget.student.id},
+            ),
+          );
+        }
         await uploadTask.timeout(const Duration(milliseconds: 4000));
         uploadedUrl = await storageRef.getDownloadURL();
       }
     } catch (e) {
       debugPrint('Student avatar upload error: $e');
-      uploadedUrl = file.path;
+      fileBytes ??= await pickedFile.readAsBytes().catchError((_) => Uint8List(0));
+      if (fileBytes.isNotEmpty) {
+        uploadedUrl = 'data:image/jpeg;base64,${base64Encode(fileBytes)}';
+      } else {
+        uploadedUrl = null;
+      }
     }
 
     // 2. Persist to Firestore and AuthController
@@ -500,6 +505,7 @@ class _StudentProfileDialogState extends State<StudentProfileDialog> {
     if (_currentStudent.semester == 2 && targetYear < 4) {
       targetYear += 1;
     }
+    final messenger = ScaffoldMessenger.of(context);
 
     showDialog(
       context: context,
@@ -561,7 +567,6 @@ class _StudentProfileDialogState extends State<StudentProfileDialog> {
               ),
               onPressed: () async {
                 Navigator.pop(dCtx);
-                final messenger = ScaffoldMessenger.of(context);
                 if (sl.isRegistered<ProfileController>()) {
                   try {
                     await sl<ProfileController>().requestUpgrade(
@@ -664,11 +669,12 @@ class _StudentProfileDialogState extends State<StudentProfileDialog> {
                         ? const Color(0xFF064E3B).withValues(alpha: 0.35)
                         : const Color(0xFFECFDF5),
                     backgroundImage: avatarProvider,
+                    onBackgroundImageError: avatarProvider != null ? (_, __) {} : null,
                     child: avatarProvider == null
                         ? Text(
                             _currentStudent.fullName.isNotEmpty
                                 ? _currentStudent.fullName.substring(0, 1).toUpperCase()
-                                : 'S',
+                                : (_currentStudent.role == UserRole.cr ? 'C' : 'S'),
                             style: const TextStyle(
                               fontSize: 32,
                               fontWeight: FontWeight.w800,
@@ -770,122 +776,85 @@ class _StudentProfileDialogState extends State<StudentProfileDialog> {
 
             const SizedBox(height: 6),
 
-            // Role and Active Badge Row
+            // RoleBadgeChip & Edit Info Row
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const RoleBadgeChip(role: UserRole.student, isCompact: true),
+                RoleBadgeChip(role: _currentStudent.role),
                 const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF047857).withValues(alpha: isDark ? 0.2 : 0.1),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: const Color(0xFF047857).withValues(alpha: isDark ? 0.4 : 0.25),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 5,
-                        height: 5,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF047857),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                      const Text(
-                        'ACTIVE',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.4,
-                          color: Color(0xFF047857),
-                        ),
-                      ),
-                    ],
+                TextButton.icon(
+                  onPressed: () => setState(() => _isEditing = true),
+                  icon: const Icon(Icons.edit_rounded, size: 14),
+                  label: const Text('Edit Info'),
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    foregroundColor: const Color(0xFF047857),
+                    textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
                   ),
                 ),
               ],
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
 
-            // Account Details Card
+            // Account Details Card (Clean 4-row card matching exact design)
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
+                  color: isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFE2E8F0),
                 ),
               ),
               child: Column(
                 children: [
                   _buildDetailRow(
-                    icon: Icons.badge_outlined,
-                    label: 'Student ID',
-                    value: _currentStudent.studentId ?? 'N/A',
+                    icon: Icons.business_outlined,
+                    label: 'Department',
+                    value: 'Computer Science & Engineering',
                     isDark: isDark,
                   ),
-                  const Divider(height: 18),
-                  _buildDetailRow(
-                    icon: Icons.email_outlined,
-                    label: 'Institutional Email',
-                    value: _currentStudent.email,
-                    isDark: isDark,
-                  ),
-                  const Divider(height: 18),
-                  if (_isEditing)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: TextField(
-                        controller: _phoneController,
-                        keyboardType: TextInputType.phone,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: isDark ? Colors.white : const Color(0xFF0F172A),
-                        ),
-                        decoration: InputDecoration(
-                          prefixIcon: const Icon(Icons.phone_outlined, size: 20),
-                          labelText: 'Phone Number',
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                      ),
-                    )
-                  else
-                    _buildDetailRow(
-                      icon: Icons.phone_outlined,
-                      label: 'Phone Number',
-                      value: _currentStudent.phone?.isNotEmpty == true ? _currentStudent.phone! : 'Not set',
-                      isDark: isDark,
-                    ),
-                  const Divider(height: 18),
+                  const Divider(height: 20),
                   _buildDetailRow(
                     icon: Icons.school_outlined,
                     label: 'Academic Term',
                     value: 'Year ${_currentStudent.year ?? "—"}, Semester ${_currentStudent.semester ?? "—"}',
                     isDark: isDark,
                   ),
-                  const Divider(height: 18),
+                  const Divider(height: 20),
                   _buildDetailRow(
-                    icon: Icons.account_balance_outlined,
-                    label: 'Department',
-                    value: 'Computer Science & Engineering',
+                    icon: Icons.phone_outlined,
+                    label: 'Contact Phone',
+                    value: (_currentStudent.phone != null && _currentStudent.phone!.isNotEmpty)
+                        ? _currentStudent.phone!
+                        : 'Tap to add phone',
                     isDark: isDark,
+                    onTap: () => setState(() => _isEditing = true),
                   ),
-                  const Divider(height: 18),
-                  _buildDetailRow(
-                    icon: Icons.military_tech_outlined,
-                    label: 'Semester Status',
-                    value: _currentStudent.semesterStatus ?? 'ACTIVE',
-                    isDark: isDark,
+                  const Divider(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.palette_outlined,
+                            size: 18,
+                            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            'Theme Mode',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const ThemeToggleButton(showBackground: true),
+                    ],
                   ),
                 ],
               ),
@@ -893,41 +862,40 @@ class _StudentProfileDialogState extends State<StudentProfileDialog> {
 
             const SizedBox(height: 16),
 
-            // Upgrade Semester Action Tile
-            InkWell(
-              onTap: () => _showUpgradeSemesterDialog(context),
-              borderRadius: BorderRadius.circular(16),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF047857).withValues(alpha: isDark ? 0.15 : 0.08),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: const Color(0xFF047857).withValues(alpha: isDark ? 0.3 : 0.2),
+            if (!_isEditing) ...[
+              // Upgrade Semester Action Tile
+              InkWell(
+                onTap: () => _showUpgradeSemesterDialog(context),
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF047857).withValues(alpha: isDark ? 0.15 : 0.08),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: const Color(0xFF047857).withValues(alpha: isDark ? 0.3 : 0.2),
+                    ),
                   ),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.upgrade_rounded, color: Color(0xFF047857), size: 22),
-                    const SizedBox(width: 12),
-                    const Expanded(
-                      child: Text(
-                        'Request Academic Semester Upgrade',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF047857),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.upgrade_rounded, color: Color(0xFF047857), size: 22),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Request Academic Semester Upgrade',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF047857),
+                          ),
                         ),
                       ),
-                    ),
-                    Icon(Icons.arrow_forward_ios_rounded, size: 14, color: isDark ? Colors.white54 : Colors.black45),
-                  ],
+                      Icon(Icons.arrow_forward_ios_rounded, size: 14, color: isDark ? Colors.white54 : Colors.black45),
+                    ],
+                  ),
                 ),
               ),
-            ),
-
-            if (_isEditing) ...[
-              const SizedBox(height: 16),
+            ] else ...[
               SizedBox(
                 width: double.infinity,
                 height: 46,
@@ -952,120 +920,43 @@ class _StudentProfileDialogState extends State<StudentProfileDialog> {
               ),
             ],
 
-            const SizedBox(height: 16),
-
-            // Theme Toggle Tile
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(
-                color: isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        isDark ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
-                        size: 20,
-                        color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        'Appearance Theme',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.white : const Color(0xFF0F172A),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const ThemeToggleButton(showBackground: false),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            // App Settings Tile
-            InkWell(
-              onTap: () {
-                Navigator.pop(context);
-                AppSettingsBottomSheet.show(
-                  context: context,
-                  user: _currentStudent,
-                  authController: sl<AuthController>(),
-                );
-              },
-              borderRadius: BorderRadius.circular(16),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.tune_rounded,
-                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                      size: 20,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'App Settings & Preferences',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.white : const Color(0xFF0F172A),
-                        ),
-                      ),
-                    ),
-                    Icon(
-                      Icons.arrow_forward_ios_rounded,
-                      size: 14,
-                      color: isDark ? Colors.white54 : Colors.black45,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
 
             // Sign Out Button
             SizedBox(
               width: double.infinity,
-              height: 48,
               child: OutlinedButton.icon(
-                onPressed: () {
-                  Navigator.pop(context);
-                  widget.onLogout();
+                onPressed: () async {
+                  final isCr = _currentStudent.role == UserRole.cr;
+                  final confirmed = await AppConfirmationDialog.show(
+                    context: context,
+                    title: 'Sign Out?',
+                    message: 'Are you sure you want to end your ${isCr ? "CR" : "student"} session and sign out?',
+                    confirmText: 'Sign Out',
+                    isDestructive: true,
+                    icon: Icons.logout_rounded,
+                  );
+                  if (confirmed == true && mounted) {
+                    Navigator.pop(context);
+                    await widget.onLogout();
+                  }
                 },
-                icon: const Icon(Icons.logout_rounded, size: 18, color: Color(0xFFDC2626)),
-                label: const Text(
-                  'Sign Out of Student Account',
-                  style: TextStyle(
-                    fontSize: 14,
+                icon: const Icon(Icons.logout_rounded, color: Color(0xFFEF4444)),
+                label: Text(
+                  _currentStudent.role == UserRole.cr
+                      ? 'Sign Out CR Session'
+                      : 'Sign Out Student Session',
+                  style: const TextStyle(
+                    color: Color(0xFFEF4444),
                     fontWeight: FontWeight.w700,
-                    color: Color(0xFFDC2626),
                   ),
                 ),
                 style: OutlinedButton.styleFrom(
-                  side: BorderSide(
-                    color: const Color(0xFFDC2626).withValues(alpha: 0.4),
+                  side: const BorderSide(color: Color(0xFFFCA5A5)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  backgroundColor: const Color(0xFFDC2626).withValues(alpha: 0.04),
                 ),
               ),
             ),
@@ -1080,36 +971,51 @@ class _StudentProfileDialogState extends State<StudentProfileDialog> {
     required String label,
     required String value,
     required bool isDark,
+    VoidCallback? onTap,
   }) {
-    return Row(
-      children: [
-        Icon(
-          icon,
-          size: 18,
-          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-        ),
-        const SizedBox(width: 10),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-          ),
-        ),
-        const Spacer(),
-        Flexible(
-          child: Text(
-            value,
-            textAlign: TextAlign.end,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: isDark ? Colors.white : const Color(0xFF0F172A),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
             ),
-          ),
+            const SizedBox(width: 10),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                value,
+                textAlign: TextAlign.end,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: onTap != null
+                      ? const Color(0xFF047857)
+                      : (isDark ? Colors.white : const Color(0xFF0F172A)),
+                ),
+              ),
+            ),
+            if (onTap != null) ...[
+              const SizedBox(width: 4),
+              const Icon(Icons.edit_outlined, size: 13, color: Color(0xFF047857)),
+            ],
+          ],
         ),
-      ],
+      ),
     );
   }
 }

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import '../../../../core/config/env_config.dart';
 import '../../../../core/constants/role_constants.dart';
 import '../../../../core/error/error_handler.dart';
 import '../../../../core/error/exceptions.dart';
@@ -175,37 +176,42 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
     int? semester,
   }) async {
     try {
-      try {
-        final callable = _functions.httpsCallable('createAdminUser');
-        final response = await callable.call({
-          'fullName': fullName.trim(),
-          'email': email.trim().toLowerCase(),
-          'password': password,
-          'role': role.value,
-          if (studentId != null) 'studentId': studentId.trim(),
-          if (phone != null) 'phone': phone.trim(),
-          if (year != null) 'year': year,
-          if (semester != null) 'semester': semester,
-        });
+      if (EnvConfig.isCloudFunctionsEnabled) {
+        try {
+          final callable = _functions.httpsCallable('createAdminUser');
+          final response = await callable.call({
+            'fullName': fullName.trim(),
+            'email': email.trim().toLowerCase(),
+            'password': password,
+            'role': role.value,
+            if (studentId != null) 'studentId': studentId.trim(),
+            if (phone != null) 'phone': phone.trim(),
+            if (year != null) 'year': year,
+            if (semester != null) 'semester': semester,
+          });
 
-        final data = response.data;
-        if (data is Map && data['success'] == true) {
-          final userId = data['userId'] as String;
-          return UserModel(
-            id: userId,
-            email: email.trim().toLowerCase(),
-            fullName: fullName.trim(),
-            role: role,
-            studentId: studentId?.trim(),
-            phone: phone?.trim(),
-            year: year,
-            semester: semester,
-            assignedCourseIds: const [],
-            isActive: true,
-          );
+          final data = response.data;
+          if (data is Map && data['success'] == true) {
+            final userId = data['userId'] as String;
+            return UserModel(
+              id: userId,
+              email: email.trim().toLowerCase(),
+              fullName: fullName.trim(),
+              role: role,
+              studentId: studentId?.trim(),
+              phone: phone?.trim(),
+              year: year,
+              semester: semester,
+              assignedCourseIds: const [],
+              isActive: true,
+            );
+          }
+        } catch (fnErr) {
+          // Fallback below
         }
-      } catch (fnErr) {
-        // Fallback to direct Firestore user creation if Cloud Functions is not deployed
+      }
+
+      // Direct Firestore user creation fallback
         final normalizedEmail = email.trim().toLowerCase();
         final existingSnap = await _firestore
             .collection('users')
@@ -250,9 +256,6 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
         });
 
         return userModel;
-      }
-
-      throw const ServerException(message: 'Failed to provision account.');
     } catch (e) {
       throw ErrorHandler.handle(e);
     }
@@ -261,17 +264,20 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
   @override
   Future<void> deleteUser({required String userId}) async {
     try {
-      try {
-        final callable = _functions.httpsCallable('deleteUserByAdmin');
-        final response = await callable.call({'userId': userId});
-        final data = response.data;
-        if (data is Map && data['success'] == false) {
-          throw ServerException(message: data['message'] ?? 'Failed to delete user.');
+      if (EnvConfig.isCloudFunctionsEnabled) {
+        try {
+          final callable = _functions.httpsCallable('deleteUserByAdmin');
+          final response = await callable.call({'userId': userId});
+          final data = response.data;
+          if (data is Map && data['success'] == false) {
+            throw ServerException(message: data['message'] ?? 'Failed to delete user.');
+          }
+          return;
+        } catch (fnErr) {
+          // Fallback below
         }
-        return;
-      } catch (fnErr) {
-        await _firestore.collection('users').doc(userId).delete();
       }
+      await _firestore.collection('users').doc(userId).delete();
     } catch (e) {
       throw ErrorHandler.handle(e);
     }
@@ -546,21 +552,26 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
     int? assignedSemester,
   }) async {
     try {
-      try {
-        final callable = _functions.httpsCallable('approveSignupRequest');
-        final response = await callable.call({
-          'requestId': requestId,
-          if (assignedYear != null) 'assignedYear': assignedYear,
-          if (assignedSemester != null) 'assignedSemester': assignedSemester,
-        });
+      if (EnvConfig.isCloudFunctionsEnabled) {
+        try {
+          final callable = _functions.httpsCallable('approveSignupRequest');
+          final response = await callable.call({
+            'requestId': requestId,
+            if (assignedYear != null) 'assignedYear': assignedYear,
+            if (assignedSemester != null) 'assignedSemester': assignedSemester,
+          });
 
-        final data = response.data;
-        if (data is Map && data['success'] == false) {
-          throw ServerException(message: data['message'] ?? 'Failed to approve signup petition.');
+          final data = response.data;
+          if (data is Map && data['success'] == false) {
+            throw ServerException(message: data['message'] ?? 'Failed to approve signup petition.');
+          }
+          return;
+        } catch (fnErr) {
+          // Fallback below
         }
-        return;
-      } catch (fnErr) {
-        // Fallback to direct Firestore operations if Cloud Functions is not deployed
+      }
+
+      // Fallback to direct Firestore operations
         final reqDoc = await _firestore.collection('signupRequests').doc(requestId).get();
         if (!reqDoc.exists) {
           throw const ServerException(message: 'Signup petition not found.');
@@ -597,7 +608,6 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
           'createdUserId': userId,
           'updatedAt': now,
         });
-      }
     } catch (e) {
       throw ErrorHandler.handle(e);
     }
@@ -609,26 +619,30 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
     required String reason,
   }) async {
     try {
-      try {
-        final callable = _functions.httpsCallable('rejectSignupRequest');
-        final response = await callable.call({
-          'requestId': requestId,
-          'reason': reason,
-        });
+      if (EnvConfig.isCloudFunctionsEnabled) {
+        try {
+          final callable = _functions.httpsCallable('rejectSignupRequest');
+          final response = await callable.call({
+            'requestId': requestId,
+            'reason': reason,
+          });
 
-        final data = response.data;
-        if (data is Map && data['success'] == false) {
-          throw ServerException(message: data['message'] ?? 'Failed to reject signup petition.');
+          final data = response.data;
+          if (data is Map && data['success'] == false) {
+            throw ServerException(message: data['message'] ?? 'Failed to reject signup petition.');
+          }
+          return;
+        } catch (fnErr) {
+          // Fallback below
         }
-        return;
-      } catch (fnErr) {
-        await _firestore.collection('signupRequests').doc(requestId).update({
-          'status': 'REJECTED',
-          'rejectionReason': reason,
-          'rejectedAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
       }
+
+      await _firestore.collection('signupRequests').doc(requestId).update({
+        'status': 'REJECTED',
+        'rejectionReason': reason,
+        'rejectedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
     } catch (e) {
       throw ErrorHandler.handle(e);
     }
@@ -664,17 +678,22 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
   @override
   Future<void> approveSemesterUpgrade({required String requestId}) async {
     try {
-      try {
-        final callable = _functions.httpsCallable('approveSemesterUpgrade');
-        final response = await callable.call({'requestId': requestId});
+      if (EnvConfig.isCloudFunctionsEnabled) {
+        try {
+          final callable = _functions.httpsCallable('approveSemesterUpgrade');
+          final response = await callable.call({'requestId': requestId});
 
-        final data = response.data;
-        if (data is Map && data['success'] == false) {
-          throw ServerException(message: data['message'] ?? 'Failed to approve semester promotion.');
+          final data = response.data;
+          if (data is Map && data['success'] == false) {
+            throw ServerException(message: data['message'] ?? 'Failed to approve semester promotion.');
+          }
+          return;
+        } catch (fnErr) {
+          // Fallback below
         }
-        return;
-      } catch (fnErr) {
-        final upgradeDoc = await _firestore.collection('semesterUpgradeRequests').doc(requestId).get();
+      }
+
+      final upgradeDoc = await _firestore.collection('semesterUpgradeRequests').doc(requestId).get();
         if (!upgradeDoc.exists) {
           throw const ServerException(message: 'Semester upgrade request not found.');
         }
@@ -707,7 +726,6 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
           'isRead': false,
           'createdAt': now,
         });
-      }
     } catch (e) {
       throw ErrorHandler.handle(e);
     }

@@ -33,6 +33,7 @@ class CrAddSlotDialog extends StatefulWidget {
 class _CrAddSlotDialogState extends State<CrAddSlotDialog> {
   final _formKey = GlobalKey<FormState>();
   Course? _selectedCourse;
+  late String _selectedDay;
   late final TextEditingController _startTimeController;
   late final TextEditingController _endTimeController;
   late final TextEditingController _roomController;
@@ -43,6 +44,7 @@ class _CrAddSlotDialogState extends State<CrAddSlotDialog> {
   @override
   void initState() {
     super.initState();
+    _selectedDay = _dayOfWeekFromLabel(widget.data.tomorrowDateLabel);
     if (widget.data.enrolledCourses.isNotEmpty) {
       _selectedCourse = widget.data.enrolledCourses.first;
     }
@@ -79,7 +81,7 @@ class _CrAddSlotDialogState extends State<CrAddSlotDialog> {
       courseTitle: _selectedCourse!.title,
       teacherId: _selectedCourse!.teacherId ?? '',
       teacherName: _teacherController.text.trim(),
-      dayOfWeek: _dayOfWeekFromLabel(widget.data.tomorrowDateLabel),
+      dayOfWeek: _selectedDay,
       startTime: _startTimeController.text.trim(),
       endTime: _endTimeController.text.trim(),
       room: _roomController.text.trim(),
@@ -94,9 +96,12 @@ class _CrAddSlotDialogState extends State<CrAddSlotDialog> {
       setState(() => _isSubmitting = false);
       if (success) {
         Navigator.of(context).pop();
+        final dayLabel = _selectedDay == _dayOfWeekFromLabel(widget.data.tomorrowDateLabel)
+            ? "tomorrow"
+            : _selectedDay.substring(0, 1) + _selectedDay.substring(1).toLowerCase();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Added ${slot.courseCode} to tomorrow\'s schedule!'),
+            content: Text('Added ${slot.courseCode} to $dayLabel\'s schedule!'),
             backgroundColor: const Color(0xFF059669),
             behavior: SnackBarBehavior.floating,
           ),
@@ -158,7 +163,9 @@ class _CrAddSlotDialogState extends State<CrAddSlotDialog> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Add Class for Tomorrow',
+                    _selectedDay == _dayOfWeekFromLabel(widget.data.tomorrowDateLabel)
+                        ? 'Add Class for Tomorrow'
+                        : 'Add Class for ${_selectedDay.substring(0, 1) + _selectedDay.substring(1).toLowerCase()}',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w800,
@@ -172,11 +179,64 @@ class _CrAddSlotDialogState extends State<CrAddSlotDialog> {
                 ],
               ),
               Text(
-                'Schedule slot for ${widget.data.tomorrowDateLabel} (Year ${widget.data.year} · Sem ${widget.data.semester})',
+                'Schedule routine (Year ${widget.data.year} · Sem ${widget.data.semester})',
                 style: TextStyle(
                   fontSize: 12,
                   color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                 ),
+              ),
+              const SizedBox(height: 16),
+
+              // Day of Week Selector
+              const Text('Day of Week', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+              const SizedBox(height: 6),
+              DropdownButtonFormField<String>(
+                value: _selectedDay,
+                isExpanded: true,
+                decoration: InputDecoration(
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'SUNDAY', child: Text('Sunday')),
+                  DropdownMenuItem(value: 'MONDAY', child: Text('Monday')),
+                  DropdownMenuItem(value: 'TUESDAY', child: Text('Tuesday')),
+                  DropdownMenuItem(value: 'WEDNESDAY', child: Text('Wednesday')),
+                  DropdownMenuItem(value: 'THURSDAY', child: Text('Thursday')),
+                  DropdownMenuItem(value: 'FRIDAY', child: Text('Friday')),
+                  DropdownMenuItem(value: 'SATURDAY', child: Text('Saturday')),
+                ].map((item) {
+                  final tomorrowDay = _dayOfWeekFromLabel(widget.data.tomorrowDateLabel);
+                  final isTomorrow = item.value == tomorrowDay;
+                  return DropdownMenuItem<String>(
+                    value: item.value,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(item.value!),
+                        if (isTomorrow)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0284C7).withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Text(
+                              'Tomorrow',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Color(0xFF0284C7),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+                onChanged: (val) {
+                  if (val != null) setState(() => _selectedDay = val);
+                },
               ),
               const SizedBox(height: 16),
 

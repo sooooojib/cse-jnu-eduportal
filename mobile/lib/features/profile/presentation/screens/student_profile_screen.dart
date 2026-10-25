@@ -56,12 +56,13 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
       targetYear = currentSemester == 2 ? (currentYear < 4 ? currentYear + 1 : 4) : currentYear;
       targetSemester = currentSemester == 2 ? 1 : 2;
     }
+    final messenger = ScaffoldMessenger.of(context);
 
     showDialog(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
-          builder: (context, setDialogState) {
+          builder: (dialogCtx, setDialogState) {
             return AlertDialog(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               title: Text(
@@ -144,7 +145,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                         requestedSemester: targetSemester,
                       );
                       if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        messenger.showSnackBar(
                           SnackBar(
                             content: Text(isInitial
                                 ? 'Initial enrollment request submitted for review.'
@@ -155,7 +156,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                       }
                     } catch (e) {
                       if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        messenger.showSnackBar(
                           SnackBar(
                             content: Text(e.toString().replaceAll('Exception: ', '')),
                             backgroundColor: Colors.redAccent,
@@ -177,12 +178,13 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
   void _showChangeRequestDialog(SemesterStatus status) {
     int targetYear = status.requestedYear ?? 1;
     int targetSemester = status.requestedSemester ?? 1;
+    final messenger = ScaffoldMessenger.of(context);
 
     showDialog(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
-          builder: (context, setDialogState) {
+          builder: (dialogCtx, setDialogState) {
             return AlertDialog(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               title: const Text('Change Enrollment Request', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
@@ -261,7 +263,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                         requestedSemester: targetSemester,
                       );
                       if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        messenger.showSnackBar(
                           const SnackBar(
                             content: Text('Enrollment request updated successfully.'),
                             backgroundColor: Colors.green,
@@ -270,7 +272,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                       }
                     } catch (e) {
                       if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        messenger.showSnackBar(
                           SnackBar(
                             content: Text(e.toString().replaceAll('Exception: ', '')),
                             backgroundColor: Colors.redAccent,
@@ -291,10 +293,11 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
 
   Future<void> _dismissRejection(String? requestId) async {
     if (requestId == null || requestId.isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context);
     try {
       await _profileController.dismissRejection(requestId: requestId);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           const SnackBar(
             content: Text('Rejection notice dismissed.'),
             backgroundColor: Colors.green,
@@ -303,7 +306,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(
             content: Text(e.toString().replaceAll('Exception: ', '')),
             backgroundColor: Colors.redAccent,

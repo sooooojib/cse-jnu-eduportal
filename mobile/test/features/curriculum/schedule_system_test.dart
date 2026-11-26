@@ -286,7 +286,8 @@ void main() {
       // Verify slot cards
       expect(find.text('Operating Systems'), findsOneWidget);
       expect(find.text('Database Systems'), findsOneWidget);
-      expect(find.text('Room 501'), findsOneWidget);
+      // "All days" view: the room line starts with the weekday.
+      expect(find.textContaining('Room 501'), findsOneWidget);
       expect(find.text('Extra'), findsOneWidget);
     });
 
@@ -310,10 +311,10 @@ void main() {
       await tester.pumpWidget(buildTestableWidget(const StudentScheduleScreen()));
       await tester.pumpAndSettle();
 
-      expect(find.text('CR Schedule Terminal'), findsOneWidget);
-      expect(find.text('Tomorrow Only'), findsOneWidget);
-      expect(find.text('Schedule for Tomorrow'), findsWidgets);
-      expect(find.text('Broadcast on WhatsApp'), findsOneWidget);
+      // "Change" lives on the Class Changes card; the CR gets one quiet share link.
+      expect(find.text('Change'), findsWidgets);
+      expect(find.text('CR only'), findsNothing);
+      expect(find.text('Share routine on WhatsApp'), findsOneWidget);
 
       // Tapping Broadcast on WhatsApp triggers modal
       when(() => mockRepo.getWhatsAppBroadcast(year: any(named: 'year'), semester: any(named: 'semester')))
@@ -325,7 +326,7 @@ void main() {
                 whatsappUrl: 'https://wa.me/?text=Routine',
               ));
 
-      await tester.tap(find.text('Broadcast on WhatsApp'));
+      await tester.tap(find.text('Share routine on WhatsApp'));
       await tester.pumpAndSettle();
 
       expect(find.text('WhatsApp Broadcast'), findsOneWidget);
@@ -361,9 +362,9 @@ void main() {
       await tester.pumpWidget(buildTestableWidget(const TeacherScheduleScreen()));
       await tester.pumpAndSettle();
 
-      expect(find.text('Faculty Schedule Hub'), findsOneWidget);
-      expect(find.text('Routine Grid'), findsOneWidget);
-      expect(find.text('Manage Exams'), findsOneWidget);
+      expect(find.text('My Schedule'), findsOneWidget);
+      expect(find.text('Routine'), findsOneWidget);
+      expect(find.text('Exams'), findsOneWidget);
       expect(find.text('Add Class'), findsWidgets);
 
       // Verify timeline cards

@@ -1,13 +1,16 @@
-import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
 
 import '../../../../core/config/env_config.dart';
+import '../../../../core/di/injection_container.dart';
 import '../../../../core/error/error_handler.dart';
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/logging/app_logger.dart';
+import '../../../../core/network/authoritative_guard.dart';
+import '../../../../core/network/safe_retry_policy.dart';
 import '../models/attendance_models.dart';
+import '../services/class_attendance_service.dart';
 import '../../domain/entities/attendance_entities.dart';
 import '../../domain/repositories/attendance_repository.dart';
 
@@ -27,64 +30,26 @@ class AttendanceRemoteDataSourceImpl implements AttendanceRemoteDataSource {
   final FirebaseFirestore _firestore;
   final fb.FirebaseAuth _auth;
   final FirebaseFunctions _functions;
+  final AuthoritativeGuard? _authoritativeGuard;
+
+  /// Direct-database logic (rotating codes, late, auto-absent, who marked).
+  final ClassAttendanceService _service;
 
   AttendanceRemoteDataSourceImpl({
     FirebaseFirestore? firestore,
     fb.FirebaseAuth? auth,
     FirebaseFunctions? functions,
+    AuthoritativeGuard? authoritativeGuard,
   })  : _firestore = firestore ?? FirebaseFirestore.instance,
         _auth = auth ?? fb.FirebaseAuth.instance,
-        _functions = functions ?? FirebaseFunctions.instance;
+        _service = ClassAttendanceServiceImpl(firestore: firestore, auth: auth),
+        _functions = functions ?? FirebaseFunctions.instance,
+        _authoritativeGuard = authoritativeGuard ?? (sl.isRegistered<AuthoritativeGuard>() ? sl<AuthoritativeGuard>() : null);
 
   @override
   Future<AttendanceSummaryModel> getMySummary() async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) throw const ServerException(message: "Not authenticated.");
-
-    final snapshot = await _firestore
-        .collection("attendance")
-        .where("studentId", isEqualTo: uid)
-        .orderBy("date", descending: true)
-        .get();
-
-    final records = snapshot.docs.map((doc) {
-      final data = {"id": doc.id, ...doc.data()};
-      return AttendanceRecordModel.fromJson(data);
-    }).toList();
-
-    final Map<String, List<AttendanceRecordModel>> byCourse = {};
-    for (final r in records) {
-      byCourse.putIfAbsent(r.courseCode, () => []).add(r);
-    }
-
-    final courseSummaries = byCourse.entries.map((entry) {
-      final total = entry.value.length;
-      final attended = entry.value.where((r) => r.status == "PRESENT").length;
-      final pct = total > 0 ? (attended / total) * 100 : 0.0;
-      return CourseAttendanceModel(
-        courseId: entry.key,
-        courseCode: entry.key,
-        courseTitle: entry.value.first.courseTitle,
-        attendedClasses: attended,
-        totalClasses: total,
-        percentage: pct,
-        isEligible: pct >= 75,
-      );
-    }).toList();
-
-    final totalAttended = records.where((r) => r.status == "PRESENT").length;
-    final totalSessions = records.length;
-    final overallPct = totalSessions > 0
-        ? (totalAttended / totalSessions) * 100
-        : 0.0;
-
-    return AttendanceSummaryModel(
-      overallPercentage: overallPct,
-      totalAttended: totalAttended,
-      totalSessions: totalSessions,
-      courseSummaries: courseSummaries,
-      recentRecords: records.take(15).toList(),
-    );
+    // Attended ÷ held, where held = class days of the student's semester.
+    return await _service.mySummary() as AttendanceSummaryModel;
   }
 
   @override
@@ -97,123 +62,62 @@ class AttendanceRemoteDataSourceImpl implements AttendanceRemoteDataSource {
       throw const ServerException(message: "Verification code must be exactly 6 characters.");
     }
 
-    // Attempt Server-Side Cloud Function first for authoritative execution
-    if (EnvConfig.isCloudFunctionsEnabled) {
-      try {
-        final callable = _functions.httpsCallable('submitAttendanceCode');
-        final result = await callable.call({
-          'code': cleanCode,
-          if (courseId != null) 'courseId': courseId,
-        });
-
-        final data = result.data;
-        if (data is Map && data['success'] == true) {
-          return AttendanceVerificationResult(
-            success: true,
-            message: data['message'] as String? ?? "Attendance verified successfully.",
-            courseCode: data['courseCode'] as String?,
-            courseTitle: data['courseTitle'] as String?,
-            recordId: data['recordId'] as String?,
-          );
-        }
-      } on FirebaseFunctionsException catch (e) {
-        if (e.code == 'failed-precondition' || e.code == 'deadline-exceeded' || e.code == 'already-exists') {
-          throw ServerException(message: e.message ?? "Failed to verify attendance code.");
-        }
-        AppLogger.w('submitAttendanceCode Cloud Function note ($e). Falling back to Firestore transaction.');
-      } catch (e) {
-        AppLogger.w('submitAttendanceCode error ($e). Falling back to Firestore transaction.');
-      }
-    }
-
-    // 1. Query for the active session matching the code outside transaction
-    // (Firestore transactions prohibit collection queries and require document references)
-    final sessionSnap = await _firestore
-        .collection("attendanceSessions")
-        .where("code", isEqualTo: cleanCode)
-        .where("isActive", isEqualTo: true)
-        .limit(1)
-        .get();
-
-    if (sessionSnap.docs.isEmpty) {
-      throw const ServerException(message: "Invalid or expired attendance code.");
-    }
-
-    final sessionDoc = sessionSnap.docs.first;
-    final sessionRef = sessionDoc.reference;
-
-    // 2. Authoritative Firestore Transaction with Document-Level Mutual Exclusion
-    return await _firestore.runTransaction((transaction) async {
-      final freshSession = await transaction.get(sessionRef);
-      if (!freshSession.exists) {
-        throw const ServerException(message: "Attendance session not found.");
-      }
-      final sessionData = freshSession.data() ?? {};
-      if (sessionData["isActive"] != true) {
-        throw const ServerException(message: "This attendance session is no longer active.");
-      }
-
-      // Check Expiration
-      final expiresAt = sessionData['expiresAt'];
-      if (expiresAt is Timestamp && expiresAt.toDate().isBefore(DateTime.now())) {
-        throw const ServerException(message: "This attendance session has expired.");
-      }
-
-      final sessionCourseId = sessionData["courseId"] as String? ?? "";
-      if (courseId != null && courseId != sessionCourseId) {
-        throw const ServerException(message: "Code does not match the selected course.");
-      }
-
-      // Check Duplicate Attendance via Composite Document ID
-      final docId = "${sessionDoc.id}_$uid";
-      final recordRef = _firestore.collection("attendance").doc(docId);
-      final existingRecord = await transaction.get(recordRef);
-      if (existingRecord.exists) {
-        throw const ServerException(message: "You have already attended this session.");
-      }
-
-      // Fetch user profile for denormalized roll and name
-      final userDoc = await transaction.get(_firestore.collection("users").doc(uid));
-      final userData = userDoc.data() ?? {};
-      final studentName = userData["fullName"] as String? ?? "";
-      final studentRoll = userData["studentId"] as String? ?? "";
-
-      // Write Present Record
-      transaction.set(recordRef, {
-        "id": docId,
-        "sessionId": sessionDoc.id,
-        "studentId": uid,
-        "studentName": studentName,
-        "studentRoll": studentRoll,
-        "courseId": sessionCourseId,
-        "courseCode": sessionData["courseCode"] ?? "",
-        "courseTitle": sessionData["courseTitle"] ?? "",
-        "status": "PRESENT",
-        "isManualOverride": false,
-        "date": sessionData["sessionDate"] ?? sessionData["date"] ?? DateTime.now().toIso8601String().substring(0, 10),
-        "verifiedAt": FieldValue.serverTimestamp(),
-      });
-
-      // Increment total count atomically
-      transaction.update(sessionRef, {
-        "totalPresentCount": FieldValue.increment(1),
-        "updatedAt": FieldValue.serverTimestamp(),
-      });
-
-      return AttendanceVerificationResult(
-        success: true,
-        message: "Attendance marked successfully.",
-        courseCode: sessionData["courseCode"] as String?,
-        courseTitle: sessionData["courseTitle"] as String?,
-        recordId: docId,
+    // Authoritative Server Validation: Never allow offline attendance verification
+    if (_authoritativeGuard != null) {
+      await _authoritativeGuard.ensureAuthoritativeServer(
+        operationName: "Attendance verification",
       );
-    });
+    }
+
+    return await SafeRetryPolicy.execute<AttendanceVerificationResult>(
+      idempotencyKey: 'verify_code_${uid}_$cleanCode',
+      operationName: 'Attendance verification',
+      action: () async {
+        // Attempt Server-Side Cloud Function first for authoritative execution
+        if (EnvConfig.isCloudFunctionsEnabled) {
+          try {
+            final callable = _functions.httpsCallable('submitAttendanceCode');
+            final result = await callable.call({
+              'code': cleanCode,
+              if (courseId != null) 'courseId': courseId,
+            });
+
+            final data = result.data;
+            if (data is Map && data['success'] == true) {
+              return AttendanceVerificationResult(
+                success: true,
+                message: data['message'] as String? ?? "Attendance verified successfully.",
+                courseCode: data['courseCode'] as String?,
+                courseTitle: data['courseTitle'] as String?,
+                recordId: data['recordId'] as String?,
+              );
+            }
+          } on FirebaseFunctionsException catch (e) {
+            if (e.code == 'failed-precondition' || e.code == 'deadline-exceeded' || e.code == 'already-exists') {
+              throw ServerException(message: e.message ?? "Failed to verify attendance code.");
+            }
+            AppLogger.w('submitAttendanceCode Cloud Function note ($e). Falling back to Firestore transaction.');
+          } catch (e) {
+            AppLogger.w('submitAttendanceCode error ($e). Falling back to Firestore transaction.');
+          }
+        }
+
+        // Direct path: rotating code checked by the security rules.
+        return await _service.markWithCode(cleanCode, courseId: courseId);
+      },
+    );
   }
 
   @override
   Future<AttendanceSessionModel> startSession({required String courseId, int? durationMinutes}) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw const ServerException(message: "Not authenticated.");
+
+    if (_authoritativeGuard != null) {
+      await _authoritativeGuard.ensureAuthoritativeServer(
+        operationName: "Creating attendance session",
+      );
+    }
 
     final duration = durationMinutes ?? 15;
 
@@ -235,62 +139,18 @@ class AttendanceRemoteDataSourceImpl implements AttendanceRemoteDataSource {
       }
     }
 
-    // 2. Transactional Firestore Fallback
-    final courseDoc = await _firestore.collection("courses").doc(courseId).get();
-    if (!courseDoc.exists) throw const ServerException(message: "Course not found.");
-    final courseData = courseDoc.data()!;
-
-    // Deactivate previous active sessions for this course
-    final oldSessions = await _firestore.collection("attendanceSessions")
-        .where("courseId", isEqualTo: courseId)
-        .where("teacherId", isEqualTo: uid)
-        .where("isActive", isEqualTo: true)
-        .get();
-
-    final batch = _firestore.batch();
-    for (final doc in oldSessions.docs) {
-      batch.update(doc.reference, {
-        "isActive": false,
-        "status": "COMPLETED",
-        "closedAt": FieldValue.serverTimestamp(),
-      });
-    }
-    await batch.commit();
-
-    // Generate safe 6-character code
-    const chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
-    final rand = Random.secure();
-    final code = List.generate(6, (index) => chars[rand.nextInt(chars.length)]).join();
-
-    final sessionRef = _firestore.collection("attendanceSessions").doc();
-    final now = DateTime.now();
-    final expiresAt = now.add(Duration(minutes: duration));
-
-    final sessionMap = {
-      "id": sessionRef.id,
-      "courseId": courseId,
-      "courseCode": courseData["code"] ?? courseId,
-      "courseTitle": courseData["title"] ?? "",
-      "teacherId": uid,
-      "teacherName": courseData["teacherName"] ?? "Professor",
-      "code": code,
-      "isActive": true,
-      "status": "ACTIVE",
-      "sessionDate": now.toIso8601String().substring(0, 10),
-      "startTime": FieldValue.serverTimestamp(),
-      "expiresAt": Timestamp.fromDate(expiresAt),
-      "targetYear": courseData["year"] ?? 1,
-      "targetSemester": courseData["semester"] ?? 1,
-      "totalPresentCount": 0,
-      "createdAt": FieldValue.serverTimestamp(),
-    };
-
-    await sessionRef.set(sessionMap);
-    return AttendanceSessionModel.fromJson(sessionMap);
+    // Direct path: code kept private to the teacher, rotating.
+    return await _service.startClassSession(courseId: courseId, durationMinutes: duration) as AttendanceSessionModel;
   }
 
   @override
   Future<void> deactivateSession({required String sessionId}) async {
+    if (_authoritativeGuard != null) {
+      await _authoritativeGuard.ensureAuthoritativeServer(
+        operationName: "Closing attendance session",
+      );
+    }
+
     if (EnvConfig.isCloudFunctionsEnabled) {
       try {
         final callable = _functions.httpsCallable('deactivateAttendanceSession');
@@ -437,27 +297,7 @@ class AttendanceRemoteDataSourceImpl implements AttendanceRemoteDataSource {
       }
     }
 
-    // D. If still empty, load candidate students across the users collection
-    if (studentMap.isEmpty) {
-      try {
-        final allSnap = await _firestore.collection("users")
-            .where("role", whereIn: ["STUDENT", "CR", "student", "cr"])
-            .limit(100)
-            .get();
-        for (final doc in allSnap.docs) {
-          final d = doc.data();
-          final uYear = d["year"]?.toString();
-          final uSem = d["semester"]?.toString();
-          if (yearInt == null ||
-              (uYear == yearInt.toString() && uSem == semInt?.toString()) ||
-              uYear == null) {
-            addStudent(doc.id, d);
-          }
-        }
-      } catch (e) {
-        AppLogger.w('Candidate students fallback error: $e');
-      }
-    }
+    // Only this semester's students and those enrolled (no guessing from other semesters).
 
     final roster = studentMap.entries.map((entry) {
       final sId = entry.key;
@@ -469,11 +309,15 @@ class AttendanceRemoteDataSourceImpl implements AttendanceRemoteDataSource {
         studentName: s["fullName"] as String? ?? "Student",
         status: rec != null ? (rec["status"] as String? ?? "ABSENT") : "ABSENT",
         isManualOverride: rec != null ? (rec["isManualOverride"] as bool? ?? false) : false,
+        // Who set it: SELF (entered the code) or TEACHER; null = no record yet.
+        markedBy: rec == null
+            ? null
+            : (rec["markedBy"] as String? ?? ((rec["isManualOverride"] as bool? ?? false) ? "TEACHER" : "SELF")),
       );
     }).toList();
 
     roster.sort((a, b) => a.studentRoll.compareTo(b.studentRoll));
-    final presentCount = roster.where((r) => r.status == "PRESENT").length;
+    final presentCount = roster.where((r) => r.isPresent).length;
 
     return SessionRosterModel(
       sessionId: sessionId,
@@ -490,6 +334,12 @@ class AttendanceRemoteDataSourceImpl implements AttendanceRemoteDataSource {
 
   @override
   Future<void> updateRoster({required String sessionId, required List<AttendanceRosterItem> updates}) async {
+    if (_authoritativeGuard != null) {
+      await _authoritativeGuard.ensureAuthoritativeServer(
+        operationName: "Updating attendance roster",
+      );
+    }
+
     if (EnvConfig.isCloudFunctionsEnabled) {
       try {
         final callable = _functions.httpsCallable('updateAttendanceRoster');
@@ -503,49 +353,7 @@ class AttendanceRemoteDataSourceImpl implements AttendanceRemoteDataSource {
       }
     }
 
-    final sessionDoc = await _firestore.collection("attendanceSessions").doc(sessionId).get();
-    if (!sessionDoc.exists) throw const ServerException(message: "Session not found.");
-    final sData = sessionDoc.data()!;
-
-    final batch = _firestore.batch();
-    final now = FieldValue.serverTimestamp();
-
-    for (final item in updates) {
-      final recordId = "${sessionId}_${item.studentId}";
-      final recordRef = _firestore.collection("attendance").doc(recordId);
-
-      batch.set(recordRef, {
-        "id": recordId,
-        "sessionId": sessionId,
-        "studentId": item.studentId,
-        "studentName": item.studentName,
-        "studentRoll": item.studentRoll,
-        "courseId": sData["courseId"],
-        "courseCode": sData["courseCode"],
-        "courseTitle": sData["courseTitle"],
-        "status": item.status,
-        "isManualOverride": true,
-        "date": sData["sessionDate"] ?? DateTime.now().toIso8601String().substring(0, 10),
-        "verifiedAt": item.status == "PRESENT" ? now : null,
-        "updatedAt": now,
-      }, SetOptions(merge: true));
-    }
-
-    await batch.commit();
-
-    try {
-      final presentSnap = await _firestore.collection("attendance")
-          .where("sessionId", isEqualTo: sessionId)
-          .where("status", isEqualTo: "PRESENT")
-          .get();
-
-      await _firestore.collection("attendanceSessions").doc(sessionId).update({
-        "totalPresentCount": presentSnap.size,
-        "updatedAt": now,
-      });
-    } catch (e) {
-      AppLogger.w('Failed to update totalPresentCount on session ($e)');
-    }
+    await _service.saveMarks(sessionId: sessionId, items: updates);
   }
 }
 

@@ -266,7 +266,6 @@ class _TeacherFeedbackScreenState extends State<TeacherFeedbackScreen> with Sing
                         hintText: 'Write a constructive, professional response...',
                         filled: true,
                         fillColor: isDark ? AppColors.surfaceContainerDark : AppColors.surfaceContainerLight,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -313,7 +312,7 @@ class _TeacherFeedbackScreenState extends State<TeacherFeedbackScreen> with Sing
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primaryLight,
                           foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          shape: const StadiumBorder(),
                         ),
                         onPressed: _controller.isSubmitting
                             ? null
@@ -681,7 +680,7 @@ class _TeacherFeedbackScreenState extends State<TeacherFeedbackScreen> with Sing
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primaryLight,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    shape: const StadiumBorder(),
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     minimumSize: Size.zero,
                   ),

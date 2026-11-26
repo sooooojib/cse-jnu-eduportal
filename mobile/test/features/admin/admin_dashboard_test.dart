@@ -275,8 +275,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // Header checks
-      expect(find.text('JAGANNATH UNIVERSITY'), findsOneWidget);
-      expect(find.text('Welcome, Chief Administrator'), findsOneWidget);
+      expect(find.text('Jagannath University'), findsOneWidget);
+      expect(find.text('Welcome back, Chief Administrator.'), findsOneWidget);
       expect(find.text('Administrator'), findsOneWidget);
 
       // System Overview metrics checks
@@ -380,7 +380,7 @@ void main() {
 
       // User Directory inside Administrative Quick Actions
       expect(find.text('User Directory'), findsOneWidget);
-      expect(find.text('Directory & Roles'), findsOneWidget);
+      expect(find.text('Everyone, roles and sessions'), findsOneWidget);
 
       // Quick Actions
       expect(find.text('Administrative Quick Actions'), findsOneWidget);

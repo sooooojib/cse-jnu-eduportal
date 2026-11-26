@@ -2,9 +2,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
 import '../../../../core/config/env_config.dart';
+import '../../../../core/di/injection_container.dart';
 import '../../../../core/error/error_handler.dart';
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/logging/app_logger.dart';
+import '../../../../core/network/authoritative_guard.dart';
+import '../../../../core/network/safe_retry_policy.dart';
 import '../models/counseling_models.dart';
 import '../../domain/entities/counseling_entities.dart';
 import '../../domain/repositories/counseling_repository.dart';
@@ -26,7 +29,7 @@ abstract class CounselingRemoteDataSource {
   });
   Future<List<CounselingSlotModel>> getTeacherSlots(String teacherId);
   Future<List<CounselingBookingModel>> getTeacherRequests(String teacherId);
-  Future<void> approveBooking(String bookingId);
+  Future<void> approveBooking(String bookingId, {String? teacherMessage, String? startTime, String? endTime});
   Future<void> rejectBooking(String bookingId, {String? reason});
   Future<void> deleteSlot(String slotId);
 }
@@ -35,14 +38,17 @@ class CounselingRemoteDataSourceImpl implements CounselingRemoteDataSource {
   final FirebaseFirestore _firestore;
   final fb.FirebaseAuth _auth;
   final FirebaseFunctions _functions;
+  final AuthoritativeGuard? _authoritativeGuard;
 
   CounselingRemoteDataSourceImpl({
     FirebaseFirestore? firestore,
     fb.FirebaseAuth? auth,
     FirebaseFunctions? functions,
+    AuthoritativeGuard? authoritativeGuard,
   })  : _firestore = firestore ?? FirebaseFirestore.instance,
         _auth = auth ?? fb.FirebaseAuth.instance,
-        _functions = functions ?? FirebaseFunctions.instance;
+        _functions = functions ?? FirebaseFunctions.instance,
+        _authoritativeGuard = authoritativeGuard ?? (sl.isRegistered<AuthoritativeGuard>() ? sl<AuthoritativeGuard>() : null);
 
   @override
   Future<List<CounselingSlotModel>> getAvailableSlots({String? teacherId}) async {
@@ -274,11 +280,22 @@ class CounselingRemoteDataSourceImpl implements CounselingRemoteDataSource {
   }
 
   @override
-  Future<void> approveBooking(String bookingId) async {
+  Future<void> approveBooking(String bookingId, {String? teacherMessage, String? startTime, String? endTime}) async {
+    if (_authoritativeGuard != null) {
+      await _authoritativeGuard.ensureAuthoritativeServer(
+        operationName: 'Approving counseling appointment',
+      );
+    }
+
     if (EnvConfig.isCloudFunctionsEnabled) {
       try {
         final callable = _functions.httpsCallable('approveCounselingBooking');
-        await callable.call({'bookingId': bookingId});
+        await callable.call({
+          'bookingId': bookingId,
+          if (teacherMessage != null && teacherMessage.isNotEmpty) 'teacherMessage': teacherMessage,
+          if (startTime != null && startTime.isNotEmpty) 'startTime': startTime,
+          if (endTime != null && endTime.isNotEmpty) 'endTime': endTime,
+        });
         return;
       } on FirebaseFunctionsException catch (e) {
         if (e.code == 'already-exists' || e.code == 'failed-precondition') {
@@ -315,20 +332,25 @@ class CounselingRemoteDataSourceImpl implements CounselingRemoteDataSource {
           throw const ServerException(message: 'This slot has already been booked and confirmed.');
         }
 
-        // Lock slot
+        // Lock slot (and update time if modified)
         transaction.update(slotRef, {
           'isBooked': true,
           'status': 'BOOKED',
           'bookedStudentId': bData['studentId'],
           'bookedStudentName': bData['studentName'],
           'bookedBookingId': bookingId,
+          if (startTime != null && startTime.isNotEmpty) 'startTime': startTime,
+          if (endTime != null && endTime.isNotEmpty) 'endTime': endTime,
           'updatedAt': FieldValue.serverTimestamp(),
         });
 
-        // Approve winning booking
+        // Approve winning booking (and update time if modified)
         transaction.update(bookingRef, {
           'status': 'APPROVED',
           'reviewedAt': FieldValue.serverTimestamp(),
+          if (teacherMessage != null && teacherMessage.isNotEmpty) 'teacherMessage': teacherMessage,
+          if (startTime != null && startTime.isNotEmpty) 'startTime': startTime,
+          if (endTime != null && endTime.isNotEmpty) 'endTime': endTime,
         });
 
         // Mark competing requests as REJECTED
@@ -352,6 +374,12 @@ class CounselingRemoteDataSourceImpl implements CounselingRemoteDataSource {
 
   @override
   Future<void> rejectBooking(String bookingId, {String? reason}) async {
+    if (_authoritativeGuard != null) {
+      await _authoritativeGuard.ensureAuthoritativeServer(
+        operationName: 'Rejecting counseling appointment',
+      );
+    }
+
     if (EnvConfig.isCloudFunctionsEnabled) {
       try {
         final callable = _functions.httpsCallable('rejectCounselingBooking');
@@ -483,9 +511,14 @@ class CounselingRepositoryImpl implements CounselingRepository {
   }
 
   @override
-  Future<void> approveBooking(String bookingId) async {
+  Future<void> approveBooking(String bookingId, {String? teacherMessage, String? startTime, String? endTime}) async {
     try {
-      await remoteDataSource.approveBooking(bookingId);
+      await remoteDataSource.approveBooking(
+        bookingId,
+        teacherMessage: teacherMessage,
+        startTime: startTime,
+        endTime: endTime,
+      );
     } catch (e) {
       throw ErrorHandler.handleException(e);
     }

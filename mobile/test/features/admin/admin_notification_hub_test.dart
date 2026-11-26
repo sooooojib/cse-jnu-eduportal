@@ -104,7 +104,7 @@ void main() {
       await tester.tap(find.byType(FloatingActionButton));
       await tester.pumpAndSettle();
 
-      expect(find.text('Broadcast Notice & Notification'), findsOneWidget);
+      expect(find.text('Send a notice'), findsOneWidget);
       expect(find.text('Notice Category:'), findsOneWidget);
       expect(find.text('Notice Title:'), findsOneWidget);
 

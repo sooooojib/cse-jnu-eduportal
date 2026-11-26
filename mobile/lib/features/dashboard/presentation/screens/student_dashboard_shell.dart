@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../../../../app/router/route_names.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/role_colors.dart';
 import '../../../../core/constants/role_constants.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/network/cache_metadata.dart';
 import '../../../../shared/widgets/dialogs/app_confirmation_dialog.dart';
 import '../../../../shared/widgets/states/app_error_state_view.dart';
 import '../../../../shared/widgets/states/app_loading_view.dart';
+import '../../../../shared/widgets/states/cached_data_badge.dart';
 import '../../../../shared/widgets/theme/theme_toggle_button.dart';
 import '../../../auth/domain/entities/user.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
@@ -25,6 +26,8 @@ import '../../../curriculum/domain/entities/curriculum_entities.dart';
 import '../../../curriculum/presentation/widgets/exam_details_dialog.dart';
 import '../../../profile/presentation/widgets/student_profile_dialog.dart';
 import '../../../../core/utils/avatar_image_resolver.dart';
+import '../../../cr/presentation/widgets/cr_transfer_cards.dart';
+import '../../../curriculum/presentation/widgets/class_changes_card.dart';
 
 /// Student Dashboard Screen
 ///
@@ -317,7 +320,7 @@ class _StudentDashboardShellState extends State<StudentDashboardShell> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                shape: const StadiumBorder(),
               ),
               onPressed: () {
                 Navigator.of(ctx).pop();
@@ -369,12 +372,24 @@ class _StudentDashboardShellState extends State<StudentDashboardShell> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (data.isFromCache)
+                    CachedDataBadge(
+                      metadata: CacheMetadata.cached(
+                        message: 'Showing cached student dashboard (Offline)',
+                      ),
+                      onRefresh: () => _controller.refreshData(),
+                    ),
                   // 1. Header Section
                   CrHeaderSection(
                     data: data,
                     onRequestSemesterChange: () =>
                         _showSemesterChangeDialog(data.year, data.semester),
                   ),
+
+                  const SizedBox(height: 12),
+
+                  // My Class: classmates & roles; highlights a CR role offered to me
+                  const MyClassCard(),
 
                   const SizedBox(height: 18),
 
@@ -394,6 +409,12 @@ class _StudentDashboardShellState extends State<StudentDashboardShell> {
                   ),
 
                   const SizedBox(height: 20),
+
+                  // One-day class changes for my batch (read-only for students)
+                  if (widget.authController.currentUser != null) ...[
+                    ClassChangesCard(user: widget.authController.currentUser!),
+                    const SizedBox(height: 20),
+                  ],
 
                   // 3. Time-Aware Schedule Card (Today & Tomorrow in One Place)
                   CrTodayScheduleCard(
@@ -475,7 +496,7 @@ class _StudentDashboardShellState extends State<StudentDashboardShell> {
         title: Center(
           child: Text(
             'JnU EduPortal',
-            style: GoogleFonts.plusJakartaSans(
+            style: TextStyle(fontFamily: 'PlusJakartaSans', 
               fontWeight: FontWeight.w800,
               fontSize: 19,
               letterSpacing: -0.4,

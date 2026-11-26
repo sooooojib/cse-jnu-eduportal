@@ -27,6 +27,7 @@ class AppTheme {
       brightness: Brightness.light,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: AppColors.surfaceLight,
+      fontFamily: AppTypography.sans,
       textTheme: AppTypography.textTheme(
         AppColors.onSurfaceLight,
         AppColors.onSurfaceVariantLight,
@@ -82,6 +83,27 @@ class AppTheme {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         ),
       ),
+      // Selected chips & segmented buttons use the brand green (not M3 teal).
+      chipTheme: const ChipThemeData(
+        selectedColor: AppColors.primary,
+        checkmarkColor: Colors.white,
+        secondaryLabelStyle: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        shape: StadiumBorder(),
+        side: BorderSide(color: AppColors.outlineVariantLight),
+      ),
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: ButtonStyle(
+          backgroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected) ? AppColors.primary : null,
+          ),
+          foregroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected) ? Colors.white : null,
+          ),
+          iconColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected) ? Colors.white : null,
+          ),
+        ),
+      ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: AppColors.primary,
@@ -97,23 +119,23 @@ class AppTheme {
         fillColor: AppColors.surfaceContainerLight,
         contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(20),
           borderSide: const BorderSide(color: AppColors.outlineVariantLight, width: 1),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(20),
           borderSide: const BorderSide(color: AppColors.outlineVariantLight, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(20),
           borderSide: const BorderSide(color: AppColors.primary, width: 2),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(20),
           borderSide: const BorderSide(color: AppColors.error, width: 1.5),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(20),
           borderSide: const BorderSide(color: AppColors.error, width: 2),
         ),
         labelStyle: const TextStyle(
@@ -177,6 +199,7 @@ class AppTheme {
       brightness: Brightness.dark,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: AppColors.surfaceDark,
+      fontFamily: AppTypography.sans,
       textTheme: AppTypography.textTheme(
         AppColors.onSurfaceDark,
         AppColors.onSurfaceVariantDark,
@@ -232,6 +255,27 @@ class AppTheme {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         ),
       ),
+      // Selected chips & segmented buttons use the brand green (not M3 teal).
+      chipTheme: const ChipThemeData(
+        selectedColor: AppColors.primary,
+        checkmarkColor: Colors.white,
+        secondaryLabelStyle: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        shape: StadiumBorder(),
+        side: BorderSide(color: Color(0x33FFFFFF)),
+      ),
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: ButtonStyle(
+          backgroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected) ? AppColors.primary : null,
+          ),
+          foregroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected) ? Colors.white : null,
+          ),
+          iconColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected) ? Colors.white : null,
+          ),
+        ),
+      ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: AppColors.primaryContainer,
@@ -247,23 +291,23 @@ class AppTheme {
         fillColor: AppColors.surfaceContainerDark,
         contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(20),
           borderSide: const BorderSide(color: AppColors.outlineDark, width: 1),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(20),
           borderSide: const BorderSide(color: AppColors.outlineDark, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(20),
           borderSide: const BorderSide(color: AppColors.primaryContainer, width: 2),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(20),
           borderSide: const BorderSide(color: AppColors.errorContainer, width: 1.5),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(20),
           borderSide: const BorderSide(color: AppColors.errorContainer, width: 2),
         ),
         labelStyle: const TextStyle(

@@ -11,6 +11,7 @@ import '../../../../shared/widgets/inputs/app_text_field.dart';
 import '../../../../shared/widgets/dialogs/app_dialog.dart';
 import '../../../../shared/widgets/theme/theme_toggle_button.dart';
 import '../../../../shared/widgets/states/app_minimal_launch_view.dart';
+import '../../../../shared/widgets/states/offline_connectivity_banner.dart';
 import '../controllers/auth_controller.dart';
 import '../controllers/auth_state.dart';
 
@@ -72,6 +73,7 @@ class _LoginScreenState extends State<LoginScreen> {
         context.go(RouteNames.studentDashboard);
         break;
       case UserRole.teacher:
+      case UserRole.chairman:
         context.go(RouteNames.teacherDashboard);
         break;
       case UserRole.cr:
@@ -89,8 +91,9 @@ class _LoginScreenState extends State<LoginScreen> {
       listenable: widget.authController,
       builder: (context, _) {
         if (widget.authController.state is AuthLoading) {
-          return const AppMinimalLaunchView(
-            statusMessage: 'Signing in to JnU EduPortal...',
+          final loadingState = widget.authController.state as AuthLoading;
+          return AppMinimalLaunchView(
+            statusMessage: loadingState.message ?? 'Signing in...',
           );
         }
 
@@ -132,11 +135,15 @@ class _LoginScreenState extends State<LoginScreen> {
           },
         ),
       ),
-      body: Stack(
+      body: Column(
         children: [
-          // Decorative ambient background glow orbs (IgnorePointer to never block touch)
-          IgnorePointer(
+          const OfflineConnectivityBanner(),
+          Expanded(
             child: Stack(
+              children: [
+                // Decorative ambient background glow orbs (IgnorePointer to never block touch)
+                IgnorePointer(
+                  child: Stack(
               children: [
                 Positioned(
                   top: -120,
@@ -447,6 +454,9 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ],
       ),
+    ),
+  ],
+),
     );
       },
     );

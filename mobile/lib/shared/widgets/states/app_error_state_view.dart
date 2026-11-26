@@ -20,6 +20,18 @@ class AppErrorStateView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isNetwork = message.toLowerCase().contains('network') ||
+        message.toLowerCase().contains('internet') ||
+        message.toLowerCase().contains('connection') ||
+        message.toLowerCase().contains('offline') ||
+        message.toLowerCase().contains('timed out') ||
+        icon == Icons.wifi_off_rounded;
+    final resolvedIcon = (icon == Icons.error_outline_rounded && isNetwork)
+        ? Icons.wifi_off_rounded
+        : icon;
+    final resolvedTitle = (title == 'Something Went Wrong' && isNetwork)
+        ? 'Connection Error'
+        : title;
 
     return Center(
       child: Padding(
@@ -35,14 +47,14 @@ class AppErrorStateView extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                icon,
+                resolvedIcon,
                 size: 48,
                 color: theme.colorScheme.error,
               ),
             ),
             const SizedBox(height: 20),
             Text(
-              title,
+              resolvedTitle,
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 18,

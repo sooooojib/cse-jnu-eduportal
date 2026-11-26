@@ -1,5 +1,6 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
+import { isAdminRole, isTeacherRole } from "./roles";
 
 export const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 export const MAX_DOCUMENT_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -139,7 +140,7 @@ export function evaluateUploadPermission(
 
   switch (request.scope) {
     case "notice":
-      if (role !== "ADMIN") {
+      if (!isAdminRole(role)) {
         throw new functions.https.HttpsError(
           "permission-denied",
           "Only administrators can upload notice attachments."
@@ -154,7 +155,7 @@ export function evaluateUploadPermission(
           "targetUserId is required for avatar uploads."
         );
       }
-      if (auth.uid !== request.targetUserId && role !== "ADMIN") {
+      if (auth.uid !== request.targetUserId && !isAdminRole(role)) {
         throw new functions.https.HttpsError(
           "permission-denied",
           "Users can only upload their own avatar."
@@ -167,7 +168,7 @@ export function evaluateUploadPermission(
       break;
 
     case "feedback_reply":
-      if (role !== "TEACHER" && role !== "ADMIN") {
+      if (!isTeacherRole(role) && !isAdminRole(role)) {
         throw new functions.https.HttpsError(
           "permission-denied",
           "Only teachers or administrators can attach files to feedback replies."
@@ -207,7 +208,7 @@ export function evaluateDeletePermission(
   }
 
   const role = (auth.token.role || "").toUpperCase();
-  if (role === "ADMIN") {
+  if (isAdminRole(role)) {
     return; // Admin can delete any file
   }
 

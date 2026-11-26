@@ -2,8 +2,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import '../../../../core/config/env_config.dart';
 import '../../../../core/constants/role_constants.dart';
+import '../../../../core/di/injection_container.dart';
 import '../../../../core/error/error_handler.dart';
 import '../../../../core/error/exceptions.dart';
+import '../../../../core/network/authoritative_guard.dart';
 import '../../domain/entities/admin_stats.dart';
 import '../../../auth/data/models/user_model.dart';
 import '../../../auth/data/models/signup_request_model.dart';
@@ -31,6 +33,9 @@ abstract class AdminRemoteDataSource {
   });
   Future<void> deleteUser({required String userId});
   Future<void> toggleUserActiveStatus({required String userId, required bool isActive});
+  Future<void> setAdminDelegate({required String userId, required bool enabled});
+  Future<void> updateUserRole({required String userId, required UserRole role});
+  Future<void> updateUserSession({required String userId, required String? session});
 
   // Courses
   Future<List<CourseModel>> getAllCourses();
@@ -95,19 +100,22 @@ abstract class AdminRemoteDataSource {
 class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
   final FirebaseFirestore _firestore;
   final FirebaseFunctions _functions;
+  final AuthoritativeGuard? _authoritativeGuard;
 
   AdminRemoteDataSourceImpl({
     FirebaseFirestore? firestore,
     FirebaseFunctions? functions,
+    AuthoritativeGuard? authoritativeGuard,
   })  : _firestore = firestore ?? FirebaseFirestore.instance,
-        _functions = functions ?? FirebaseFunctions.instance;
+        _functions = functions ?? FirebaseFunctions.instance,
+        _authoritativeGuard = authoritativeGuard ?? (sl.isRegistered<AuthoritativeGuard>() ? sl<AuthoritativeGuard>() : null);
 
   @override
   Future<AdminOverviewStats> getOverviewStats() async {
     try {
       final results = await Future.wait([
         _safeCount(_firestore.collection('users').where('role', isEqualTo: 'STUDENT')),
-        _safeCount(_firestore.collection('users').where('role', isEqualTo: 'TEACHER')),
+        _safeCount(_firestore.collection('users').where('role', whereIn: ['TEACHER', 'CHAIRMAN'])),
         _safeCount(_firestore.collection('users').where('role', isEqualTo: 'CR')),
         _safeCount(_firestore.collection('courses')),
         _safeCount(_firestore.collection('signupRequests').where('status', isEqualTo: 'PENDING')),
@@ -149,7 +157,10 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
   Future<List<UserModel>> getAllUsers({UserRole? roleFilter}) async {
     try {
       Query query = _firestore.collection('users');
-      if (roleFilter != null) {
+      if (roleFilter == UserRole.teacher) {
+        // "Faculty" includes the Chairman, who also teaches and can be assigned courses.
+        query = query.where('role', whereIn: [UserRole.teacher.value, UserRole.chairman.value]);
+      } else if (roleFilter != null) {
         query = query.where('role', isEqualTo: roleFilter.value);
       }
       final snap = await query.get();
@@ -176,6 +187,12 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
     int? semester,
   }) async {
     try {
+      if (_authoritativeGuard != null) {
+        await _authoritativeGuard.ensureAuthoritativeServer(
+          operationName: 'Creating user profile',
+        );
+      }
+
       if (EnvConfig.isCloudFunctionsEnabled) {
         try {
           final callable = _functions.httpsCallable('createAdminUser');
@@ -264,6 +281,12 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
   @override
   Future<void> deleteUser({required String userId}) async {
     try {
+      if (_authoritativeGuard != null) {
+        await _authoritativeGuard.ensureAuthoritativeServer(
+          operationName: 'Deleting user profile',
+        );
+      }
+
       if (EnvConfig.isCloudFunctionsEnabled) {
         try {
           final callable = _functions.httpsCallable('deleteUserByAdmin');
@@ -286,8 +309,69 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
   @override
   Future<void> toggleUserActiveStatus({required String userId, required bool isActive}) async {
     try {
+      if (_authoritativeGuard != null) {
+        await _authoritativeGuard.ensureAuthoritativeServer(
+          operationName: 'Updating user active status',
+        );
+      }
+
       await _firestore.collection('users').doc(userId).update({
         'isActive': isActive,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      throw ErrorHandler.handle(e);
+    }
+  }
+
+  @override
+  Future<void> setAdminDelegate({required String userId, required bool enabled}) async {
+    try {
+      if (_authoritativeGuard != null) {
+        await _authoritativeGuard.ensureAuthoritativeServer(
+          operationName: 'Updating signup committee access',
+        );
+      }
+      if (EnvConfig.isCloudFunctionsEnabled) {
+        await _functions.httpsCallable('setAdminDelegate').call({
+          'userId': userId,
+          'enabled': enabled,
+        });
+        return;
+      }
+      await _firestore.collection('users').doc(userId).update({
+        'isAdminDelegate': enabled,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      throw ErrorHandler.handle(e);
+    }
+  }
+
+  @override
+  Future<void> updateUserRole({required String userId, required UserRole role}) async {
+    try {
+      if (_authoritativeGuard != null) {
+        await _authoritativeGuard.ensureAuthoritativeServer(
+          operationName: 'Changing user role',
+        );
+      }
+      // Role changes must update Firebase Auth custom claims, so they are
+      // only possible through the Cloud Function.
+      await _functions.httpsCallable('updateUserRole').call({
+        'userId': userId,
+        'role': role.value,
+      });
+    } catch (e) {
+      throw ErrorHandler.handle(e);
+    }
+  }
+
+  @override
+  Future<void> updateUserSession({required String userId, required String? session}) async {
+    try {
+      await _firestore.collection('users').doc(userId).update({
+        'session': (session == null || session.isEmpty) ? FieldValue.delete() : session,
         'updatedAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
@@ -350,6 +434,8 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
         'courseType': course.courseType,
         'teacherId': course.teacherId,
         'teacherName': course.teacherName,
+        if (course.targetClassCount != null && course.targetClassCount! > 0)
+          'targetClassCount': course.targetClassCount,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -368,6 +454,9 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
         'year': course.year,
         'semester': course.semester,
         'courseType': course.courseType,
+        'targetClassCount': (course.targetClassCount != null && course.targetClassCount! > 0)
+            ? course.targetClassCount
+            : FieldValue.delete(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
@@ -413,13 +502,20 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
     bool isCoordinator = false,
   }) async {
     try {
+      if (_authoritativeGuard != null) {
+        await _authoritativeGuard.ensureAuthoritativeServer(
+          operationName: 'Assigning course to teacher',
+        );
+      }
+
       // 1. Validate Teacher
       final teacherDoc = await _firestore.collection('users').doc(teacherId).get();
       if (!teacherDoc.exists || teacherDoc.data() == null) {
         throw const ValidationException(message: 'Teacher profile not found.', validationErrors: []);
       }
       final teacherData = teacherDoc.data()!;
-      if (teacherData['role'] != 'TEACHER') {
+      final teacherRole = (teacherData['role'] as String? ?? '').toUpperCase();
+      if (teacherRole != 'TEACHER' && teacherRole != 'CHAIRMAN') {
         throw const ValidationException(message: 'Selected user is not a departmental faculty member.', validationErrors: []);
       }
       final teacherName = teacherData['fullName'] as String? ?? 'Professor';
@@ -491,6 +587,12 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
     required String teacherId,
   }) async {
     try {
+      if (_authoritativeGuard != null) {
+        await _authoritativeGuard.ensureAuthoritativeServer(
+          operationName: 'Removing course assignment',
+        );
+      }
+
       await _firestore.collection('courseAssignments').doc(assignmentId).delete();
 
       try {
@@ -552,6 +654,12 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
     int? assignedSemester,
   }) async {
     try {
+      if (_authoritativeGuard != null) {
+        await _authoritativeGuard.ensureAuthoritativeServer(
+          operationName: 'Approving signup request',
+        );
+      }
+
       if (EnvConfig.isCloudFunctionsEnabled) {
         try {
           final callable = _functions.httpsCallable('approveSignupRequest');
@@ -567,6 +675,9 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
           }
           return;
         } catch (fnErr) {
+          // Business-rule rejections from the server must reach the user; only
+          // fall back to direct Firestore when the function itself is unreachable.
+          if (_isAuthoritativeRejection(fnErr)) rethrow;
           // Fallback below
         }
       }
@@ -593,6 +704,7 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
           'university': 'Jagannath University',
           'year': assignedYear ?? reqData['year'] ?? 1,
           'semester': assignedSemester ?? reqData['semester'] ?? 1,
+          if (reqData['session'] != null) 'session': reqData['session'],
           'isActive': true,
           'assignedCourseIds': [],
           'fcmTokens': [],
@@ -619,6 +731,12 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
     required String reason,
   }) async {
     try {
+      if (_authoritativeGuard != null) {
+        await _authoritativeGuard.ensureAuthoritativeServer(
+          operationName: 'Rejecting signup request',
+        );
+      }
+
       if (EnvConfig.isCloudFunctionsEnabled) {
         try {
           final callable = _functions.httpsCallable('rejectSignupRequest');
@@ -633,6 +751,9 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
           }
           return;
         } catch (fnErr) {
+          // Business-rule rejections from the server must reach the user; only
+          // fall back to direct Firestore when the function itself is unreachable.
+          if (_isAuthoritativeRejection(fnErr)) rethrow;
           // Fallback below
         }
       }
@@ -678,6 +799,12 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
   @override
   Future<void> approveSemesterUpgrade({required String requestId}) async {
     try {
+      if (_authoritativeGuard != null) {
+        await _authoritativeGuard.ensureAuthoritativeServer(
+          operationName: 'Approving semester request',
+        );
+      }
+
       if (EnvConfig.isCloudFunctionsEnabled) {
         try {
           final callable = _functions.httpsCallable('approveSemesterUpgrade');
@@ -737,6 +864,12 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
     String? reason,
   }) async {
     try {
+      if (_authoritativeGuard != null) {
+        await _authoritativeGuard.ensureAuthoritativeServer(
+          operationName: 'Rejecting semester request',
+        );
+      }
+
       await _firestore.collection('semesterUpgradeRequests').doc(requestId).update({
         'status': 'REJECTED',
         'rejectionReason': reason ?? 'Administrative discretion.',
@@ -822,6 +955,12 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
     bool syncToPublicRoutines = false,
   }) async {
     try {
+      if (_authoritativeGuard != null) {
+        await _authoritativeGuard.ensureAuthoritativeServer(
+          operationName: 'Publishing department notice',
+        );
+      }
+
       // 1. Create central notice record
       final noticeRef = _firestore.collection('notices').doc();
       final nowStr = DateTime.now().toIso8601String();
@@ -843,7 +982,7 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
       if (targetAudience == 'STUDENTS') {
         userQuery = userQuery.where('role', isEqualTo: 'STUDENT');
       } else if (targetAudience == 'TEACHERS') {
-        userQuery = userQuery.where('role', isEqualTo: 'TEACHER');
+        userQuery = userQuery.where('role', whereIn: ['TEACHER', 'CHAIRMAN']);
       } else if (targetAudience == 'CRS') {
         userQuery = userQuery.where('role', isEqualTo: 'CR');
       }
@@ -893,6 +1032,12 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
   @override
   Future<void> deleteNotice(String noticeId) async {
     try {
+      if (_authoritativeGuard != null) {
+        await _authoritativeGuard.ensureAuthoritativeServer(
+          operationName: 'Deleting department notice',
+        );
+      }
+
       await _firestore.collection('notices').doc(noticeId).delete();
       try {
         await _firestore.collection('public_routines').doc(noticeId).delete();
@@ -901,4 +1046,19 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
       throw ErrorHandler.handle(e);
     }
   }
+}
+
+/// True when a Cloud Function rejected the call for a business / security
+/// reason (as opposed to being unreachable), so callers must not retry the
+/// operation through a direct-Firestore fallback.
+bool _isAuthoritativeRejection(Object error) {
+  if (error is! FirebaseFunctionsException) return false;
+  const rejectionCodes = {
+    'permission-denied',
+    'unauthenticated',
+    'invalid-argument',
+    'failed-precondition',
+    'already-exists',
+  };
+  return rejectionCodes.contains(error.code);
 }

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/role_colors.dart';
+import '../../../../app/theme/app_colors.dart';
 import '../../../../core/constants/role_constants.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../shared/widgets/dialogs/app_confirmation_dialog.dart';
+import '../../../../shared/widgets/states/app_error_state_view.dart';
 import '../../../attendance/presentation/screens/teacher_attendance_terminal_screen.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../../../curriculum/domain/entities/curriculum_entities.dart';
@@ -160,7 +161,7 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
               scrolledUnderElevation: 1,
               titleSpacing: 12,
               title: const Text(
-                'Faculty Schedule Hub',
+                'My Schedule',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
               ),
               actions: [
@@ -194,8 +195,8 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
                     unselectedLabelColor: isDark ? Colors.white60 : Colors.black54,
                     labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                     tabs: const [
-                      Tab(text: 'Routine Grid'),
-                      Tab(text: 'Manage Exams'),
+                      Tab(text: 'Routine'),
+                      Tab(text: 'Exams'),
                     ],
                   ),
                 ),
@@ -234,8 +235,8 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
                             unselectedLabelColor: isDark ? Colors.white60 : Colors.black54,
                             labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                             tabs: const [
-                              Tab(text: 'Routine Grid'),
-                              Tab(text: 'Manage Exams'),
+                              Tab(text: 'Routine'),
+                              Tab(text: 'Exams'),
                             ],
                           ),
                         ),
@@ -339,7 +340,7 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Faculty Teaching Schedule & Attendance',
+                            'Your classes and attendance',
                             style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : Colors.black54),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -378,23 +379,9 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
                     child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
                   )
                 else if (state is ScheduleError)
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 36),
-                      child: Column(
-                        children: [
-                          const Icon(Icons.error_outline, size: 44, color: Colors.redAccent),
-                          const SizedBox(height: 12),
-                          Text(state.message, textAlign: TextAlign.center),
-                          const SizedBox(height: 16),
-                          ElevatedButton(
-                            onPressed: _loadData,
-                            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
-                            child: const Text('Retry'),
-                          ),
-                        ],
-                      ),
-                    ),
+                  AppErrorStateView(
+                    message: state.message,
+                    onRetry: _loadData,
                   )
                 else if (state is ScheduleLoaded && state.slots.isEmpty)
                   Container(
@@ -425,7 +412,7 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primary,
                             foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            shape: const StadiumBorder(),
                           ),
                         ),
                       ],
@@ -460,42 +447,12 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
     return Container(
       decoration: BoxDecoration(
         color: isDark ? AppColors.surfaceContainerDark : Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: isLive
-              ? AppColors.primary
-              : (isDark ? Colors.white12 : const Color(0xFFE2E8F0)),
-          width: isLive ? 1.5 : 1,
-        ),
-        boxShadow: isLive
-            ? [
-                BoxShadow(
-                  color: AppColors.primary.withOpacity(0.2),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                )
-              ]
-            : [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                )
-              ],
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: isDark ? Colors.white12 : const Color(0xFFE2E8F0)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Live accent top bar
-          if (isLive)
-            Container(
-              height: 4,
-              decoration: const BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-              ),
-            ),
-
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -541,7 +498,6 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
                         decoration: BoxDecoration(
                           color: Colors.redAccent.withOpacity(0.12),
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.redAccent),
                         ),
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
@@ -549,7 +505,7 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
                             CircleAvatar(radius: 3, backgroundColor: Colors.redAccent),
                             SizedBox(width: 4),
                             Text(
-                              'LIVE NOW',
+                              'Live now',
                               style: TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.bold),
                             ),
                           ],
@@ -657,7 +613,7 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
                   ],
                 ),
 
-                // Live CTA: Start Attendance Terminal
+                // Live: start attendance for this class
                 if (isLive) ...[
                   const SizedBox(height: 12),
                   SizedBox(
@@ -668,16 +624,17 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
                           MaterialPageRoute(
                             builder: (_) => TeacherAttendanceTerminalScreen(
                               preselectedCourseId: slot.courseId,
+                              slotId: slot.id,
                             ),
                           ),
                         );
                       },
                       icon: const Icon(Icons.qr_code_2_rounded),
-                      label: const Text('Start Attendance Terminal'),
+                      label: const Text('Start Attendance'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: const StadiumBorder(),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
                     ),

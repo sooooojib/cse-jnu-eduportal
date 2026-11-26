@@ -59,6 +59,7 @@ class CounselingBooking extends Equatable {
   final String notes;
   final String status;
   final String? rejectionReason;
+  final String? teacherMessage;
   final String? reviewedAt;
   final String createdAt;
 
@@ -76,6 +77,7 @@ class CounselingBooking extends Equatable {
     required this.notes,
     required this.status,
     this.rejectionReason,
+    this.teacherMessage,
     this.reviewedAt,
     required this.createdAt,
   });
@@ -95,6 +97,7 @@ class CounselingBooking extends Equatable {
         notes,
         status,
         rejectionReason,
+        teacherMessage,
         reviewedAt,
         createdAt,
       ];

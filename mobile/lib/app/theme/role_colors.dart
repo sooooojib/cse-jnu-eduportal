@@ -45,6 +45,14 @@ class RoleColors {
     primary: Color(0xFF9333EA),
   );
 
+  // Chairman: royal indigo with gold accent
+  static const RoleColorScheme chairman = RoleColorScheme(
+    background: Color(0xFFEEF2FF),
+    text: Color(0xFF3730A3),
+    border: Color(0xFFFCD34D),
+    primary: Color(0xFFD97706),
+  );
+
   // Dark Schemes
   static const RoleColorScheme studentDark = RoleColorScheme(
     background: Color(0xFF064E3B),
@@ -74,6 +82,13 @@ class RoleColors {
     primary: Color(0xFFA855F7),
   );
 
+  static const RoleColorScheme chairmanDark = RoleColorScheme(
+    background: Color(0xFF312E81),
+    text: Color(0xFFC7D2FE),
+    border: Color(0xFFF59E0B),
+    primary: Color(0xFFFBBF24),
+  );
+
   static RoleColorScheme forRole(UserRole role, {bool isDark = false}) {
     if (isDark) {
       switch (role) {
@@ -81,6 +96,8 @@ class RoleColors {
           return studentDark;
         case UserRole.teacher:
           return teacherDark;
+        case UserRole.chairman:
+          return chairmanDark;
         case UserRole.cr:
           return crDark;
         case UserRole.admin:
@@ -92,6 +109,8 @@ class RoleColors {
         return student;
       case UserRole.teacher:
         return teacher;
+      case UserRole.chairman:
+        return chairman;
       case UserRole.cr:
         return cr;
       case UserRole.admin:

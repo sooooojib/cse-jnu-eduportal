@@ -111,6 +111,7 @@ class AuthRepositoryImpl implements AuthRepository {
     required String role,
     String? studentId,
     String? phone,
+    String? session,
   }) async {
     try {
       return await remoteDataSource.submitSignupRequest(
@@ -119,6 +120,7 @@ class AuthRepositoryImpl implements AuthRepository {
         role: role,
         studentId: studentId,
         phone: phone,
+        session: session,
       );
     } catch (e) {
       throw ErrorHandler.handle(e);

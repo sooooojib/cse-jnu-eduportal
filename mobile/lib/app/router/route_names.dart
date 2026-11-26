@@ -16,6 +16,8 @@ class RouteNames {
   static const String teacherFeedback = '/teacher/feedback';
   static const String studentProfile = '/profile';
   static const String notifications = '/notifications';
+  /// Classmates of the same semester & session (Students and CRs).
+  static const String myClass = '/my-class';
 
   // Admin Management Routes
   static const String adminUsers = '/admin/users';
@@ -27,4 +29,6 @@ class RouteNames {
   static const String adminFeedback = '/admin/feedback';
   static const String adminSettings = '/admin/settings';
   static const String adminNotifications = '/admin/notifications';
+  static const String adminTeacherMonitoring = '/admin/teacher-monitoring';
+  static const String adminRoutine = '/admin/routine';
 }

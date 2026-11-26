@@ -48,6 +48,8 @@ Cloud Firestore Root
   "avatarUrl": "https://firebasestorage.googleapis.com/.../avatars/uid.webp",
   "year": 3,
   "semester": 1,
+  "session": "2021-2022",
+  "isAdminDelegate": false,
   "assignedCourseIds": [],
   "fcmTokens": ["token_android_xyz", "token_ios_abc"],
   "isActive": true,
@@ -55,6 +57,9 @@ Cloud Firestore Root
   "updatedAt": "Timestamp(2026-08-31 22:00:00 UTC)"
 }
 ```
+* `role`: `STUDENT` | `CR` | `TEACHER` | `CHAIRMAN` | `ADMIN`. The Chairman is faculty with departmental admin rights (see [role_matrices.md](../features/role_matrices.md)); custom claim `role: "CHAIRMAN"`.
+* `session`: academic session / batch (`YYYY-YYYY`, consecutive years) for `STUDENT` / `CR`; copied from the signup request on approval. `null` for staff and for students created before this field existed (Admin/Chairman can set it from the User Directory).
+* `isAdminDelegate`: `TEACHER` only. When `true` the faculty member gets the limited Admin View (signup committee: review Student / CR requests). Set via the `setAdminDelegate` Cloud Function.
 
 ### 3.2 `signupRequests` Collection
 * **Document ID**: Auto-generated UUID.
@@ -65,12 +70,17 @@ Cloud Firestore Root
   "role": "STUDENT",
   "studentId": "2024CSE015",
   "phone": "+8801800000000",
+  "session": "2024-2025",
   "status": "PENDING",
   "rejectionReason": null,
   "reviewedBy": null,
+  "reviewedByRole": null,
   "createdAt": "Timestamp"
 }
 ```
+* `role` may only be `STUDENT`, `CR`, or `TEACHER` (enforced by security rules and `approveSignupRequest`).
+* `session` is **required** for `STUDENT` / `CR` requests (rules check the `^[0-9]{4}-[0-9]{4}$` pattern).
+* `reviewedByRole` records whether an `ADMIN`, `CHAIRMAN`, or delegated `TEACHER` made the decision.
 
 ### 3.3 `courses` Collection
 * **Document ID**: Course Code (e.g., `CSE-3101`) or Auto-generated UUID.
@@ -86,9 +96,11 @@ Cloud Firestore Root
   "teacherId": "uid_teacher_1",
   "teacherName": "Dr. Md. Abu Layek",
   "coordinatorId": "uid_teacher_1",
+  "targetClassCount": 30,
   "createdAt": "Timestamp"
 }
 ```
+* `targetClassCount` (optional): target number of classes per semester, set by the Admin / Chairman and used by Teacher Course Monitoring. There is no default. When absent, monitoring shows classes held without a progress percentage.
 
 ### 3.4 `schedules` Collection
 * **Document ID**: Auto-generated UUID.

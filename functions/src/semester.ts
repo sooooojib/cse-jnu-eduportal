@@ -1,5 +1,6 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
+import { isAdminRole } from "./roles";
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -399,7 +400,7 @@ export const dismissSemesterRejection = onCall(async (request) => {
 });
 
 export const approveSemesterUpgrade = onCall(async (request) => {
-  if (!request.auth || request.auth.token.role !== "ADMIN") {
+  if (!request.auth || !isAdminRole(request.auth.token.role)) {
     throw new HttpsError("permission-denied", "Only administrators can approve semester upgrades.");
   }
   const { requestId } = request.data || {};
@@ -410,7 +411,7 @@ export const approveSemesterUpgrade = onCall(async (request) => {
 });
 
 export const rejectSemesterUpgrade = onCall(async (request) => {
-  if (!request.auth || request.auth.token.role !== "ADMIN") {
+  if (!request.auth || !isAdminRole(request.auth.token.role)) {
     throw new HttpsError("permission-denied", "Only administrators can reject semester upgrades.");
   }
   const { requestId, reason } = request.data || {};

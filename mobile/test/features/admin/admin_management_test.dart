@@ -329,6 +329,41 @@ void main() {
       expect(find.textContaining('already exists'), findsOneWidget);
     });
 
+    testWidgets('Students tab filters by semester dropdown (e.g. 3.1)', (tester) async {
+      const senior = User(
+        id: 'uid_student_3',
+        email: 'senior@cse.jnu.ac.bd',
+        fullName: 'Senior Student',
+        role: UserRole.student,
+        studentId: '2021CSE001',
+        year: 3,
+        semester: 1,
+      );
+      when(() => mockAdminRepo.getAllUsers(roleFilter: any(named: 'roleFilter')))
+          .thenAnswer((_) async => [sampleStudent, senior]);
+
+      await tester.pumpWidget(buildTestableWidget(
+        AdminUserDirectoryScreen(repository: mockAdminRepo, initialRoleIndex: 2),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('directory_level_filter')), findsOneWidget);
+      expect(find.text('Sadia Sultana'), findsOneWidget);
+      expect(find.text('Senior Student'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('directory_level_filter')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('3.1').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Senior Student'), findsOneWidget);
+      expect(find.text('Sadia Sultana'), findsNothing);
+
+      // The semester dropdown only appears on the Students / CRs tabs.
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Faculty'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('directory_level_filter')), findsNothing);
+    });
+
     testWidgets('Prompts destructive confirmation before deleting user', (tester) async {
       when(() => mockAdminRepo.getAllUsers(roleFilter: any(named: 'roleFilter')))
           .thenAnswer((_) async => [sampleStudent]);
@@ -340,10 +375,12 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      // Tap delete icon
-      final deleteBtn = find.byIcon(Icons.delete_outline_rounded);
-      expect(deleteBtn, findsOneWidget);
-      await tester.tap(deleteBtn);
+      // Open the user actions menu, then choose Delete
+      final menuBtn = find.byIcon(Icons.more_vert_rounded);
+      expect(menuBtn, findsOneWidget);
+      await tester.tap(menuBtn);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete user'));
       await tester.pumpAndSettle();
 
       expect(find.text('Delete User Account?'), findsOneWidget);
@@ -394,12 +431,15 @@ void main() {
       await tester.enterText(textFields.at(0), 'CSE-1201'); // Code
       await tester.enterText(textFields.at(1), 'Data Structures'); // Title
       await tester.enterText(textFields.at(2), '3.0'); // Credits
-      await tester.enterText(textFields.at(3), 'Linear and non-linear data structures.'); // Description
+      await tester.enterText(textFields.at(3), '28'); // Target classes per semester
+      await tester.enterText(textFields.at(4), 'Linear and non-linear data structures.'); // Description
 
       await tester.tap(find.text('Save Course'));
       await tester.pumpAndSettle();
 
-      verify(() => mockAdminRepo.createCourse(any())).called(1);
+      final created = verify(() => mockAdminRepo.createCourse(captureAny())).captured.single as Course;
+      expect(created.targetClassCount, 28);
+      expect(created.description, 'Linear and non-linear data structures.');
       expect(find.textContaining('saved'), findsOneWidget);
     });
 
@@ -588,6 +628,41 @@ void main() {
   // 4. SIGNUP REQUEST MANAGEMENT TESTS
   // ═══════════════════════════════════════════════════════════════════════════
   group('4. Signup Request Moderation', () {
+    testWidgets('Session dropdown groups and filters signup petitions (oldest session first)', (tester) async {
+      const s21 = SignupRequest(
+        id: 'req_21', email: 'a@x.bd', fullName: 'Batch Twentyone', role: UserRole.student,
+        studentId: 'B210305001', session: '2021-2022', status: 'PENDING', createdAt: '2026-10-02',
+      );
+      const s23 = SignupRequest(
+        id: 'req_23', email: 'b@x.bd', fullName: 'Batch Twentythree', role: UserRole.cr,
+        studentId: 'B230305001', session: '2023-2024', status: 'PENDING', createdAt: '2026-10-03',
+      );
+      const teacher = SignupRequest(
+        id: 'req_t', email: 't@x.bd', fullName: 'New Lecturer', role: UserRole.teacher,
+        phone: '01700000000', status: 'PENDING', createdAt: '2026-10-04',
+      );
+      when(() => mockAdminRepo.getAllSignupRequests(statusFilter: any(named: 'statusFilter')))
+          .thenAnswer((_) async => [teacher, s23, s21]);
+
+      await tester.pumpWidget(buildTestableWidget(AdminSignupRequestsScreen(repository: mockAdminRepo)));
+      await tester.pumpAndSettle();
+
+      // Group headings appear oldest session first (teachers-last ordering is
+      // covered by the RequestOrdering unit tests; it is below the fold here).
+      final y21 = tester.getTopLeft(find.text('Session 2021-22').last).dy;
+      final y23 = tester.getTopLeft(find.text('Session 2023-24').last).dy;
+      expect(y21, lessThan(y23));
+
+      await tester.tap(find.byKey(const ValueKey('signup_session_filter')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Session 2023-24').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Batch Twentythree'), findsOneWidget);
+      expect(find.text('Batch Twentyone'), findsNothing);
+      expect(find.text('New Lecturer'), findsNothing);
+    });
+
     testWidgets('Lists pending signup requests with details', (tester) async {
       when(() => mockAdminRepo.getAllSignupRequests(statusFilter: any(named: 'statusFilter')))
           .thenAnswer((_) async => [sampleSignup]);
@@ -622,7 +697,11 @@ void main() {
 
       expect(find.text('Approve Newbie Student'), findsOneWidget);
 
-      await tester.tap(find.widgetWithText(ElevatedButton, 'Approve').last);
+      await tester.tap(find.byKey(const ValueKey('approval_semester_dropdown')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Year 1 · Semester 1').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Approve & Provision'));
       await tester.pumpAndSettle();
 
       verify(() => mockAdminRepo.approveSignup(
@@ -651,7 +730,8 @@ void main() {
 
       expect(find.text('Reject Petition'), findsOneWidget);
 
-      final reasonField = find.byType(TextField);
+      // The screen also has a search box, so target the field inside the dialog.
+      final reasonField = find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField));
       await tester.enterText(reasonField, 'Unverifiable departmental student ID.');
 
       await tester.tap(find.widgetWithText(ElevatedButton, 'Reject'));
@@ -680,7 +760,11 @@ void main() {
       await tester.tap(find.text('Approve'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.widgetWithText(ElevatedButton, 'Approve').last);
+      await tester.tap(find.byKey(const ValueKey('approval_semester_dropdown')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Year 1 · Semester 1').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Approve & Provision'));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('already APPROVED'), findsOneWidget);
@@ -691,6 +775,29 @@ void main() {
   // 5. SEMESTER UPGRADE REQUEST TESTS
   // ═══════════════════════════════════════════════════════════════════════════
   group('5. Semester Upgrade Petitions', () {
+    testWidgets('Requested-semester dropdown filters petitions and flags backwards requests', (tester) async {
+      const backwards = SemesterUpgradeRequest(
+        id: 'sem_back', studentId: 'u2', studentName: 'Backwards Request', studentRoll: 'R2',
+        currentYear: 3, currentSemester: 1, requestedYear: 1, requestedSemester: 1,
+        status: 'PENDING', createdAt: '2026-10-02T09:00:00Z',
+      );
+      when(() => mockAdminRepo.getAllSemesterRequests(statusFilter: any(named: 'statusFilter')))
+          .thenAnswer((_) async => [sampleSemesterRequest, backwards]);
+
+      await tester.pumpWidget(buildTestableWidget(AdminSemesterRequestsScreen(repository: mockAdminRepo)));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Lower than current semester'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('semester_request_level_filter')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('1.2').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sadia Sultana'), findsOneWidget);
+      expect(find.text('Backwards Request'), findsNothing);
+    });
+
     testWidgets('Displays pending semester upgrade petitions with transition badges', (tester) async {
       when(() => mockAdminRepo.getAllSemesterRequests(statusFilter: any(named: 'statusFilter')))
           .thenAnswer((_) async => [sampleSemesterRequest]);
@@ -747,7 +854,8 @@ void main() {
 
       expect(find.text('Reject Semester Request'), findsOneWidget);
 
-      final reasonField = find.byType(TextField);
+      // The screen also has a search box, so target the field inside the dialog.
+      final reasonField = find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField));
       await tester.enterText(reasonField, 'Attendance prerequisites not satisfied.');
 
       await tester.tap(find.widgetWithText(ElevatedButton, 'Reject'));

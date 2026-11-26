@@ -14,6 +14,10 @@ class Course extends Equatable {
   final String? coordinatorId;
   final String? createdAt;
 
+  /// Optional benchmark for how many classes should be held in a semester,
+  /// set per course by the Admin / Chairman. Null means no target is set.
+  final int? targetClassCount;
+
   const Course({
     required this.id,
     required this.code,
@@ -27,7 +31,14 @@ class Course extends Equatable {
     this.teacherName,
     this.coordinatorId,
     this.createdAt,
+    this.targetClassCount,
   });
+
+  bool get isLab => courseType.toUpperCase().contains('LAB');
+
+  /// The configured target, or null when not set (or not positive).
+  int? get targetClasses =>
+      (targetClassCount != null && targetClassCount! > 0) ? targetClassCount : null;
 
   @override
   List<Object?> get props => [
@@ -43,6 +54,7 @@ class Course extends Equatable {
         teacherName,
         coordinatorId,
         createdAt,
+        targetClassCount,
       ];
 }
 
@@ -110,6 +122,10 @@ class ScheduleSlot extends Equatable {
   final String? status;
   final String? createdBy;
 
+  /// One-day change applied on top of the weekly routine, shown to users
+  /// (e.g. "Moved from 09:00 AM, Room 302" or a cancellation reason).
+  final String? changeNote;
+
   const ScheduleSlot({
     required this.id,
     required this.courseId,
@@ -127,6 +143,7 @@ class ScheduleSlot extends Equatable {
     this.date,
     this.status = 'SCHEDULED',
     this.createdBy,
+    this.changeNote,
   });
 
   ScheduleSlot copyWith({
@@ -146,6 +163,7 @@ class ScheduleSlot extends Equatable {
     String? date,
     String? status,
     String? createdBy,
+    String? changeNote,
   }) {
     return ScheduleSlot(
       id: id ?? this.id,
@@ -164,6 +182,7 @@ class ScheduleSlot extends Equatable {
       date: date ?? this.date,
       status: status ?? this.status,
       createdBy: createdBy ?? this.createdBy,
+      changeNote: changeNote ?? this.changeNote,
     );
   }
 
@@ -185,7 +204,19 @@ class ScheduleSlot extends Equatable {
         date,
         status,
         createdBy,
+        changeNote,
       ];
+
+  /// True when the class is not happening that day: cancelled in advance or
+  /// reported as not taken.
+  bool get isCancelled {
+    final s = (status ?? '').toUpperCase();
+    return s == 'CANCELLED' || s == 'NOT_TAKEN';
+  }
+
+  /// Reported by the CR as not taken (the class was due but did not happen).
+  bool get isNotTaken => (status ?? '').toUpperCase() == 'NOT_TAKEN';
+  bool get isMoved => (status ?? '').toUpperCase() == 'MOVED';
 }
 
 class TeacherAvailabilitySlot extends Equatable {
@@ -279,6 +310,17 @@ class Exam extends Equatable {
   final String? createdAt;
   final String? updatedAt;
 
+  /// SCHEDULED (default) or CANCELLED. Cancelled exams stay listed, struck
+  /// through, instead of disappearing.
+  final String status;
+
+  /// Reason shown to students (e.g. why it was cancelled).
+  final String? statusNote;
+
+  /// Set when the exam was postponed / moved: where it was before.
+  final String? previousDate;
+  final String? previousStartTime;
+
   const Exam({
     required this.id,
     required this.courseId,
@@ -299,7 +341,16 @@ class Exam extends Equatable {
     this.creatorRole,
     this.createdAt,
     this.updatedAt,
+    this.status = 'SCHEDULED',
+    this.statusNote,
+    this.previousDate,
+    this.previousStartTime,
   });
+
+  bool get isCancelled => status.toUpperCase() == 'CANCELLED';
+
+  /// Moved from another date / time (shown as "Postponed from …").
+  bool get wasMoved => (previousDate ?? '').isNotEmpty;
 
   bool get isPast {
     try {
@@ -336,6 +387,10 @@ class Exam extends Equatable {
     String? creatorRole,
     String? createdAt,
     String? updatedAt,
+    String? status,
+    String? statusNote,
+    String? previousDate,
+    String? previousStartTime,
   }) {
     return Exam(
       id: id ?? this.id,
@@ -357,6 +412,10 @@ class Exam extends Equatable {
       creatorRole: creatorRole ?? this.creatorRole,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      status: status ?? this.status,
+      statusNote: statusNote ?? this.statusNote,
+      previousDate: previousDate ?? this.previousDate,
+      previousStartTime: previousStartTime ?? this.previousStartTime,
     );
   }
 
@@ -381,5 +440,9 @@ class Exam extends Equatable {
         creatorRole,
         createdAt,
         updatedAt,
+        status,
+        statusNote,
+        previousDate,
+        previousStartTime,
       ];
 }

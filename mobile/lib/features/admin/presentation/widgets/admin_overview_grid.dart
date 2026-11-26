@@ -168,18 +168,8 @@ class AdminOverviewGrid extends StatelessWidget {
           color: isDark ? const Color(0xFF13263E) : Colors.white,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: hasPulse
-                ? accentColor.withValues(alpha: 0.5)
-                : (isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0)),
-            width: hasPulse ? 1.5 : 1.0,
+            color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
           ),
-          boxShadow: [
-            BoxShadow(
-              color: isDark ? Colors.black26 : Colors.black.withValues(alpha: 0.03),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -203,13 +193,6 @@ class AdminOverviewGrid extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: accentColor,
                       shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: accentColor.withValues(alpha: 0.6),
-                          blurRadius: 6,
-                          spreadRadius: 2,
-                        ),
-                      ],
                     ),
                   ),
               ],

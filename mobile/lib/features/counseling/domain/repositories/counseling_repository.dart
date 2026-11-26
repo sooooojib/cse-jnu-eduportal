@@ -16,7 +16,7 @@ abstract class CounselingRepository {
   });
   Future<List<CounselingSlot>> getTeacherSlots(String teacherId);
   Future<List<CounselingBooking>> getTeacherRequests(String teacherId);
-  Future<void> approveBooking(String bookingId);
+  Future<void> approveBooking(String bookingId, {String? teacherMessage, String? startTime, String? endTime});
   Future<void> rejectBooking(String bookingId, {String? reason});
   Future<void> deleteSlot(String slotId);
 }
@@ -86,7 +86,13 @@ class ApproveBookingUseCase {
   final CounselingRepository repository;
   ApproveBookingUseCase(this.repository);
 
-  Future<void> execute(String bookingId) => repository.approveBooking(bookingId);
+  Future<void> execute(String bookingId, {String? teacherMessage, String? startTime, String? endTime}) =>
+      repository.approveBooking(
+        bookingId,
+        teacherMessage: teacherMessage,
+        startTime: startTime,
+        endTime: endTime,
+      );
 }
 
 class RejectBookingUseCase {

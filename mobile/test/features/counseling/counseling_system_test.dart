@@ -246,7 +246,12 @@ void main() {
     });
 
     test('5. Teacher approves booking (authoritative single-booking transaction)', () async {
-      when(() => mockRepository.approveBooking('booking-1')).thenAnswer((_) async {});
+      when(() => mockRepository.approveBooking(
+            'booking-1',
+            teacherMessage: any(named: 'teacherMessage'),
+            startTime: any(named: 'startTime'),
+            endTime: any(named: 'endTime'),
+          )).thenAnswer((_) async {});
       when(() => mockRepository.getTeacherSlots('teacher-layek-uid'))
           .thenAnswer((_) async => sampleSlots);
       when(() => mockRepository.getTeacherRequests('teacher-layek-uid'))
@@ -254,7 +259,12 @@ void main() {
 
       final success = await controller.approveRequest('booking-1', teacherId: 'teacher-layek-uid');
       expect(success, true);
-      verify(() => mockRepository.approveBooking('booking-1')).called(1);
+      verify(() => mockRepository.approveBooking(
+            'booking-1',
+            teacherMessage: any(named: 'teacherMessage'),
+            startTime: any(named: 'startTime'),
+            endTime: any(named: 'endTime'),
+          )).called(1);
     });
 
     test('6. Teacher rejects booking with reason', () async {
@@ -389,6 +399,117 @@ void main() {
       // Slots empty state
       expect(find.text('No Counseling Slots Created'), findsOneWidget);
       expect(find.text('Create First Slot'), findsOneWidget);
+    });
+
+    testWidgets('11. StudentCounselingScreen displays REQUESTED badge and pending button for requested slots', (tester) async {
+      when(() => mockRepository.getAvailableSlots(teacherId: any(named: 'teacherId')))
+          .thenAnswer((_) async => sampleSlots);
+      when(() => mockRepository.getMyBookings()).thenAnswer((_) async => sampleBookings);
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: StudentCounselingScreen(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // slot-1 has booking-1 with status PENDING in sampleBookings
+      expect(find.text('REQUESTED'), findsOneWidget);
+      expect(find.text('Requested (Pending Review)'), findsOneWidget);
+      expect(find.byIcon(Icons.hourglass_top_rounded), findsWidgets);
+    });
+
+    testWidgets('12. StudentCounselingScreen displays Teacher Note in My Appointments when teacherMessage is present', (tester) async {
+      const approvedBookingWithMessage = CounselingBooking(
+        id: 'booking-appr-1',
+        slotId: 'slot-1',
+        studentId: 'student-1',
+        studentName: 'Rahim Student',
+        teacherId: 'teacher-layek-uid',
+        teacherName: 'Dr. Md. Abu Layek',
+        slotDate: '2026-11-20',
+        startTime: '10:00',
+        endTime: '11:00',
+        category: 'Academic Advising',
+        notes: 'Discussion regarding thesis.',
+        status: 'APPROVED',
+        teacherMessage: 'Please meet at Room 501 and bring your draft.',
+        createdAt: '2026-11-19T10:00:00Z',
+      );
+
+      when(() => mockRepository.getAvailableSlots(teacherId: any(named: 'teacherId')))
+          .thenAnswer((_) async => sampleSlots);
+      when(() => mockRepository.getMyBookings())
+          .thenAnswer((_) async => [approvedBookingWithMessage]);
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: StudentCounselingScreen(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Switch to My Appointments tab
+      await tester.tap(find.text('My Appointments'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('APPROVED'), findsOneWidget);
+      expect(find.text('Teacher Note:'), findsOneWidget);
+      expect(find.text('Please meet at Room 501 and bring your draft.'), findsOneWidget);
+      expect(find.byIcon(Icons.chat_bubble_outline_rounded), findsOneWidget);
+    });
+
+    testWidgets('13. TeacherCounselingScreen approval dialog includes Message to Student and Time Adjusters', (tester) async {
+      when(() => mockRepository.getTeacherSlots('teacher-layek-uid'))
+          .thenAnswer((_) async => sampleSlots);
+      when(() => mockRepository.getTeacherRequests('teacher-layek-uid'))
+          .thenAnswer((_) async => sampleBookings);
+      when(() => mockRepository.approveBooking(
+            'booking-1',
+            teacherMessage: any(named: 'teacherMessage'),
+            startTime: any(named: 'startTime'),
+            endTime: any(named: 'endTime'),
+          )).thenAnswer((_) async {});
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TeacherCounselingScreen(
+            controller: controller,
+            authController: mockAuthController,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Tap Approve on request card
+      await tester.tap(find.text('Approve'));
+      await tester.pumpAndSettle();
+
+      // Approval dialog should contain time selector & message field
+      expect(find.text('Approve Appointment'), findsOneWidget);
+      expect(find.text('Session Time (Tap to adjust)'), findsOneWidget);
+      expect(find.text('Start Time'), findsOneWidget);
+      expect(find.text('End Time'), findsOneWidget);
+      expect(find.text('Message to Student (Optional)'), findsOneWidget);
+      expect(find.byType(TextField), findsOneWidget);
+
+      // Enter teacher message
+      await tester.enterText(
+        find.byType(TextField),
+        'Bring your project slides.',
+      );
+      await tester.pumpAndSettle();
+
+      // Confirm & Lock Slot
+      await tester.tap(find.text('Confirm & Lock Slot'));
+      await tester.pumpAndSettle();
+
+      verify(() => mockRepository.approveBooking(
+            'booking-1',
+            teacherMessage: 'Bring your project slides.',
+            startTime: any(named: 'startTime'),
+            endTime: any(named: 'endTime'),
+          )).called(1);
     });
   });
 }

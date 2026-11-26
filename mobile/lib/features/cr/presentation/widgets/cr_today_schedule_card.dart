@@ -1,10 +1,19 @@
+import '../../../../core/constants/role_constants.dart';
+import '../../../curriculum/presentation/widgets/exam_details_dialog.dart';
+import '../../../curriculum/presentation/widgets/exam_tile.dart';
+import '../../../curriculum/domain/services/exam_rules.dart';
+import '../../../curriculum/presentation/widgets/class_change_note.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/communication/whatsapp_share_dialog.dart';
 import '../../../../core/communication/whatsapp_share_service.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/utils/class_time.dart';
+import '../../../auth/domain/entities/user.dart';
 import '../../../curriculum/domain/entities/curriculum_entities.dart';
+import '../../../curriculum/presentation/widgets/class_actions_sheet.dart';
+import '../../../curriculum/presentation/widgets/class_slot_tile.dart';
 import '../../domain/entities/cr_dashboard_data.dart';
 
 class CrTodayScheduleCard extends StatefulWidget {
@@ -12,11 +21,19 @@ class CrTodayScheduleCard extends StatefulWidget {
   final VoidCallback onViewFullSchedule;
   final VoidCallback? onManageTomorrowTap;
 
+  /// When set (the CR), each class of their semester gets a Modify button.
+  final User? user;
+
+  /// Called after a class is changed from its Modify button.
+  final VoidCallback? onChanged;
+
   const CrTodayScheduleCard({
     super.key,
     required this.data,
     required this.onViewFullSchedule,
     this.onManageTomorrowTap,
+    this.user,
+    this.onChanged,
   });
 
   @override
@@ -35,6 +52,11 @@ class _CrTodayScheduleCardState extends State<CrTodayScheduleCard> {
   }
 
   bool get isShowingTomorrow => _selectedDay == 1;
+
+  DateTime get _shownDate {
+    final today = ClassTime.dateOnly(DateTime.now());
+    return isShowingTomorrow ? today.add(const Duration(days: 1)) : today;
+  }
 
   List<ScheduleSlot> get currentClasses =>
       isShowingTomorrow ? widget.data.tomorrowClasses : widget.data.todayClasses;
@@ -70,14 +92,20 @@ class _CrTodayScheduleCardState extends State<CrTodayScheduleCard> {
       buffer.writeln('');
       for (int i = 0; i < classes.length; i++) {
         final slot = classes[i];
+        if (slot.isCancelled) {
+          buffer.writeln('${i + 1}. ~${slot.courseCode}: ${slot.courseTitle}~ *${slot.isNotTaken ? 'NOT TAKEN' : 'CANCELLED'}*');
+          if (ClassChangeNote.shows(slot)) buffer.writeln('   ${slot.changeNote}');
+          if (i < classes.length - 1) buffer.writeln('');
+          continue;
+        }
         buffer.writeln('${i + 1}. *${slot.courseCode}: ${slot.courseTitle}*');
         buffer.writeln('   Time: ${slot.startTime} - ${slot.endTime}');
         buffer.writeln('   Room: ${slot.room}');
         if (slot.teacherName.isNotEmpty) {
           buffer.writeln('   Faculty: ${slot.teacherName}');
         }
-        if (slot.isExtraClass) {
-          buffer.writeln('   Note: Extra Class');
+        if (slot.isMoved || slot.isExtraClass) {
+          buffer.writeln('   Note: ${slot.changeNote ?? 'Extra Class'}');
         }
         if (i < classes.length - 1) {
           buffer.writeln('');
@@ -110,13 +138,6 @@ class _CrTodayScheduleCardState extends State<CrTodayScheduleCard> {
               ? Colors.white.withValues(alpha: 0.08)
               : const Color(0xFFE2E8F0),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -125,9 +146,7 @@ class _CrTodayScheduleCardState extends State<CrTodayScheduleCard> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             decoration: BoxDecoration(
-              color: isDark
-                  ? const Color(0xFF1D3552).withValues(alpha: 0.6)
-                  : const Color(0xFFF8FAFC),
+              color: Colors.transparent, // same as the card: less nesting
               borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
               border: Border(
                 bottom: BorderSide(
@@ -147,43 +166,16 @@ class _CrTodayScheduleCardState extends State<CrTodayScheduleCard> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  _selectedTab == 0
-                                      ? (isShowingTomorrow ? "Tomorrow's Schedule" : "Today's Schedule")
-                                      : (isShowingTomorrow ? "Tomorrow's Exams" : "Today's Exams"),
-                                  style: TextStyle(
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.w700,
-                                    color: isDark ? Colors.white : const Color(0xFF0F172A),
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              if (isShowingTomorrow) ...[
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: isDark
-                                        ? const Color(0xFF38BDF8).withValues(alpha: 0.15)
-                                        : const Color(0xFFE0F2FE),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Text(
-                                    'Next-Day',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
-                                      color: isDark ? const Color(0xFF38BDF8) : const Color(0xFF0284C7),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
+                          // The Today | Tomorrow switch already says which day it is.
+                          Text(
+                            _selectedTab == 0 ? 'Classes' : 'Exams',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 2),
                           Text(
@@ -207,7 +199,7 @@ class _CrTodayScheduleCardState extends State<CrTodayScheduleCard> {
                         color: isDark
                             ? const Color(0xFF0F1E33)
                             : const Color(0xFFE2E8F0).withValues(alpha: 0.8),
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(999),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -228,49 +220,21 @@ class _CrTodayScheduleCardState extends State<CrTodayScheduleCard> {
                   ],
                 ),
 
+                // Tomorrow: two quiet links (each class also has its own Modify).
                 if (isShowingTomorrow && widget.onManageTomorrowTap != null) ...[
-                  const SizedBox(height: 12),
-                  Row(
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 4,
                     children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: widget.onManageTomorrowTap,
-                          icon: const Icon(Icons.add_rounded, size: 16),
-                          label: const FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              'Add Class Slot',
-                              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
-                            ),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
+                      TextButton.icon(
+                        onPressed: widget.onManageTomorrowTap,
+                        icon: const Icon(Icons.edit_calendar_rounded, size: 18),
+                        label: const Text('Change a Class'),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () => _handleWhatsAppBroadcast(context),
-                          icon: const Icon(Icons.forum_rounded, size: 15, color: Color(0xFF075E54)),
-                          label: const FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              'Broadcast',
-                              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Color(0xFF075E54)),
-                            ),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            backgroundColor: const Color(0xFF25D366).withValues(alpha: 0.1),
-                            side: BorderSide(color: const Color(0xFF25D366).withValues(alpha: 0.35)),
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
+                      TextButton.icon(
+                        onPressed: () => _handleWhatsAppBroadcast(context),
+                        icon: const Icon(Icons.forum_outlined, size: 18),
+                        label: const Text('Share on WhatsApp'),
                       ),
                     ],
                   ),
@@ -387,7 +351,7 @@ class _CrTodayScheduleCardState extends State<CrTodayScheduleCard> {
           color: isSelected
               ? (isDark ? const Color(0xFF1E3A8A) : Colors.white)
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(9),
+          borderRadius: BorderRadius.circular(999),
           boxShadow: isSelected
               ? [
                   BoxShadow(
@@ -586,365 +550,56 @@ class _CrTodayScheduleCardState extends State<CrTodayScheduleCard> {
   Widget _buildClassesTimeline(BuildContext context, bool isDark) {
     final classes = currentClasses;
 
+    // Each class is its own box, so the list needs no end marker.
     return ListView.separated(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: classes.length + 1, // +1 for "End of scheduled classes" footer
-      separatorBuilder: (_, __) => const SizedBox(height: 18),
+      itemCount: classes.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
-        if (index == classes.length) {
-          // End of scheduled classes footer
-          return Row(
-            children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.06)
-                      : const Color(0xFFF1F5F9),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.done_all_rounded,
-                  size: 16,
-                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                ),
-              ),
-              const SizedBox(width: 14),
-              Text(
-                'End of scheduled classes',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
-                ),
-              ),
-            ],
-          );
-        }
-
         final slot = classes[index];
-        final bool isFirst = index == 0;
-        final bool isLab = slot.courseCode.endsWith('2') ||
-            slot.courseCode.endsWith('4') ||
-            slot.courseTitle.toLowerCase().contains('lab');
-
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Left icon marker
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: isFirst
-                    ? (isDark
-                        ? const Color(0xFF1E3A8A).withValues(alpha: 0.3)
-                        : const Color(0xFFEFF6FF))
-                    : (isDark
-                        ? Colors.white.withValues(alpha: 0.06)
-                        : const Color(0xFFF1F5F9)),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isFirst
-                      ? (isDark
-                          ? const Color(0xFF3B82F6)
-                          : const Color(0xFFBFDBFE))
-                      : Colors.transparent,
-                  width: 1.5,
+        final user = widget.user;
+        final examsNow = ExamClashes.examsDuring(slot, ClassTime.dateKey(_shownDate), widget.data.upcomingExams);
+        return ClassSlotTile(
+          slot: slot,
+          highlight: index == 0 && !isShowingTomorrow,
+          examNote: examsNow.isEmpty ? null : 'Exam in this slot: ${ExamTypes.label(examsNow.first.type)}',
+          action: user == null
+              ? null
+              : ClassModifyButton(
+                  user: user,
+                  slot: slot,
+                  date: _shownDate,
+                  onChanged: widget.onChanged,
                 ),
-              ),
-              child: Icon(
-                isLab ? Icons.laptop_mac_rounded : Icons.school_rounded,
-                size: 18,
-                color: isFirst
-                    ? (isDark
-                        ? const Color(0xFF60A5FA)
-                        : const Color(0xFF1D4ED8))
-                    : (isDark
-                        ? const Color(0xFF94A3B8)
-                        : const Color(0xFF64748B)),
-              ),
-            ),
-            const SizedBox(width: 14),
-
-            // Content
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          slot.courseTitle.isNotEmpty
-                              ? '${slot.courseCode}: ${slot.courseTitle}'
-                              : slot.courseCode,
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: isDark ? Colors.white : const Color(0xFF0F172A),
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: isFirst
-                              ? (isDark
-                                  ? AppColors.primary.withValues(alpha: 0.25)
-                                  : const Color(0xFFECFDF5))
-                              : (isDark
-                                  ? Colors.white.withValues(alpha: 0.06)
-                                  : const Color(0xFFF1F5F9)),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          slot.startTime,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: isFirst
-                                ? AppColors.primaryLight
-                                : (isDark
-                                    ? const Color(0xFF94A3B8)
-                                    : const Color(0xFF64748B)),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 1.5),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.06)
-                              : const Color(0xFFE2E8F0),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          slot.courseCode,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: isDark
-                                ? const Color(0xFFCBD5E1)
-                                : const Color(0xFF475569),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 1.5),
-                        decoration: BoxDecoration(
-                          color: isLab
-                              ? (isDark ? const Color(0xFF064E3B) : const Color(0xFFD1FAE5))
-                              : (isDark ? const Color(0xFF1E3A8A) : const Color(0xFFDBEAFE)),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          isLab ? 'Lab' : (slot.isExtraClass ? 'Extra' : 'Theory'),
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: isLab
-                                ? (isDark ? const Color(0xFF6EE7B7) : const Color(0xFF047857))
-                                : (isDark ? const Color(0xFF93C5FD) : const Color(0xFF1D4ED8)),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Icon(
-                        Icons.location_on_rounded,
-                        size: 14,
-                        color: isDark
-                            ? const Color(0xFF94A3B8)
-                            : const Color(0xFF64748B),
-                      ),
-                      const SizedBox(width: 3),
-                      Expanded(
-                        child: Text(
-                          slot.room,
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            color: isDark
-                                ? const Color(0xFF94A3B8)
-                                : const Color(0xFF64748B),
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (slot.teacherName.isNotEmpty) ...[
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            '• ${slot.teacherName}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isDark ? Colors.white38 : Colors.black45,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
         );
       },
     );
   }
 
   Widget _buildExamsTimeline(BuildContext context, bool isDark) {
+    final exams = widget.data.upcomingExams;
+    final user = widget.user;
     return ListView.separated(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: widget.data.upcomingExams.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 14),
+      itemCount: exams.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
-        final exam = widget.data.upcomingExams[index];
-        return Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: isDark
-                ? const Color(0xFF1E3A8A).withValues(alpha: 0.15)
-                : const Color(0xFFF0FDF4),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isDark
-                  ? const Color(0xFF3B82F6).withValues(alpha: 0.3)
-                  : const Color(0xFFBBF7D0),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.08)
-                          : const Color(0xFFDCFCE7),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      exam.courseCode,
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w700,
-                        color: isDark ? const Color(0xFF86EFAC) : const Color(0xFF166534),
-                      ),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF2563EB).withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      exam.type.replaceAll('_', ' '),
-                      style: const TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF2563EB),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                exam.title.isNotEmpty ? exam.title : '${exam.courseCode} Examination',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: isDark ? Colors.white : const Color(0xFF0F172A),
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Icon(
-                    Icons.calendar_today_rounded,
-                    size: 13,
-                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    exam.examDate,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Icon(
-                    Icons.access_time_rounded,
-                    size: 13,
-                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      '${exam.startTime} - ${exam.endTime}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-              if (exam.room.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.location_on_rounded,
-                      size: 13,
-                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        'Room: ${exam.room}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ],
-          ),
+        final exam = exams[index];
+        return ExamTile(
+          exam: exam,
+          onTap: () async {
+            final changed = await ExamDetailsDialog.show(
+              context: context,
+              exam: exam,
+              userRole: user?.role ?? UserRole.student,
+              userYear: user?.year ?? widget.data.year,
+              userSemester: user?.semester ?? widget.data.semester,
+              userId: user?.id,
+            );
+            if (changed == true) widget.onChanged?.call();
+          },
         );
       },
     );

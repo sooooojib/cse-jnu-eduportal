@@ -105,9 +105,6 @@ class CrMetricsGrid extends StatelessWidget {
                     ? const Color(0xFF7F1D1D).withValues(alpha: 0.3)
                     : const Color(0xFFFEF2F2),
                 iconColor: const Color(0xFFDC2626),
-                badgeText: data.upcomingExamsCount > 0 ? 'Term Exam' : null,
-                badgeBackgroundColor: const Color(0xFFFFDAD6),
-                badgeTextColor: const Color(0xFF93000A),
                 onTap: onUpcomingExamsTap,
               ),
             ),

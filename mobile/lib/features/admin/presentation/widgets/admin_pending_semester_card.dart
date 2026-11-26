@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../profile/domain/entities/semester_status.dart';
+import '../utils/request_ordering.dart';
 
 class AdminPendingSemesterCard extends StatelessWidget {
   final List<SemesterUpgradeRequest> requests;
@@ -70,7 +71,7 @@ class AdminPendingSemesterCard extends StatelessWidget {
                         foregroundColor: const Color(0xFFDC2626),
                         side: const BorderSide(color: Color(0xFFFCA5A5)),
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        shape: const StadiumBorder(),
                       ),
                       icon: const Icon(Icons.close_rounded, size: 18),
                       label: const Text('Reject', style: TextStyle(fontWeight: FontWeight.w700)),
@@ -87,7 +88,7 @@ class AdminPendingSemesterCard extends StatelessWidget {
                         backgroundColor: const Color(0xFF047857),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        shape: const StadiumBorder(),
                       ),
                       icon: const Icon(Icons.check_rounded, size: 18),
                       label: const Text('Approve', style: TextStyle(fontWeight: FontWeight.w700)),
@@ -180,7 +181,6 @@ class AdminPendingSemesterCard extends StatelessWidget {
               maxLines: 3,
               decoration: InputDecoration(
                 hintText: 'Enter rejection reason...',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
           ],
@@ -209,21 +209,16 @@ class AdminPendingSemesterCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Same order as the full screens (see RequestOrdering).
+    final requests = RequestOrdering.sortSemesterRequestsByTarget(this.requests);
 
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : Colors.white,
-        borderRadius: BorderRadius.circular(24),
+        color: isDark ? const Color(0xFF13263E) : Colors.white,
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: isDark ? Colors.black26 : Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

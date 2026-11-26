@@ -13,7 +13,12 @@ class AuthInitial extends AuthState {
 }
 
 class AuthLoading extends AuthState {
-  const AuthLoading();
+  final String? message;
+
+  const AuthLoading({this.message});
+
+  @override
+  List<Object?> get props => [message];
 }
 
 class Authenticated extends AuthState {

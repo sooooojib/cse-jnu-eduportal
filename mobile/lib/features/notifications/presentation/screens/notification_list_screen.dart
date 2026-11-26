@@ -127,11 +127,6 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
                           ? (isDark ? AppColors.surfaceContainerDark : AppColors.surfaceContainerLight)
                           : (isDark ? AppColors.primaryLight.withOpacity(0.12) : const Color(0xFFECFDF5)),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: notif.isRead
-                            ? (isDark ? AppColors.outlineDark.withOpacity(0.15) : AppColors.outlineLight.withOpacity(0.15))
-                            : AppColors.primaryLight.withOpacity(0.35),
-                      ),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -226,6 +221,8 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
       case 'SEMESTER_DECISION':
       case 'SEMESTER':
         return Icons.upgrade;
+      case 'EXAM_UPDATE':
+        return Icons.assignment_outlined;
       default:
         return Icons.notifications_active_outlined;
     }
@@ -251,6 +248,8 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
       case 'ATTENDANCE':
       case 'ATTENDANCE_VERIFIED':
         return '/attendance';
+      case 'EXAM_UPDATE':
+        return '/schedule';
       default:
         return null;
     }

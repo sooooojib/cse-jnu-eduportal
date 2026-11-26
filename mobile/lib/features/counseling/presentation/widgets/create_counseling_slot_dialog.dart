@@ -369,7 +369,7 @@ class _CreateCounselingSlotDialogState extends State<CreateCounselingSlotDialog>
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryLight,
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: const StadiumBorder(),
                 ),
                 onPressed: _isLoading ? null : _handleSubmit,
                 child: _isLoading

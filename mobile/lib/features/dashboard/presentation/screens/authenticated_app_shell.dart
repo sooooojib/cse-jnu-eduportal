@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../../../../app/router/route_names.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/theme_controller.dart';
@@ -34,6 +33,8 @@ import '../../../attendance/presentation/screens/teacher_attendance_terminal_scr
 import '../../../counseling/presentation/screens/teacher_counseling_screen.dart';
 import '../../../feedback/presentation/screens/teacher_feedback_screen.dart';
 import '../../../../core/utils/avatar_image_resolver.dart';
+import '../../../../shared/widgets/states/app_minimal_launch_view.dart';
+import '../../../../shared/widgets/states/offline_connectivity_banner.dart';
 import 'student_dashboard_shell.dart';
 
 /// Unified Authenticated Application Shell
@@ -170,8 +171,17 @@ class _AuthenticatedAppShellState extends State<AuthenticatedAppShell> {
 
   @override
   Widget build(BuildContext context) {
-    final authState = _authController.state;
-    final currentUser = authState is Authenticated ? authState.user : _authController.currentUser;
+    return ListenableBuilder(
+      listenable: _authController,
+      builder: (context, _) {
+        final authState = _authController.state;
+        if (authState is AuthLoading) {
+          return AppMinimalLaunchView(
+            statusMessage: authState.message ?? 'Signing out...',
+          );
+        }
+
+        final currentUser = authState is Authenticated ? authState.user : _authController.currentUser;
     final role = widget.role ?? currentUser?.role ?? UserRole.student;
     final isDark = context.isDarkMode;
 
@@ -221,7 +231,7 @@ class _AuthenticatedAppShellState extends State<AuthenticatedAppShell> {
           label: 'Settings',
         ),
       ];
-    } else if (role == UserRole.teacher) {
+    } else if (role.hasTeacherAccess) {
       roleColor = const Color(0xFF1D4ED8);
       shellTitle = 'JnU EduPortal';
       screens = [
@@ -375,7 +385,7 @@ class _AuthenticatedAppShellState extends State<AuthenticatedAppShell> {
                     assignedCoursesCount: 0,
                     onLogout: () => _handleLogout(context),
                   );
-                } else if (role == UserRole.teacher) {
+                } else if (role.hasTeacherAccess) {
                   TeacherProfileDialog.show(
                     context: context,
                     teacher: user,
@@ -402,7 +412,7 @@ class _AuthenticatedAppShellState extends State<AuthenticatedAppShell> {
                         ? Text(
                             currentUser != null && currentUser.fullName.isNotEmpty
                                 ? currentUser.fullName.substring(0, 1).toUpperCase()
-                                : (role == UserRole.admin ? 'A' : (role == UserRole.teacher ? 'T' : (role == UserRole.cr ? 'C' : 'S'))),
+                                : (role == UserRole.admin ? 'A' : (role.hasTeacherAccess ? 'T' : (role == UserRole.cr ? 'C' : 'S'))),
                             style: TextStyle(
                               color: roleColor,
                               fontWeight: FontWeight.w800,
@@ -418,7 +428,7 @@ class _AuthenticatedAppShellState extends State<AuthenticatedAppShell> {
           title: Center(
             child: Text(
               'JnU EduPortal',
-              style: GoogleFonts.plusJakartaSans(
+              style: TextStyle(fontFamily: 'PlusJakartaSans', 
                 fontWeight: FontWeight.w800,
                 fontSize: 19,
                 letterSpacing: -0.4,
@@ -447,9 +457,16 @@ class _AuthenticatedAppShellState extends State<AuthenticatedAppShell> {
             const SizedBox(width: 4),
           ],
         ),
-        body: IndexedStack(
-          index: safeIndex,
-          children: screens,
+        body: Column(
+          children: [
+            const OfflineConnectivityBanner(),
+            Expanded(
+              child: IndexedStack(
+                index: safeIndex,
+                children: screens,
+              ),
+            ),
+          ],
         ),
         bottomNavigationBar: Container(
           decoration: BoxDecoration(
@@ -509,6 +526,8 @@ class _AuthenticatedAppShellState extends State<AuthenticatedAppShell> {
           ),
         ),
       ),
+    );
+      },
     );
   }
 }

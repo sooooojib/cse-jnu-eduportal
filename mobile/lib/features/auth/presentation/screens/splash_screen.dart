@@ -61,6 +61,7 @@ class _SplashScreenState extends State<SplashScreen> {
         context.go(RouteNames.studentDashboard);
         break;
       case UserRole.teacher:
+      case UserRole.chairman:
         context.go(RouteNames.teacherDashboard);
         break;
       case UserRole.cr:

@@ -21,6 +21,7 @@ class AdminDashboardLoaded extends AdminDashboardState {
   final bool isProcessingAction;
   final String? actionSuccessMessage;
   final String? actionErrorMessage;
+  final bool isFromCache;
 
   const AdminDashboardLoaded({
     required this.stats,
@@ -29,6 +30,7 @@ class AdminDashboardLoaded extends AdminDashboardState {
     this.isProcessingAction = false,
     this.actionSuccessMessage,
     this.actionErrorMessage,
+    this.isFromCache = false,
   });
 
   AdminDashboardLoaded copyWith({
@@ -38,6 +40,7 @@ class AdminDashboardLoaded extends AdminDashboardState {
     bool? isProcessingAction,
     String? actionSuccessMessage,
     String? actionErrorMessage,
+    bool? isFromCache,
   }) {
     return AdminDashboardLoaded(
       stats: stats ?? this.stats,
@@ -46,6 +49,7 @@ class AdminDashboardLoaded extends AdminDashboardState {
       isProcessingAction: isProcessingAction ?? this.isProcessingAction,
       actionSuccessMessage: actionSuccessMessage,
       actionErrorMessage: actionErrorMessage,
+      isFromCache: isFromCache ?? this.isFromCache,
     );
   }
 }

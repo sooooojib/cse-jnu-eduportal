@@ -27,12 +27,29 @@ service cloud.firestore {
       );
     }
 
+    // System administrator only (security roles, de-anonymised feedback audit).
+    function isSystemAdmin() {
+      return isRole('ADMIN');
+    }
+
+    // Chairman of the Department: faculty member with departmental admin rights.
+    function isChairman() {
+      return isRole('CHAIRMAN');
+    }
+
+    // Departmental administration rights (Admin or Chairman).
     function isAdmin() {
-      return isRole('ADMIN') || isRole('admin');
+      return isSystemAdmin() || isChairman();
     }
 
     function isTeacher() {
-      return isRole('TEACHER') || isRole('teacher') || isRole('FACULTY') || isRole('faculty') || isAdmin();
+      return isRole('TEACHER') || isRole('FACULTY') || isAdmin();
+    }
+
+    // Faculty member granted the limited Admin View (signup review committee).
+    function isAdminDelegate() {
+      return isRole('TEACHER') &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isAdminDelegate', false) == true;
     }
 
     function isCR() {
@@ -46,6 +63,58 @@ service cloud.firestore {
       return isRole('STUDENT') || isRole('student') || isCR();
     }
 
+    // ─── CR ROLE HAND-OVER HELPERS (no Cloud Functions) ─────────────────────
+    // A CR offers the role to a classmate via crTransfers/{crUid}. When the
+    // classmate accepts, ONE batch sets the transfer to ACCEPTED, makes the
+    // classmate CR and the old CR STUDENT. These helpers allow those two role
+    // changes only inside that batch (get = before, getAfter = after).
+    function userData(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+
+    function sameClass(a, b) {
+      return a.get('year', null) != null && a.get('year', null) == b.get('year', null) &&
+             a.get('semester', null) != null && a.get('semester', null) == b.get('semester', null) &&
+             a.get('session', '') is string && a.get('session', '') != '' &&
+             a.get('session', '') == b.get('session', '');
+    }
+
+    function crHandoverKeysOnly() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['role', 'isCR', 'crTransferRef', 'updatedAt']);
+    }
+
+    // The invited classmate promotes themself to CR.
+    function crHandoverTo(userId) {
+      let ref = request.resource.data.get('crTransferRef', '');
+      let path = /databases/$(database)/documents/crTransfers/$(ref);
+      return isUser(userId) && ref is string && ref != '' && crHandoverKeysOnly() &&
+             resource.data.get('role', '') == 'STUDENT' && request.resource.data.role == 'CR' &&
+             exists(path) && get(path).data.status == 'PENDING' && get(path).data.toUid == userId &&
+             getAfter(path).data.status == 'ACCEPTED';
+    }
+
+    // The old CR (transfer id == their uid) is demoted by the accepting classmate.
+    function crHandoverFrom(userId) {
+      let path = /databases/$(database)/documents/crTransfers/$(userId);
+      return isAuthenticated() && crHandoverKeysOnly() &&
+             resource.data.get('role', '') == 'CR' && request.resource.data.role == 'STUDENT' &&
+             exists(path) && get(path).data.status == 'PENDING' &&
+             get(path).data.toUid == request.auth.uid &&
+             getAfter(path).data.status == 'ACCEPTED';
+    }
+
+    // ─── SCHEDULING HELPERS ─────────────────────────────────────────────────
+    // A teacher (or Chairman) teaches a course if they own it or it is in
+    // their assignedCourseIds.
+    function teachesCourse(courseId) {
+      return isTeacher() && courseId is string && courseId != '' && (
+        userData(request.auth.uid).get('assignedCourseIds', []).hasAny([courseId]) ||
+        (exists(/databases/$(database)/documents/courses/$(courseId)) &&
+         get(/databases/$(database)/documents/courses/$(courseId)).data.get('teacherId', '') == request.auth.uid)
+      );
+    }
+
     // ─── VALIDATION HELPERS ──────────────────────────────────────────────────
     function isNonEmptyString(field, maxLen) {
       return request.resource.data[field] is string &&
@@ -54,21 +123,95 @@ service cloud.firestore {
     }
 
     // ─── COLLECTION: users ───────────────────────────────────────────────────
+    // Security Fix (VULN-02): Enforce strict whitelist on user updates.
+    // Regular users can NEVER alter role, isCR, isActive, year, semester, studentId, or email.
+    // The Chairman may manage non-admin accounts but can never create, delete,
+    // or edit ADMIN accounts, nor change anyone's role (role changes go through
+    // the updateUserRole Cloud Function, system admin only).
     match /users/{userId} {
       allow read: if isAuthenticated();
-      allow create, delete: if isAdmin();
-      allow update: if isAdmin() || (
-        isUser(userId) &&
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'year', 'semester', 'studentId', 'email'])
+      allow create: if isSystemAdmin() || (
+        isChairman() && request.resource.data.get('role', '') != 'ADMIN'
       );
+      allow delete: if isSystemAdmin() || (
+        isChairman() && resource.data.get('role', '') != 'ADMIN'
+      );
+      allow update: if isSystemAdmin() || (
+        isChairman() &&
+        resource.data.get('role', '') != 'ADMIN' &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role'])
+      ) || (
+        isUser(userId) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'fullName', 'phone', 'avatarUrl', 'fcmTokens', 'updatedAt', 'bio', 'officeRoom'
+        ])
+      ) || crHandoverTo(userId) || crHandoverFrom(userId);
+    }
+
+    // ─── COLLECTION: crTransfers (CR role hand-over, doc id = current CR uid) ──
+    match /crTransfers/{fromUid} {
+      // New request (or re-request after a finished one) by the current CR to
+      // an active STUDENT of the same year, semester and session.
+      function validRequest() {
+        let d = request.resource.data;
+        return request.auth.uid == fromUid &&
+               d.fromUid == fromUid && d.toUid is string && d.toUid != fromUid &&
+               d.status == 'PENDING' &&
+               userData(fromUid).get('role', '') == 'CR' &&
+               exists(/databases/$(database)/documents/users/$(d.toUid)) &&
+               userData(d.toUid).get('role', '') == 'STUDENT' &&
+               userData(d.toUid).get('isActive', true) == true &&
+               sameClass(userData(fromUid), userData(d.toUid));
+      }
+
+      function onlyStatusChange(keys) {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+      }
+
+      allow read: if isAuthenticated() && (
+        request.auth.uid == fromUid ||
+        resource.data.toUid == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if validRequest();
+      allow update: if
+        // Re-request after the previous transfer finished.
+        (resource.data.status != 'PENDING' && validRequest()) ||
+        // Current CR cancels.
+        (request.auth.uid == fromUid && resource.data.status == 'PENDING' &&
+         request.resource.data.status == 'CANCELLED' && onlyStatusChange(['status', 'updatedAt'])) ||
+        // Invited classmate declines.
+        (request.auth.uid == resource.data.toUid && resource.data.status == 'PENDING' &&
+         request.resource.data.status == 'DECLINED' &&
+         onlyStatusChange(['status', 'respondedAt', 'updatedAt'])) ||
+        // Invited classmate accepts: only together with both role changes,
+        // while the sender is still CR and both are still classmates.
+        (request.auth.uid == resource.data.toUid && resource.data.status == 'PENDING' &&
+         request.resource.data.status == 'ACCEPTED' &&
+         onlyStatusChange(['status', 'respondedAt', 'updatedAt']) &&
+         userData(fromUid).get('role', '') == 'CR' &&
+         userData(request.auth.uid).get('role', '') == 'STUDENT' &&
+         sameClass(userData(fromUid), userData(request.auth.uid)) &&
+         getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'CR' &&
+         getAfter(/databases/$(database)/documents/users/$(fromUid)).data.role == 'STUDENT');
+      allow delete: if isAdmin();
     }
 
     // ─── COLLECTION: signupRequests ──────────────────────────────────────────
+    // Public signup form may only request STUDENT, CR, or TEACHER. Students & CRs
+    // must state their academic session (e.g. "2021-2022").
     match /signupRequests/{requestId} {
       allow create: if request.resource.data.status == 'PENDING' &&
                        isNonEmptyString('email', 100) &&
-                       isNonEmptyString('fullName', 100);
-      allow read, update, delete: if isAdmin();
+                       isNonEmptyString('fullName', 100) &&
+                       request.resource.data.get('role', 'STUDENT') in ['STUDENT', 'CR', 'TEACHER'] &&
+                       (
+                         request.resource.data.get('role', 'STUDENT') == 'TEACHER' ||
+                         (request.resource.data.get('session', '') is string &&
+                          request.resource.data.get('session', '').matches('^[0-9]{4}-[0-9]{4}$'))
+                       );
+      allow read: if isAdmin() || isAdminDelegate();
+      allow update, delete: if isAdmin();
     }
 
     // ─── COLLECTION: courses ─────────────────────────────────────────────────
@@ -90,81 +233,222 @@ service cloud.firestore {
     }
 
     // ─── COLLECTION: schedules ───────────────────────────────────────────────
+    // Security Fix (VULN-03): Remove spoofable creatorRole == 'CR' bypass.
+    // Strictly require verified CR, Teacher, or Admin role.
+    // The weekly routine is managed by Admin / Chairman and by teachers for
+    // their own courses. CRs make one-day changes via classChanges instead and
+    // may only remove old one-off (dated) classes they created themselves.
     match /schedules/{slotId} {
       allow read: if isAuthenticated();
-      allow create, update: if isAdmin() || isCR() || isTeacher() ||
-        (isAuthenticated() && (
-          request.resource.data.creatorRole == 'CR' ||
-          request.resource.data.createdByCrId == request.auth.uid ||
-          request.resource.data.createdBy == request.auth.uid ||
-          (resource != null && (
-            resource.data.createdByCrId == request.auth.uid ||
-            resource.data.createdBy == request.auth.uid
-          ))
-        ));
-      allow delete: if isAdmin() || isCR() || isTeacher() ||
-        (isAuthenticated() && resource != null && (
-          resource.data.createdByCrId == request.auth.uid ||
-          resource.data.createdBy == request.auth.uid
-        ));
+      allow create: if isAdmin() || teachesCourse(request.resource.data.get('courseId', ''));
+      allow update: if isAdmin() || (
+        teachesCourse(resource.data.get('courseId', '')) &&
+        teachesCourse(request.resource.data.get('courseId', ''))
+      );
+      allow delete: if isAdmin() || teachesCourse(resource.data.get('courseId', '')) || (
+        isCR() && resource.data.get('date', null) != null &&
+        resource.data.get('createdBy', '') == request.auth.uid
+      );
     }
+
     match /scheduleSlots/{slotId} {
       allow read: if isAuthenticated();
-      allow create, update: if isAdmin() || isCR() || isTeacher() ||
-        (isAuthenticated() && (
-          request.resource.data.creatorRole == 'CR' ||
-          request.resource.data.createdByCrId == request.auth.uid ||
-          request.resource.data.createdBy == request.auth.uid ||
-          (resource != null && (
-            resource.data.createdByCrId == request.auth.uid ||
-            resource.data.createdBy == request.auth.uid
-          ))
-        ));
-      allow delete: if isAdmin() || isCR() || isTeacher() ||
-        (isAuthenticated() && resource != null && (
-          resource.data.createdByCrId == request.auth.uid ||
-          resource.data.createdBy == request.auth.uid
-        ));
+      allow create: if isAdmin() || teachesCourse(request.resource.data.get('courseId', ''));
+      allow update: if isAdmin() || (
+        teachesCourse(resource.data.get('courseId', '')) &&
+        teachesCourse(request.resource.data.get('courseId', ''))
+      );
+      allow delete: if isAdmin() || teachesCourse(resource.data.get('courseId', '')) || (
+        isCR() && resource.data.get('date', null) != null &&
+        resource.data.get('createdBy', '') == request.auth.uid
+      );
+    }
+
+    // ─── COLLECTION: classChanges (one-day extra / cancel / move / not taken) ─
+    // CR: own batch, past 7 days .. next 7 days, including "not taken" reports.
+    // Teacher/Chairman: own courses, today .. next 7 days, no "not taken".
+    // Admin: any. Changes are never edited, only undone (creator or admin).
+    match /classChanges/{changeId} {
+      // dateTs is midday of the class date. Changes may cover the past 7 days
+      // (so the CR can report what actually happened) and the next 7 days.
+      function inWindow(ts) {
+        return ts is timestamp &&
+               ts > request.time - duration.value(8, 'd') &&
+               ts < request.time + duration.value(9, 'd');
+      }
+
+      // Today or later (for teachers, who may only plan ahead).
+      function upcoming(ts) {
+        return ts > request.time - duration.value(1, 'd');
+      }
+
+      // Today or earlier: a class can only be "not taken" once it was due.
+      function notInFuture(ts) {
+        return ts < request.time + duration.value(12, 'h');
+      }
+
+      function validChange(d) {
+        return d.type in ['EXTRA', 'CANCEL', 'MOVE', 'NOT_TAKEN'] &&
+               d.date is string && d.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
+               inWindow(d.dateTs) &&
+               (d.type != 'NOT_TAKEN' || notInFuture(d.dateTs)) &&
+               d.courseId is string && d.courseId != '' &&
+               d.targetYear is int && d.targetSemester is int &&
+               d.createdBy == request.auth.uid &&
+               (d.type == 'EXTRA' || (d.get('originalSlotId', '') is string && d.get('originalSlotId', '') != ''));
+      }
+
+      function crOwnBatch(d) {
+        return isRole('CR') &&
+               userData(request.auth.uid).get('year', null) == d.targetYear &&
+               userData(request.auth.uid).get('semester', null) == d.targetSemester;
+      }
+
+      // Teachers: their own courses, today onward, and never "not taken"
+      // (that report comes from the class, not the teacher).
+      function teacherOwnUpcoming(d) {
+        return teachesCourse(d.courseId) && d.type != 'NOT_TAKEN' && upcoming(d.dateTs);
+      }
+
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && validChange(request.resource.data) && (
+        isAdmin() || crOwnBatch(request.resource.data) || teacherOwnUpcoming(request.resource.data)
+      );
+      allow update: if false;
+      allow delete: if isAuthenticated() && (resource.data.createdBy == request.auth.uid || isAdmin());
     }
 
     // ─── COLLECTION: exams ───────────────────────────────────────────────────
+    // Admin / Chairman: any exam. Teacher: their own courses. CR: their own
+    // semester, every type except FINAL. Exams are cancelled (status) rather
+    // than deleted; only Admin / Chairman delete.
     match /exams/{examId} {
+      function validExam(d) {
+        return d.courseId is string && d.courseId != '' &&
+               d.year is int && d.semester is int &&
+               d.examDate is string && d.examDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
+               d.get('type', 'MID_TERM') in ['MID_TERM', 'FINAL', 'QUIZ', 'LAB_EXAM', 'CT'] &&
+               d.get('status', 'SCHEDULED') in ['SCHEDULED', 'CANCELLED'];
+      }
+
+      // Cheap single lookup of the caller's own profile (kept small so the
+      // update rule stays well under the 1000-expression limit).
+      function crOwnSemester(d) {
+        let me = userData(request.auth.uid);
+        return me.get('role', '').upper() == 'CR' &&
+               me.get('year', null) == d.year &&
+               me.get('semester', null) == d.semester &&
+               d.get('type', 'MID_TERM') != 'FINAL';
+      }
+
       allow read: if isAuthenticated();
-      allow create, update, delete: if isAdmin() || isTeacher() || isCR();
+      allow create: if isAuthenticated() && validExam(request.resource.data) &&
+        request.resource.data.get('createdBy', '') == request.auth.uid && (
+          crOwnSemester(request.resource.data) || isAdmin() || teachesCourse(request.resource.data.courseId)
+        );
+      allow update: if isAuthenticated() && validExam(request.resource.data) &&
+        request.resource.data.get('createdBy', null) == resource.data.get('createdBy', null) && (
+          (crOwnSemester(resource.data) && crOwnSemester(request.resource.data)) ||
+          isAdmin() ||
+          (teachesCourse(resource.data.courseId) && teachesCourse(request.resource.data.courseId))
+        );
+      allow delete: if isAdmin();
     }
 
     // ─── COLLECTION: attendanceSessions ──────────────────────────────────────
+    // A teacher opens sessions for their own courses. The session document has
+    // no code: the rotating code lives in private/code, readable only by the
+    // session's teacher (and admins).
     match /attendanceSessions/{sessionId} {
       allow read: if isAuthenticated();
-      allow create: if isTeacher() || (isAuthenticated() && request.resource.data.teacherId == request.auth.uid);
-      allow update: if isTeacher() || (isAuthenticated() && (resource.data.teacherId == request.auth.uid || request.resource.data.isActive == false));
-      allow delete: if isAdmin() || (isAuthenticated() && resource.data.teacherId == request.auth.uid);
+      allow create: if isAuthenticated() &&
+        request.resource.data.get('teacherId', '') == request.auth.uid &&
+        !('code' in request.resource.data) &&
+        request.resource.data.get('mode', 'CODE') in ['CODE', 'MANUAL'] &&
+        (isAdmin() || teachesCourse(request.resource.data.get('courseId', '')));
+      allow update: if isAuthenticated() &&
+        request.resource.data.get('code', null) == resource.data.get('code', null) &&
+        request.resource.data.get('teacherId', null) == resource.data.get('teacherId', null) &&
+        (resource.data.get('teacherId', '') == request.auth.uid || isAdmin());
+      allow delete: if isAdmin() || (isTeacher() && resource.data.get('teacherId', '') == request.auth.uid);
+
+      match /private/{docId} {
+        allow read: if isAuthenticated() && (
+          get(/databases/$(database)/documents/attendanceSessions/$(sessionId)).data.get('teacherId', '') == request.auth.uid ||
+          isAdmin()
+        );
+        allow write: if isAuthenticated() && (
+          getAfter(/databases/$(database)/documents/attendanceSessions/$(sessionId)).data.get('teacherId', '') == request.auth.uid ||
+          isAdmin()
+        );
+      }
     }
 
     // ─── COLLECTION: attendance ──────────────────────────────────────────────
+    // Students: one self-mark per session, only with the current (or previous)
+    // rotating code, only for their own semester, while the session is open
+    // and the teacher's screen is live; PRESENT before lateAfter, LATE after.
+    // Teachers: only for their own course's sessions. Students can never edit
+    // or delete records; only admins delete.
     match /attendance/{recordId} {
+      function sessionOf(sid) {
+        return get(/databases/$(database)/documents/attendanceSessions/$(sid)).data;
+      }
+
+      function selfMarkOk(d) {
+        let s = sessionOf(d.sessionId);
+        let c = get(/databases/$(database)/documents/attendanceSessions/$(d.sessionId)/private/code).data;
+        let me = userData(request.auth.uid);
+        return d.get('markedBy', '') == 'SELF' &&
+               recordId == d.sessionId + '_' + request.auth.uid &&
+               d.studentId == request.auth.uid &&
+               s.isActive == true && s.expiresAt > request.time &&
+               s.get('mode', 'CODE') == 'CODE' &&
+               d.courseId == s.courseId &&
+               me.get('year', null) == s.targetYear && me.get('semester', null) == s.targetSemester &&
+               (d.get('codeUsed', '') == c.code || (c.get('prevCode', '') != '' && d.get('codeUsed', '') == c.prevCode)) &&
+               c.issuedAt > request.time - duration.value(45, 's') &&
+               d.status == (request.time > s.get('lateAfter', s.expiresAt) ? 'LATE' : 'PRESENT');
+      }
+
+      function teacherMarkOk(d) {
+        return d.get('markedBy', '') == 'TEACHER' &&
+               d.status in ['PRESENT', 'LATE', 'ABSENT'] &&
+               recordId == d.sessionId + '_' + d.studentId &&
+               sessionOf(d.sessionId).courseId == d.courseId &&
+               (sessionOf(d.sessionId).get('teacherId', '') == request.auth.uid || isAdmin() || teachesCourse(d.courseId));
+      }
+
       allow read: if isAuthenticated();
-      allow create, update: if isTeacher() ||
-        (isAuthenticated() && (
-          (request.resource.data.studentId == request.auth.uid && request.resource.data.status == 'PRESENT') ||
-          (resource != null && resource.data.studentId == request.auth.uid)
-        ));
-      allow delete: if isAdmin() || isTeacher();
+      allow create: if isAuthenticated() && (selfMarkOk(request.resource.data) || teacherMarkOk(request.resource.data));
+      allow update: if isAuthenticated() &&
+        request.resource.data.studentId == resource.data.studentId &&
+        request.resource.data.sessionId == resource.data.sessionId &&
+        teacherMarkOk(request.resource.data);
+      allow delete: if isAdmin();
     }
 
     // ─── COLLECTION: counselingSlots ─────────────────────────────────────────
     match /counselingSlots/{slotId} {
       allow read: if isAuthenticated();
-      allow create, update, delete: if isTeacher() || (isAuthenticated() && request.resource.data.teacherId == request.auth.uid) || isAdmin();
+      allow create: if (isTeacher() && request.resource.data.teacherId == request.auth.uid) || isAdmin();
+      allow update, delete: if (isTeacher() && resource.data.teacherId == request.auth.uid) || isAdmin();
     }
 
     // ─── COLLECTION: counselingBookings ──────────────────────────────────────
+    // Security Fix (VULN-05): Students cannot approve their own booking request.
+    // Students can only set status to CANCELLED.
     match /counselingBookings/{bookingId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() &&
-                       request.resource.data.studentId == request.auth.uid;
-      allow update: if isUser(resource.data.studentId) || isTeacher() || isAdmin();
-      allow delete: if isAdmin() || (isAuthenticated() && resource.data.teacherId == request.auth.uid);
+                       request.resource.data.studentId == request.auth.uid &&
+                       request.resource.data.status == 'PENDING';
+      allow update: if (isTeacher() && (resource.data.teacherId == request.auth.uid || isAdmin())) || (
+        isUser(resource.data.studentId) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt', 'cancellationReason']) &&
+        request.resource.data.status == 'CANCELLED'
+      );
+      allow delete: if isAdmin() || (isTeacher() && resource.data.teacherId == request.auth.uid);
     }
 
     // ─── COLLECTION: feedback ────────────────────────────────────────────────
@@ -198,22 +482,23 @@ service cloud.firestore {
     // ─── COLLECTION: feedbackIdentities (ADMIN & STUDENT AUTHOR ONLY) ────────
     // Strictly isolates real student identity for anonymous feedback.
     // Teachers have ZERO read or write access to this collection.
+    // The Chairman is excluded: they teach these students, so anonymous
+    // identities stay visible to the system ADMIN only.
     match /feedbackIdentities/{feedbackId} {
       allow read: if isAuthenticated() && (
         resource.data.studentId == request.auth.uid ||
-        isAdmin()
+        isSystemAdmin()
       );
       allow create: if isAuthenticated() &&
                        request.resource.data.studentId == request.auth.uid;
       allow update: if isAuthenticated() && (
         resource.data.studentId == request.auth.uid ||
-        isAdmin()
+        isSystemAdmin()
       );
-      allow delete: if isAdmin() || (
+      allow delete: if isSystemAdmin() || (
         resource.data.studentId == request.auth.uid
       );
     }
-
 
     // ─── COLLECTION: semesterUpgradeRequests ─────────────────────────────────
     match /semesterUpgradeRequests/{requestId} {
@@ -223,10 +508,16 @@ service cloud.firestore {
       allow create: if isStudent() &&
                        request.resource.data.studentId == request.auth.uid &&
                        request.resource.data.status == 'PENDING';
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        isUser(resource.data.studentId) &&
+        resource.data.status == 'PENDING' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['targetYear', 'targetSemester', 'notes', 'updatedAt'])
+      );
+      allow delete: if isAdmin();
     }
 
     // ─── COLLECTION: notifications ───────────────────────────────────────────
+    // Security Fix (VULN-06): Restrict arbitrary notification creation.
     match /notifications/{notificationId} {
       allow read: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
@@ -238,7 +529,30 @@ service cloud.firestore {
         (resource.data.userId == request.auth.uid &&
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead', 'readAt']))
       );
-      allow create: if isAuthenticated();
+      allow create: if (
+        // Exam added / changed / cancelled: teachers (and admins) may tell any
+        // student; a CR only the students of their own semester.
+        isAuthenticated() && request.resource.data.get('notificationType', '') == 'EXAM_UPDATE' &&
+        request.resource.data.get('senderId', '') == request.auth.uid &&
+        request.resource.data.isRead == false && (
+          (userData(request.auth.uid).get('role', '').upper() == 'CR' &&
+           userData(request.resource.data.userId).get('year', -1) == userData(request.auth.uid).get('year', -2) &&
+           userData(request.resource.data.userId).get('semester', -1) == userData(request.auth.uid).get('semester', -2)) ||
+          isTeacher()
+        )
+      ) || (
+        // CR hand-over messages between the two people in a transfer.
+        isAuthenticated() && request.resource.data.get('notificationType', '') == 'CR_TRANSFER' &&
+        request.resource.data.isRead == false && (
+          (existsAfter(/databases/$(database)/documents/crTransfers/$(request.auth.uid)) &&
+           getAfter(/databases/$(database)/documents/crTransfers/$(request.auth.uid)).data.toUid == request.resource.data.userId) ||
+          (exists(/databases/$(database)/documents/crTransfers/$(request.resource.data.userId)) &&
+           get(/databases/$(database)/documents/crTransfers/$(request.resource.data.userId)).data.toUid == request.auth.uid)
+        )
+      ) || isAdmin() || (
+        request.resource.data.get('notificationType', '') in ['SCHEDULE_UPDATE', 'ATTENDANCE_SESSION', 'ROUTINE_ANNOUNCEMENT'] &&
+        isTeacher()
+      );
       allow delete: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
         isAdmin()

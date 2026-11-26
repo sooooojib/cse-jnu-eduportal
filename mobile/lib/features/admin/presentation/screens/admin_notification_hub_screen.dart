@@ -13,6 +13,7 @@ import '../../../../shared/widgets/states/app_error_state_view.dart';
 import '../../../../shared/widgets/states/app_loading_view.dart';
 import '../../domain/entities/department_notice.dart';
 import '../../domain/repositories/admin_repository.dart';
+import '../widgets/admin_filter_dropdown.dart';
 
 class AdminNotificationHubScreen extends StatefulWidget {
   final AdminRepository? repository;
@@ -29,6 +30,9 @@ class _AdminNotificationHubScreenState extends State<AdminNotificationHubScreen>
   bool _isLoading = true;
   String? _errorMessage;
   String _selectedFilter = 'ALL';
+
+  /// Audience dropdown filter ("ALL" / "STUDENTS" / "TEACHERS" / "CRS"); null = any.
+  String? _audienceFilter;
 
   @override
   void initState() {
@@ -60,8 +64,11 @@ class _AdminNotificationHubScreenState extends State<AdminNotificationHubScreen>
   }
 
   List<DepartmentNotice> get _filteredNotices {
-    if (_selectedFilter == 'ALL') return _notices;
-    return _notices.where((n) => n.noticeType == _selectedFilter).toList();
+    return _notices
+        .where((n) =>
+            (_selectedFilter == 'ALL' || n.noticeType == _selectedFilter) &&
+            (_audienceFilter == null || n.targetAudience == _audienceFilter))
+        .toList();
   }
 
   Future<void> _deleteNotice(DepartmentNotice notice) async {
@@ -355,7 +362,6 @@ class _AdminNotificationHubScreenState extends State<AdminNotificationHubScreen>
                                 decoration: InputDecoration(
                                   hintText: 'https://example.com/notice.pdf',
                                   prefixIcon: const Icon(Icons.link_rounded),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                                   contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                                 ),
                               ),
@@ -365,7 +371,7 @@ class _AdminNotificationHubScreenState extends State<AdminNotificationHubScreen>
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: const Color(0xFF6366F1),
                                     foregroundColor: Colors.white,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    shape: const StadiumBorder(),
                                   ),
                                   onPressed: () {
                                     final url = urlController.text.trim();
@@ -438,7 +444,7 @@ class _AdminNotificationHubScreenState extends State<AdminNotificationHubScreen>
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Broadcast Notice & Notification',
+                                    'Send a notice',
                                     style: TextStyle(
                                       fontWeight: FontWeight.w800,
                                       fontSize: 16,
@@ -533,7 +539,6 @@ class _AdminNotificationHubScreenState extends State<AdminNotificationHubScreen>
                             decoration: InputDecoration(
                               hintText: 'e.g. Spring 2026 Semester Final Examination Routine',
                               hintStyle: const TextStyle(fontSize: 13),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                               contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                             ),
                           ),
@@ -825,7 +830,7 @@ class _AdminNotificationHubScreenState extends State<AdminNotificationHubScreen>
                               onPressed: () => Navigator.pop(ctx),
                               style: OutlinedButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                shape: const StadiumBorder(),
                               ),
                               child: const Text('Cancel'),
                             ),
@@ -838,7 +843,7 @@ class _AdminNotificationHubScreenState extends State<AdminNotificationHubScreen>
                                 backgroundColor: const Color(0xFF6366F1),
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                shape: const StadiumBorder(),
                               ),
                               icon: isSubmitting
                                   ? const SizedBox(
@@ -1109,6 +1114,21 @@ class _AdminNotificationHubScreenState extends State<AdminNotificationHubScreen>
                                 _buildFilterTab('Urgent Alerts', 'EMERGENCY_ALERT', isDark: isDark),
                               ],
                             ),
+                          ),
+                          const SizedBox(height: 10),
+                          AdminFilterDropdown<String>(
+                            key: const ValueKey('notice_audience_filter'),
+                            label: 'Audience',
+                            icon: Icons.groups_2_outlined,
+                            value: _audienceFilter,
+                            options: const [
+                              FilterOption(null, 'Any audience'),
+                              FilterOption('ALL', 'Everyone'),
+                              FilterOption('STUDENTS', 'All Students'),
+                              FilterOption('TEACHERS', 'All Faculty'),
+                              FilterOption('CRS', 'CRs Only'),
+                            ],
+                            onChanged: (v) => setState(() => _audienceFilter = v),
                           ),
                         ],
                       ),

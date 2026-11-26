@@ -614,7 +614,6 @@ class _ScheduleSlotFormDialogState extends State<ScheduleSlotFormDialog> {
                                       decoration: InputDecoration(
                                         filled: true,
                                         fillColor: isDark ? AppColors.surfaceContainerDark : const Color(0xFFF8FAFC),
-                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                                         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                                       ),
                                       items: effectiveCourses.map((c) {
@@ -681,7 +680,6 @@ class _ScheduleSlotFormDialogState extends State<ScheduleSlotFormDialog> {
                                       decoration: InputDecoration(
                                         filled: true,
                                         fillColor: isDark ? AppColors.surfaceContainerDark : const Color(0xFFF8FAFC),
-                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                                         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                                       ),
                                       items: effectiveTeachers.map((t) {
@@ -720,7 +718,6 @@ class _ScheduleSlotFormDialogState extends State<ScheduleSlotFormDialog> {
                                       decoration: InputDecoration(
                                         filled: true,
                                         fillColor: isDark ? AppColors.surfaceContainerDark : const Color(0xFFF8FAFC),
-                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                                         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                                       ),
                                       items: effectiveDays.map((d) {
@@ -781,7 +778,6 @@ class _ScheduleSlotFormDialogState extends State<ScheduleSlotFormDialog> {
                                       decoration: InputDecoration(
                                         filled: true,
                                         fillColor: isDark ? AppColors.surfaceContainerDark : const Color(0xFFF8FAFC),
-                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                                         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                                       ),
                                       items: effectiveRooms.map((r) {
@@ -898,7 +894,7 @@ class _ScheduleSlotFormDialogState extends State<ScheduleSlotFormDialog> {
                     child: OutlinedButton(
                       onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(false),
                       style: OutlinedButton.styleFrom(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: const StadiumBorder(),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
                       child: const Text('Cancel'),
@@ -912,7 +908,7 @@ class _ScheduleSlotFormDialogState extends State<ScheduleSlotFormDialog> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: isCr ? const Color(0xFFC2410C) : AppColors.primary,
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: const StadiumBorder(),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
                       child: _isSubmitting

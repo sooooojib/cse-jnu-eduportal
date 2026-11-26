@@ -33,6 +33,7 @@ class TeacherDashboardData extends Equatable {
   final String todayDateLabel;
   final String tomorrowDateLabel;
   final String dayOfWeek;
+  final bool isFromCache;
 
   List<ScheduleSlot> get effectiveTodayClasses =>
       todayClasses.isNotEmpty ? todayClasses : (!isTomorrow ? timeAwareClasses : const []);
@@ -68,6 +69,7 @@ class TeacherDashboardData extends Equatable {
     this.todayDateLabel = '',
     this.tomorrowDateLabel = '',
     required this.dayOfWeek,
+    this.isFromCache = false,
   });
 
   @override
@@ -93,5 +95,6 @@ class TeacherDashboardData extends Equatable {
         todayDateLabel,
         tomorrowDateLabel,
         dayOfWeek,
+        isFromCache,
       ];
 }

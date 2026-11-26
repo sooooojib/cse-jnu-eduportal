@@ -11,6 +11,7 @@ class SignupRequestUseCase {
     required String role,
     String? studentId,
     String? phone,
+    String? session,
   }) {
     return repository.submitSignupRequest(
       fullName: fullName,
@@ -18,6 +19,7 @@ class SignupRequestUseCase {
       role: role,
       studentId: studentId,
       phone: phone,
+      session: session,
     );
   }
 }

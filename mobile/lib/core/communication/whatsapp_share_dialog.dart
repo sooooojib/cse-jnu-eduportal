@@ -224,7 +224,6 @@ class _WhatsAppShareDialogState extends State<WhatsAppShareDialog> {
                 hintStyle: const TextStyle(fontSize: 12, color: Colors.grey),
                 prefixIcon: const Icon(Icons.phone_android_rounded, size: 20),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 suffixIcon: _phoneResult != null && _phoneResult!.isValid
                     ? const Icon(Icons.check_circle_rounded, color: Color(0xFF25D366), size: 20)
                     : null,
@@ -283,7 +282,7 @@ class _WhatsAppShareDialogState extends State<WhatsAppShareDialog> {
           icon: const Icon(Icons.copy_rounded, size: 16),
           label: const Text('Copy Message'),
           style: OutlinedButton.styleFrom(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: const StadiumBorder(),
           ),
         ),
         ElevatedButton.icon(
@@ -299,7 +298,7 @@ class _WhatsAppShareDialogState extends State<WhatsAppShareDialog> {
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF25D366),
             foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: const StadiumBorder(),
           ),
         ),
       ],

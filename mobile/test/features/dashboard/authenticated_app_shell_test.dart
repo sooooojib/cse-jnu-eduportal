@@ -351,7 +351,8 @@ void main() {
 
       // Verifies CR Greeting & Hub
       expect(find.text('Class Representative'), findsWidgets);
-      expect(find.textContaining('Manage Tomorrow'), findsOneWidget);
+      expect(find.text('My Class'), findsOneWidget);
+      expect(find.text('Classes'), findsWidgets);
       expect(find.byType(NavigationBar), findsOneWidget);
 
       // Verifies 5 CR destinations
@@ -536,7 +537,7 @@ void main() {
 
       // Returned to Home Tab
       expect(find.byType(StudentAttendanceScreen), findsNothing);
-      expect(find.text("Today's Schedule"), findsOneWidget);
+      expect(find.text('Classes'), findsWidgets);
     });
 
     testWidgets('8. Session restoration correctly enters authoritative dashboard for all 4 roles', (tester) async {
@@ -552,7 +553,7 @@ void main() {
 
       await tester.pumpWidget(MaterialApp.router(routerConfig: router));
       await tester.pumpAndSettle();
-      expect(find.text("Today's Schedule"), findsOneWidget);
+      expect(find.text('Classes'), findsWidgets);
 
       // Test Teacher entry
       when(() => mockAuthController.state).thenReturn(const Authenticated(user: teacherUser));

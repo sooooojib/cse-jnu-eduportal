@@ -153,7 +153,7 @@ class _StudentCounselingScreenState extends State<StudentCounselingScreen> with 
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primaryLight,
                           foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          shape: const StadiumBorder(),
                         ),
                         onPressed: () async {
                           final notes = notesController.text.trim();
@@ -273,7 +273,7 @@ class _StudentCounselingScreenState extends State<StudentCounselingScreen> with 
                 return TabBarView(
                   controller: _tabController,
                   children: [
-                    _buildAvailableSlotsTab(loaded?.availableSlots ?? [], isDark),
+                    _buildAvailableSlotsTab(loaded?.availableSlots ?? [], loaded?.myBookings ?? [], isDark),
                     _buildMyAppointmentsTab(loaded?.myBookings ?? [], isDark),
                   ],
                 );
@@ -285,7 +285,7 @@ class _StudentCounselingScreenState extends State<StudentCounselingScreen> with 
     );
   }
 
-  Widget _buildAvailableSlotsTab(List<CounselingSlot> slots, bool isDark) {
+  Widget _buildAvailableSlotsTab(List<CounselingSlot> slots, List<CounselingBooking> myBookings, bool isDark) {
     if (slots.isEmpty) {
       return Center(
         child: Container(
@@ -320,6 +320,14 @@ class _StudentCounselingScreenState extends State<StudentCounselingScreen> with 
         separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
           final slot = slots[index];
+
+          final matchingBooking = myBookings.cast<CounselingBooking?>().firstWhere(
+            (b) => b?.slotId == slot.id && b?.status != 'REJECTED' && b?.status != 'CANCELLED',
+            orElse: () => null,
+          );
+          final isRequested = matchingBooking != null && matchingBooking.status == 'PENDING';
+          final isConfirmed = matchingBooking != null && matchingBooking.status == 'APPROVED';
+
           return Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -344,21 +352,70 @@ class _StudentCounselingScreenState extends State<StudentCounselingScreen> with 
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Text(
-                        'OPEN',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green,
+                    if (isRequested)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(Icons.hourglass_top_rounded, size: 11, color: Colors.orange),
+                            SizedBox(width: 4),
+                            Text(
+                              'REQUESTED',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.orange,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else if (isConfirmed)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.green.withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(Icons.check_circle_outline_rounded, size: 11, color: Colors.green),
+                            SizedBox(width: 4),
+                            Text(
+                              'CONFIRMED',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'OPEN',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green,
+                          ),
                         ),
                       ),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -398,16 +455,47 @@ class _StudentCounselingScreenState extends State<StudentCounselingScreen> with 
                 SizedBox(
                   width: double.infinity,
                   height: 40,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryLight,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      elevation: 0,
-                    ),
-                    onPressed: () => _showBookingDialog(slot),
-                    child: const Text('Request Appointment', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                  ),
+                  child: isRequested
+                      ? OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.orange,
+                            side: BorderSide(color: Colors.orange.withOpacity(0.4)),
+                            shape: const StadiumBorder(),
+                          ),
+                          onPressed: () => _tabController.animateTo(1),
+                          icon: const Icon(Icons.hourglass_top_rounded, size: 16),
+                          label: const Text(
+                            'Requested (Pending Review)',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                        )
+                      : isConfirmed
+                          ? OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.green,
+                                side: BorderSide(color: Colors.green.withOpacity(0.4)),
+                                shape: const StadiumBorder(),
+                              ),
+                              onPressed: () => _tabController.animateTo(1),
+                              icon: const Icon(Icons.check_circle_rounded, size: 16),
+                              label: const Text(
+                                'Appointment Confirmed',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                            )
+                          : ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primaryLight,
+                                foregroundColor: Colors.white,
+                                shape: const StadiumBorder(),
+                                elevation: 0,
+                              ),
+                              onPressed: () => _showBookingDialog(slot),
+                              child: const Text(
+                                'Request Appointment',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                            ),
                 ),
               ],
             ),
@@ -534,6 +622,54 @@ class _StudentCounselingScreenState extends State<StudentCounselingScreen> with 
                     ),
                   ],
                 ),
+                if (booking.teacherMessage != null && booking.teacherMessage!.trim().isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? const Color(0xFF10B981).withValues(alpha: 0.12)
+                          : const Color(0xFFECFDF5),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.35),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.chat_bubble_outline_rounded,
+                              size: 14,
+                              color: isDark ? const Color(0xFF34D399) : const Color(0xFF059669),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Teacher Note:',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: isDark ? const Color(0xFF34D399) : const Color(0xFF059669),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          booking.teacherMessage!,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            height: 1.35,
+                            color: isDark ? Colors.white : const Color(0xFF0F172A),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 if (isPending || isApproved) ...[
                   const SizedBox(height: 12),
                   Align(
@@ -542,7 +678,7 @@ class _StudentCounselingScreenState extends State<StudentCounselingScreen> with 
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.redAccent,
                         side: const BorderSide(color: Colors.redAccent),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        shape: const StadiumBorder(),
                       ),
                       onPressed: () async {
                         final messenger = ScaffoldMessenger.of(context);

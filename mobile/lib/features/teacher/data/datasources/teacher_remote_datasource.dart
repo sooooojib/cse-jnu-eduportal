@@ -1,3 +1,7 @@
+import '../../../../core/utils/class_time.dart';
+import '../../../curriculum/data/repositories/class_change_repository.dart';
+import '../../../curriculum/domain/entities/class_change.dart';
+import '../../../curriculum/domain/services/effective_schedule.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/error/exceptions.dart';
@@ -53,10 +57,11 @@ class TeacherRemoteDataSourceImpl implements TeacherRemoteDataSource {
       final Set<String> assignedIds = assignedCourses.map((c) => c.id).toSet();
 
       // 3. Fetch Classes & Exams for Both Today and Tomorrow
-      final List<ScheduleSlot> todayClasses =
-          await _fetchTimeAwareClasses(teacher, todayDayOfWeek, assignedCodes, assignedIds);
-      final List<ScheduleSlot> tomorrowClasses =
-          await _fetchTimeAwareClasses(teacher, tomorrowDayOfWeek, assignedCodes, assignedIds);
+      // Weekly routine + one-day changes (extra / cancelled / moved) per date.
+      final List<ScheduleSlot> todayClasses = await _applyChanges(
+          teacher, now, await _fetchTimeAwareClasses(teacher, todayDayOfWeek, assignedCodes, assignedIds), assignedIds);
+      final List<ScheduleSlot> tomorrowClasses = await _applyChanges(
+          teacher, tomorrow, await _fetchTimeAwareClasses(teacher, tomorrowDayOfWeek, assignedCodes, assignedIds), assignedIds);
 
       final List<Exam> todayExams =
           await _fetchTimeAwareExams(teacher, now, assignedCodes, assignedIds);
@@ -180,6 +185,29 @@ class TeacherRemoteDataSourceImpl implements TeacherRemoteDataSource {
     final courses = courseMap.values.toList();
     courses.sort((a, b) => a.code.compareTo(b.code));
     return courses;
+  }
+
+  /// Applies the one-day changes on [date] that concern this teacher.
+  Future<List<ScheduleSlot>> _applyChanges(
+    User teacher,
+    DateTime date,
+    List<ScheduleSlot> routine,
+    Set<String> assignedIds,
+  ) async {
+    List<ClassChange> changes = const [];
+    try {
+      final snap = await _firestore
+          .collection('classChanges')
+          .where('date', isEqualTo: ClassTime.dateKey(date))
+          .get();
+      changes = snap.docs
+          .map(ClassChangeRepositoryImpl.fromDoc)
+          .where((c) => c.teacherId == teacher.id || assignedIds.contains(c.courseId))
+          .toList();
+    } catch (e) {
+      AppLogger.w('Failed to load class changes for teacher: $e');
+    }
+    return EffectiveSchedule.forDate(routine: routine, changes: changes, date: date);
   }
 
   Future<List<ScheduleSlot>> _fetchTimeAwareClasses(

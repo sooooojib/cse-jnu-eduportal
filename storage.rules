@@ -74,9 +74,14 @@ service firebase.storage {
     }
 
     // ─── 3. FEEDBACK ATTACHMENTS (Student/CR/Author upload, Authenticated read) ───────
+    // Security Fix (VULN-07): Support anonymous uploads with uploadedBy == 'ANONYMOUS'
+    // to prevent leaking student UID via storage metadata to reviewing professors.
     match /feedback/{feedbackId}/attachments/{attachmentId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidDocument() && hasValidMetadata();
+      allow create: if isAuthenticated() && isValidDocument() && (
+        hasValidMetadata() ||
+        (request.resource.metadata != null && request.resource.metadata.uploadedBy == 'ANONYMOUS')
+      );
       allow delete: if isAdmin() || (isAuthenticated() && resource.metadata.uploadedBy == request.auth.uid);
     }
 
@@ -90,7 +95,10 @@ service firebase.storage {
     // Legacy/generic feedback bucket path
     match /feedback/{folderId}/{attachmentId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidDocument() && hasValidMetadata();
+      allow create: if isAuthenticated() && isValidDocument() && (
+        hasValidMetadata() ||
+        (request.resource.metadata != null && request.resource.metadata.uploadedBy == 'ANONYMOUS')
+      );
       allow delete: if isAdmin() || (isAuthenticated() && resource.metadata.uploadedBy == request.auth.uid);
     }
 

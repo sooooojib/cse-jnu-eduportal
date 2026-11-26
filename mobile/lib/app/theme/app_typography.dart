@@ -1,83 +1,101 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import 'app_colors.dart';
 
 class AppTypography {
+  /// Bundled in assets/fonts (works offline; no runtime download).
+  static const String sans = 'PlusJakartaSans';
+  static const String mono = 'JetBrainsMono';
+
   // Base TextTheme using Plus Jakarta Sans
   static TextTheme textTheme(Color textColor, Color secondaryColor) {
     return TextTheme(
-      displayLarge: GoogleFonts.plusJakartaSans(
+      displayLarge: TextStyle(
+        fontFamily: 'PlusJakartaSans',
         fontSize: 34,
         fontWeight: FontWeight.w800,
         color: textColor,
         letterSpacing: -0.5,
       ),
-      displayMedium: GoogleFonts.plusJakartaSans(
+      displayMedium: TextStyle(
+        fontFamily: 'PlusJakartaSans',
         fontSize: 28,
         fontWeight: FontWeight.w700,
         color: textColor,
         letterSpacing: -0.3,
       ),
-      headlineLarge: GoogleFonts.plusJakartaSans(
+      headlineLarge: TextStyle(
+        fontFamily: 'PlusJakartaSans',
         fontSize: 30,
         fontWeight: FontWeight.w700,
         color: textColor,
         height: 1.25,
       ),
-      headlineMedium: GoogleFonts.plusJakartaSans(
+      headlineMedium: TextStyle(
+        fontFamily: 'PlusJakartaSans',
         fontSize: 24,
         fontWeight: FontWeight.w600,
         color: textColor,
         height: 1.3,
       ),
-      headlineSmall: GoogleFonts.plusJakartaSans(
+      headlineSmall: TextStyle(
+        fontFamily: 'PlusJakartaSans',
         fontSize: 20,
         fontWeight: FontWeight.w600,
         color: textColor,
       ),
-      titleLarge: GoogleFonts.plusJakartaSans(
+      titleLarge: TextStyle(
+        fontFamily: 'PlusJakartaSans',
         fontSize: 18,
         fontWeight: FontWeight.w600,
         color: textColor,
       ),
-      titleMedium: GoogleFonts.plusJakartaSans(
+      titleMedium: TextStyle(
+        fontFamily: 'PlusJakartaSans',
         fontSize: 16,
         fontWeight: FontWeight.w600,
         color: textColor,
       ),
-      titleSmall: GoogleFonts.plusJakartaSans(
+      titleSmall: TextStyle(
+        fontFamily: 'PlusJakartaSans',
         fontSize: 14,
         fontWeight: FontWeight.w600,
         color: textColor,
       ),
-      bodyLarge: GoogleFonts.plusJakartaSans(
+      bodyLarge: TextStyle(
+        fontFamily: 'PlusJakartaSans',
         fontSize: 16,
         fontWeight: FontWeight.w400,
         color: textColor,
         height: 1.5,
       ),
-      bodyMedium: GoogleFonts.plusJakartaSans(
+      bodyMedium: TextStyle(
+        fontFamily: 'PlusJakartaSans',
         fontSize: 14,
         fontWeight: FontWeight.w400,
         color: secondaryColor,
         height: 1.4,
       ),
-      bodySmall: GoogleFonts.plusJakartaSans(
+      bodySmall: TextStyle(
+        fontFamily: 'PlusJakartaSans',
         fontSize: 12,
         fontWeight: FontWeight.w400,
         color: secondaryColor,
       ),
-      labelLarge: GoogleFonts.plusJakartaSans(
+      labelLarge: TextStyle(
+        fontFamily: 'PlusJakartaSans',
         fontSize: 16,
         fontWeight: FontWeight.w600,
         color: textColor,
       ),
-      labelMedium: GoogleFonts.plusJakartaSans(
+      labelMedium: TextStyle(
+        fontFamily: 'PlusJakartaSans',
         fontSize: 14,
         fontWeight: FontWeight.w600,
         color: textColor,
       ),
-      labelSmall: GoogleFonts.plusJakartaSans(
+      labelSmall: TextStyle(
+        fontFamily: 'PlusJakartaSans',
         fontSize: 12,
         fontWeight: FontWeight.w500,
         color: secondaryColor,
@@ -86,8 +104,12 @@ class AppTypography {
   }
 
   // Monospace Terminal Typography (JetBrains Mono)
-  static TextStyle displayTerminal({Color color = AppColors.terminalGlow, double fontSize = 56}) {
-    return GoogleFonts.jetBrainsMono(
+  static TextStyle displayTerminal({
+    Color color = AppColors.terminalGlow,
+    double fontSize = 56,
+  }) {
+    return TextStyle(
+      fontFamily: 'JetBrainsMono',
       fontSize: fontSize,
       fontWeight: FontWeight.w700,
       color: color,
@@ -95,8 +117,12 @@ class AppTypography {
     );
   }
 
-  static TextStyle codeSnippet({Color color = AppColors.terminalGlow, double fontSize = 14}) {
-    return GoogleFonts.jetBrainsMono(
+  static TextStyle codeSnippet({
+    Color color = AppColors.terminalGlow,
+    double fontSize = 14,
+  }) {
+    return TextStyle(
+      fontFamily: 'JetBrainsMono',
       fontSize: fontSize,
       fontWeight: FontWeight.w500,
       color: color,

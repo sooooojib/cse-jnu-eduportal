@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/router/route_names.dart';
 import '../../../../core/constants/role_constants.dart';
+import '../../../../core/utils/academic_session.dart';
 import '../../../../core/utils/context_extensions.dart';
 import '../../../../core/utils/validators.dart';
 import '../../../../core/error/failures.dart';
@@ -32,6 +33,8 @@ class _SignupRequestScreenState extends State<SignupRequestScreen> {
   final _roleIdController = TextEditingController();
 
   UserRole _selectedRole = UserRole.student;
+  String? _selectedSession;
+  final List<String> _sessionOptions = AcademicSession.availableSessions();
   bool _isSubmitting = false;
 
   @override
@@ -54,6 +57,7 @@ class _SignupRequestScreenState extends State<SignupRequestScreen> {
         role: _selectedRole.value,
         studentId: _selectedRole != UserRole.teacher ? _roleIdController.text.trim() : null,
         phone: _selectedRole == UserRole.teacher ? _roleIdController.text.trim() : null,
+        session: _selectedRole.isStudentSide ? _selectedSession : null,
       );
 
       if (!mounted) return;
@@ -259,6 +263,30 @@ class _SignupRequestScreenState extends State<SignupRequestScreen> {
                               ),
 
                               const SizedBox(height: 16),
+
+                              // Academic Session (Students & CRs only)
+                              if (_selectedRole.isStudentSide) ...[
+                                DropdownButtonFormField<String>(
+                                  key: const ValueKey('signup_session_dropdown'),
+                                  initialValue: _selectedSession,
+                                  isExpanded: true,
+                                  decoration: InputDecoration(
+                                    labelText: 'Academic Session',
+                                    hintText: 'e.g. 2021-2022',
+                                    prefixIcon: const Icon(Icons.school_outlined),
+                                  ),
+                                  items: _sessionOptions
+                                      .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                                      .toList(),
+                                  onChanged: _isSubmitting
+                                      ? null
+                                      : (v) => setState(() => _selectedSession = v),
+                                  validator: (v) => AcademicSession.isValid(v)
+                                      ? null
+                                      : 'Please select your academic session',
+                                ),
+                                const SizedBox(height: 16),
+                              ],
 
                               // Email Address
                               AppTextField(

@@ -1,5 +1,6 @@
 import * as admin from "firebase-admin";
 import { HttpsError } from "firebase-functions/v2/https";
+import { isAdminRole } from "./roles";
 
 export type NotificationType =
   | "SIGNUP_DECISION"
@@ -197,7 +198,7 @@ export async function executeMarkNotificationAsRead(
 
   const data = doc.data()!;
   // Strict Privacy: Only the recipient user or administrator can access/modify
-  if (data.userId !== caller.uid && data.userId !== "ALL" && caller.role !== "ADMIN") {
+  if (data.userId !== caller.uid && data.userId !== "ALL" && !isAdminRole(caller.role)) {
     throw new HttpsError("permission-denied", "You are not authorized to view or modify this notification.");
   }
 

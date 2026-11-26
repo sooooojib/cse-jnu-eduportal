@@ -30,6 +30,11 @@ class AttendanceSessionModel extends AttendanceSession {
     super.totalPresentCount = 0,
     required super.createdAt,
     super.expiresAt,
+    super.mode = 'CODE',
+    super.lateAfter,
+    super.slotId,
+    super.targetYear,
+    super.targetSemester,
   });
 
   factory AttendanceSessionModel.fromJson(Map<String, dynamic> json) {
@@ -47,6 +52,11 @@ class AttendanceSessionModel extends AttendanceSession {
       totalPresentCount: json['totalPresentCount'] as int? ?? 0,
       createdAt: _tsToString(json['createdAt']),
       expiresAt: _parseDateTime(json['expiresAt'] ?? json['expiresAtMillis']),
+      mode: (json['mode'] as String?) ?? 'CODE',
+      lateAfter: _parseDateTime(json['lateAfter']),
+      slotId: json['slotId'] as String?,
+      targetYear: (json['targetYear'] as num?)?.toInt(),
+      targetSemester: (json['targetSemester'] as num?)?.toInt(),
     );
   }
 
@@ -98,6 +108,8 @@ class CourseAttendanceModel extends CourseAttendance {
     required super.totalClasses,
     required super.percentage,
     required super.isEligible,
+    super.absentDates = const [],
+    super.lateCount = 0,
   });
 
   factory CourseAttendanceModel.fromJson(Map<String, dynamic> json) {
@@ -204,6 +216,7 @@ class AttendanceSummaryModel extends AttendanceSummary {
     required super.totalSessions,
     required super.courseSummaries,
     required super.recentRecords,
+    super.isFromCache = false,
   });
 
   factory AttendanceSummaryModel.fromJson(Map<String, dynamic> json) {
@@ -220,6 +233,7 @@ class AttendanceSummaryModel extends AttendanceSummary {
       totalSessions: json['totalSessions'] as int? ?? 0,
       courseSummaries: List<CourseAttendance>.from(summaries),
       recentRecords: List<AttendanceRecord>.from(records),
+      isFromCache: json['isFromCache'] as bool? ?? false,
     );
   }
 }
@@ -232,6 +246,7 @@ class AttendanceRosterItemModel extends AttendanceRosterItem {
     required super.status,
     super.isManualOverride = false,
     super.verifiedAt,
+    super.markedBy,
   });
 
   factory AttendanceRosterItemModel.fromJson(Map<String, dynamic> json) {
@@ -242,6 +257,7 @@ class AttendanceRosterItemModel extends AttendanceRosterItem {
       status: json['status'] as String? ?? 'ABSENT',
       isManualOverride: json['isManualOverride'] as bool? ?? false,
       verifiedAt: json['verifiedAt'] != null ? _tsToString(json['verifiedAt']) : null,
+      markedBy: json['markedBy'] as String?,
     );
   }
 

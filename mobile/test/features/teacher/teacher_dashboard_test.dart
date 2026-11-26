@@ -491,21 +491,21 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(TimeAwareClassesCard), findsOneWidget);
-      expect(find.text("Today's Schedule"), findsOneWidget);
+      expect(find.text('Classes'), findsWidgets);
       expect(find.text("Today · Oct 19, 2026"), findsOneWidget);
 
       // Classes details
       expect(find.text('Operating Systems'), findsWidgets);
       expect(find.text('Room 501'), findsOneWidget);
-      expect(find.text('09:00'), findsOneWidget);
+      expect(find.text('9:00 – 10:30 AM'), findsOneWidget);
 
       expect(find.text('Operating Systems Sessional'), findsWidgets);
       expect(find.text('Lab 2'), findsOneWidget);
-      expect(find.text('11:00'), findsOneWidget);
+      expect(find.text('11:00 AM – 1:30 PM'), findsOneWidget);
 
       // Start Attendance button
       expect(find.text('Start Attendance'), findsNWidgets(2));
-      expect(find.text('End of scheduled classes'), findsOneWidget);
+      expect(find.text('End of scheduled classes'), findsNothing);
     });
 
     testWidgets('Renders Assigned Courses with code, title, credit, type, year, semester', (tester) async {
@@ -589,7 +589,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Initially on Classes tab
-      expect(find.text("Today's Schedule"), findsOneWidget);
+      expect(find.text('Classes'), findsWidgets);
       expect(find.text('Operating Systems'), findsWidgets);
 
       // Tap Exams toggle
@@ -601,10 +601,11 @@ void main() {
       await tester.pumpAndSettle();
 
       // Now on Exams tab
-      expect(find.text("Today's Exams"), findsOneWidget);
-      expect(find.text('Mid-Term: Operating Systems'), findsOneWidget);
-      expect(find.text('Main Exam Hall A'), findsOneWidget);
-      expect(find.text('Invigilator Duty'), findsOneWidget);
+      expect(find.text('Exams'), findsWidgets);
+      // Calm exam card: course name, then "type: title · room".
+      expect(find.textContaining('Mid-Term: Operating Systems'), findsOneWidget);
+      expect(find.textContaining('Main Exam Hall A'), findsOneWidget);
+      expect(find.text('Operating Systems'), findsWidgets);
 
       // Tap back to Classes toggle
       final classesTabFinder = find.descendant(
@@ -613,7 +614,7 @@ void main() {
       );
       await tester.tap(classesTabFinder);
       await tester.pumpAndSettle();
-      expect(find.text("Today's Schedule"), findsOneWidget);
+      expect(find.text('Classes'), findsWidgets);
     });
 
     testWidgets('Renders empty state when classes list is empty', (tester) async {
@@ -646,8 +647,8 @@ void main() {
       await tester.pumpWidget(buildTestableWidget(TeacherDashboardScreen(controller: controller)));
       await tester.pumpAndSettle();
 
-      expect(find.text("Tomorrow's Schedule"), findsOneWidget);
-      expect(find.text('Next-Day'), findsOneWidget);
+      expect(find.text('Classes'), findsWidgets);
+      expect(find.text('Next-Day'), findsNothing); // the Today/Tomorrow switch shows the day
       expect(find.text('No classes scheduled for tomorrow'), findsOneWidget);
     });
 
@@ -710,7 +711,7 @@ void main() {
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
       expect(find.text('Edit Faculty Profile'), findsNothing);
-      expect(find.text('Dr. Md. Abu Layek'), findsWidgets);
+      expect(find.text('Welcome back, Dr. Md. Abu Layek.'), findsOneWidget);
     });
 
     testWidgets('Renders Bottom Navigation Bar with all 5 destinations and triggers actions', (tester) async {

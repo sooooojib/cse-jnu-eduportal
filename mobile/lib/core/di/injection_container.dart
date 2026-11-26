@@ -3,13 +3,20 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../config/app_check_service.dart';
+import '../monitoring/crashlytics_service.dart';
+import '../logging/app_logger.dart';
 import '../storage/local_storage_service.dart';
 import '../storage/cloud_storage_service.dart';
 import '../communication/whatsapp_share_service.dart';
 import '../notifications/push_notification_service.dart';
+import '../network/network_info.dart';
+import '../network/authoritative_guard.dart';
 import '../../app/theme/theme_controller.dart';
 
 // Auth Feature
@@ -31,6 +38,7 @@ import '../../features/curriculum/domain/repositories/curriculum_repository.dart
 import '../../features/curriculum/presentation/controllers/schedule_controller.dart';
 
 // Attendance Feature
+import '../../features/attendance/data/services/class_attendance_service.dart';
 import '../../features/attendance/data/repositories/attendance_repository_impl.dart';
 import '../../features/attendance/domain/repositories/attendance_repository.dart';
 import '../../features/attendance/presentation/controllers/attendance_controller.dart';
@@ -56,6 +64,11 @@ import '../../features/notifications/domain/repositories/notification_repository
 import '../../features/notifications/presentation/controllers/notification_controller.dart';
 
 // Admin Feature
+import '../../features/curriculum/data/repositories/class_change_repository.dart';
+import '../../features/curriculum/data/repositories/exam_support_repository.dart';
+import '../../features/cr/data/repositories/cr_transfer_repository.dart';
+import '../../features/admin/data/repositories/teacher_monitoring_repository_impl.dart';
+import '../../features/admin/domain/repositories/teacher_monitoring_repository.dart';
 import '../../features/admin/data/datasources/admin_remote_datasource.dart';
 import '../../features/admin/data/repositories/admin_repository_impl.dart';
 import '../../features/admin/domain/repositories/admin_repository.dart';
@@ -90,6 +103,24 @@ Future<void> initDependencies() async {
   sl.registerLazySingleton<FirebaseStorage>(() => FirebaseStorage.instance);
   sl.registerLazySingleton<FirebaseMessaging>(() => FirebaseMessaging.instance);
   sl.registerLazySingleton<FirebaseFunctions>(() => FirebaseFunctions.instance);
+  if (!sl.isRegistered<FirebaseAppCheck>()) {
+    sl.registerLazySingleton<FirebaseAppCheck>(() => FirebaseAppCheck.instance);
+  }
+  if (!sl.isRegistered<AppCheckService>()) {
+    sl.registerLazySingleton<AppCheckService>(
+      () => AppCheckServiceImpl(appCheck: sl<FirebaseAppCheck>()),
+    );
+  }
+  if (!sl.isRegistered<FirebaseCrashlytics>()) {
+    sl.registerLazySingleton<FirebaseCrashlytics>(() => FirebaseCrashlytics.instance);
+  }
+  if (!sl.isRegistered<CrashlyticsService>()) {
+    sl.registerLazySingleton<CrashlyticsService>(
+      () => CrashlyticsServiceImpl(crashlytics: sl<FirebaseCrashlytics>()),
+    );
+  }
+  // Connect AppLogger to Crashlytics
+  AppLogger.crashlyticsService = sl<CrashlyticsService>();
 
   // 3. Core Storage Services
   sl.registerLazySingleton<LocalStorageService>(
@@ -110,6 +141,15 @@ Future<void> initDependencies() async {
 
   sl.registerLazySingleton<ValueNotifier<ThemeMode>>(
     () => sl<ThemeController>(),
+  );
+
+  // Network & Offline Resilience Services
+  sl.registerLazySingleton<NetworkInfo>(
+    () => NetworkInfoImpl(),
+  );
+
+  sl.registerLazySingleton<AuthoritativeGuard>(
+    () => AuthoritativeGuard(networkInfo: sl()),
   );
 
   // 4. Auth Feature
@@ -159,6 +199,7 @@ Future<void> initDependencies() async {
       resetPasswordUseCase: sl(),
       authRepository: sl(),
       pushNotificationService: sl(),
+      crashlyticsService: sl<CrashlyticsService>(),
     )..startAuthListener(),
   );
 
@@ -263,6 +304,10 @@ Future<void> initDependencies() async {
     () => AttendanceRepositoryImpl(remoteDataSource: sl()),
   );
 
+  sl.registerLazySingleton<ClassAttendanceService>(
+    () => ClassAttendanceServiceImpl(firestore: sl(), auth: sl()),
+  );
+
   sl.registerLazySingleton<GetAttendanceSummaryUseCase>(
     () => GetAttendanceSummaryUseCase(sl()),
   );
@@ -300,6 +345,7 @@ Future<void> initDependencies() async {
       getActiveAttendanceSessionUseCase: sl(),
       getSessionRosterUseCase: sl(),
       updateAttendanceRosterUseCase: sl(),
+      service: sl(),
     ),
   );
 
@@ -510,6 +556,22 @@ Future<void> initDependencies() async {
 
   sl.registerLazySingleton<AdminRepository>(
     () => AdminRepositoryImpl(remoteDataSource: sl()),
+  );
+
+  sl.registerLazySingleton<TeacherMonitoringRepository>(
+    () => TeacherMonitoringRepositoryImpl(firestore: sl()),
+  );
+
+  sl.registerLazySingleton<CrTransferRepository>(
+    () => CrTransferRepositoryImpl(firestore: sl()),
+  );
+
+  sl.registerLazySingleton<ClassChangeRepository>(
+    () => ClassChangeRepositoryImpl(firestore: sl()),
+  );
+
+  sl.registerLazySingleton<ExamSupportRepository>(
+    () => ExamSupportRepositoryImpl(firestore: sl(), classes: sl()),
   );
 
   sl.registerLazySingleton<GetAdminDashboardDataUseCase>(

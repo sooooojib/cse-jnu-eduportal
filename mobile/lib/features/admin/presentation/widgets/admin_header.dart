@@ -31,38 +31,12 @@ class AdminHeader extends StatelessWidget {
           width: double.infinity,
           decoration: BoxDecoration(
             color: isDark ? const Color(0xFF13263E) : Colors.white,
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: isDark
                   ? Colors.white.withValues(alpha: 0.08)
                   : const Color(0xFFE2E8F0),
-              width: 1.2,
             ),
-            boxShadow: isDark
-                ? [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.35),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
-                    ),
-                    BoxShadow(
-                      color: const Color(0xFF7E22CE).withValues(alpha: 0.08),
-                      blurRadius: 16,
-                      offset: const Offset(0, 4),
-                    ),
-                  ]
-                : [
-                    BoxShadow(
-                      color: const Color(0xFF0F172A).withValues(alpha: 0.04),
-                      blurRadius: 18,
-                      offset: const Offset(0, 6),
-                    ),
-                    BoxShadow(
-                      color: const Color(0xFF0F172A).withValues(alpha: 0.02),
-                      blurRadius: 4,
-                      offset: const Offset(0, 1),
-                    ),
-                  ],
           ),
           clipBehavior: Clip.antiAlias,
           child: Stack(
@@ -120,12 +94,11 @@ class AdminHeader extends StatelessWidget {
                                   const SizedBox(width: 8),
                                   Flexible(
                                     child: Text(
-                                      'JAGANNATH UNIVERSITY',
+                                      'Jagannath University',
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                        letterSpacing: 0.8,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
                                         color: isDark
                                             ? const Color(0xFF94A3B8)
                                             : const Color(0xFF64748B),
@@ -164,13 +137,6 @@ class AdminHeader extends StatelessWidget {
                                     decoration: BoxDecoration(
                                       shape: BoxShape.circle,
                                       color: const Color(0xFF10B981),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: const Color(0xFF10B981).withValues(alpha: 0.7),
-                                          blurRadius: 4,
-                                          spreadRadius: 1,
-                                        ),
-                                      ],
                                     ),
                                   ),
                                   const SizedBox(width: 6),
@@ -195,7 +161,7 @@ class AdminHeader extends StatelessWidget {
 
                         // Executive Greeting & Administrator Name
                         Text(
-                          'Welcome, $name',
+                          'Welcome back, $name.',
                           style: TextStyle(
                             fontSize: 21,
                             fontWeight: FontWeight.w800,
@@ -245,7 +211,7 @@ class AdminHeader extends StatelessWidget {
                               const SizedBox(width: 6),
                               Expanded(
                                 child: Text(
-                                  'Central Authority',
+                                  'Department administration',
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     fontSize: 11,
@@ -257,27 +223,12 @@ class AdminHeader extends StatelessWidget {
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 7,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isDark
-                                      ? Colors.white.withValues(alpha: 0.06)
-                                      : const Color(0xFFE2E8F0),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  'Session 2025–26',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.3,
-                                    color: isDark
-                                        ? const Color(0xFF94A3B8)
-                                        : const Color(0xFF64748B),
-                                  ),
+                              Text(
+                                'Session 2025–26',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                                 ),
                               ),
                             ],

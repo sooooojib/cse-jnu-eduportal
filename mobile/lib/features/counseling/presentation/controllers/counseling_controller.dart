@@ -188,7 +188,13 @@ class CounselingController extends ChangeNotifier {
     }
   }
 
-  Future<bool> approveRequest(String bookingId, {required String teacherId}) async {
+  Future<bool> approveRequest(
+    String bookingId, {
+    String? message,
+    String? startTime,
+    String? endTime,
+    required String teacherId,
+  }) async {
     _isActionLoading = true;
     notifyListeners();
 
@@ -196,7 +202,12 @@ class CounselingController extends ChangeNotifier {
       if (approveBookingUseCase == null) {
         throw Exception("Approve booking use case not configured.");
       }
-      await approveBookingUseCase!.execute(bookingId);
+      await approveBookingUseCase!.execute(
+        bookingId,
+        teacherMessage: message,
+        startTime: startTime,
+        endTime: endTime,
+      );
       await fetchTeacherData(teacherId);
       _isActionLoading = false;
       notifyListeners();

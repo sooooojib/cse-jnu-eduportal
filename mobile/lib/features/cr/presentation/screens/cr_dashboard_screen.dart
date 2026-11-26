@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../../../../app/router/route_names.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/network/cache_metadata.dart';
 import '../../../../shared/widgets/states/app_error_state_view.dart';
 import '../../../../shared/widgets/states/app_loading_view.dart';
+import '../../../../shared/widgets/states/cached_data_badge.dart';
 import '../../../../shared/widgets/dialogs/app_confirmation_dialog.dart';
 import '../../../../shared/widgets/theme/theme_toggle_button.dart';
 import '../../../auth/domain/entities/user.dart';
@@ -13,15 +14,16 @@ import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../../../curriculum/domain/entities/curriculum_entities.dart';
 import '../controllers/cr_dashboard_controller.dart';
 import '../controllers/cr_dashboard_state.dart';
-import '../widgets/cr_add_slot_dialog.dart';
 import '../widgets/cr_header_section.dart';
 import '../widgets/cr_metrics_grid.dart';
 import '../widgets/cr_semester_courses_card.dart';
 import '../widgets/cr_today_schedule_card.dart';
-import '../widgets/cr_tomorrow_schedule_card.dart';
 import '../../../../core/utils/avatar_image_resolver.dart';
 import '../../../profile/presentation/widgets/student_profile_dialog.dart';
 import '../../../../core/constants/role_constants.dart';
+import '../widgets/cr_transfer_cards.dart';
+import '../../../curriculum/presentation/widgets/class_change_sheet.dart';
+import '../../../curriculum/presentation/widgets/class_changes_card.dart';
 import '../../../curriculum/presentation/widgets/exam_details_dialog.dart';
 import '../../../curriculum/presentation/widgets/exam_form_dialog.dart';
 
@@ -42,6 +44,8 @@ class CrDashboardScreen extends StatefulWidget {
 }
 
 class _CrDashboardScreenState extends State<CrDashboardScreen> {
+  final _changesKey = GlobalKey<ClassChangesCardState>();
+
   late final CrDashboardController _controller;
   int _currentBottomNavIndex = 0;
 
@@ -329,7 +333,7 @@ class _CrDashboardScreenState extends State<CrDashboardScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                shape: const StadiumBorder(),
               ),
               onPressed: () {
                 Navigator.of(ctx).pop();
@@ -381,12 +385,24 @@ class _CrDashboardScreenState extends State<CrDashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (data.isFromCache)
+                    CachedDataBadge(
+                      metadata: CacheMetadata.cached(
+                        message: 'Showing cached CR dashboard (Offline)',
+                      ),
+                      onRefresh: () => _controller.refreshData(),
+                    ),
                   // 1. Header Section
                   CrHeaderSection(
                     data: data,
                     onRequestSemesterChange: () =>
                         _showSemesterChangeDialog(data.year, data.semester),
                   ),
+
+                  const SizedBox(height: 12),
+
+                  // My Class: classmates list & CR role transfer (right under Active Semester)
+                  const MyClassCard(),
 
                   const SizedBox(height: 18),
 
@@ -407,36 +423,44 @@ class _CrDashboardScreenState extends State<CrDashboardScreen> {
 
                   const SizedBox(height: 20),
 
-                  // 3. CR Tomorrow Schedule Card with WhatsApp Broadcaster
-                  CrTomorrowScheduleCard(
-                    data: data,
-                    onManageTomorrowTap: () {
-                      CrAddSlotDialog.show(
-                        context,
-                        data: data,
-                        onAddSlot: (slot) => _controller.addTomorrowSlot(slot),
-                      );
-                    },
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // 4. Today's Schedule Card
+                  // 3. Classes card (Today | Tomorrow). In Tomorrow view the CR can
+                  //    change a class and share the routine on WhatsApp.
                   CrTodayScheduleCard(
                     data: data,
+                    user: sl<AuthController>().currentUser,
+                    onChanged: () {
+                      _controller.refreshData();
+                      _changesKey.currentState?.reload();
+                    },
                     onViewFullSchedule: () => widget.onNavigateTab != null
                         ? widget.onNavigateTab!(2)
                         : context.push(RouteNames.schedule),
-                    onManageTomorrowTap: () {
-                      CrAddSlotDialog.show(
+                    onManageTomorrowTap: () async {
+                      final user = sl<AuthController>().currentUser;
+                      if (user == null) return;
+                      final saved = await ClassChangeSheet.show(
                         context,
-                        data: data,
-                        onAddSlot: (slot) => _controller.addTomorrowSlot(slot),
+                        user: user,
+                        initialDate: DateTime.now().add(const Duration(days: 1)),
                       );
+                      if (saved == true) {
+                        _controller.refreshData();
+                        _changesKey.currentState?.reload();
+                      }
                     },
                   ),
 
                   const SizedBox(height: 20),
+
+                  // 4. One-day changes (extra / cancelled / moved) for the next 7 days
+                  if (sl<AuthController>().currentUser != null) ...[
+                    ClassChangesCard(
+                      key: _changesKey,
+                      user: sl<AuthController>().currentUser!,
+                      onChanged: () => _controller.refreshData(),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
 
                   // 5. Semester Courses & Progress
                   CrSemesterCoursesCard(
@@ -504,7 +528,7 @@ class _CrDashboardScreenState extends State<CrDashboardScreen> {
         title: Center(
           child: Text(
             'JnU EduPortal',
-            style: GoogleFonts.plusJakartaSans(
+            style: TextStyle(fontFamily: 'PlusJakartaSans', 
               fontWeight: FontWeight.w800,
               fontSize: 19,
               letterSpacing: -0.4,

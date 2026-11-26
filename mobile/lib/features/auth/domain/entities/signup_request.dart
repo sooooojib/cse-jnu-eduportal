@@ -8,6 +8,9 @@ class SignupRequest extends Equatable {
   final UserRole role;
   final String? studentId;
   final String? phone;
+
+  /// Academic session / batch, e.g. "2021-2022" (students & CRs only).
+  final String? session;
   final String status;
   final String? rejectionReason;
   final String? reviewedBy;
@@ -20,6 +23,7 @@ class SignupRequest extends Equatable {
     required this.role,
     this.studentId,
     this.phone,
+    this.session,
     required this.status,
     this.rejectionReason,
     this.reviewedBy,
@@ -34,6 +38,7 @@ class SignupRequest extends Equatable {
         role,
         studentId,
         phone,
+        session,
         status,
         rejectionReason,
         reviewedBy,

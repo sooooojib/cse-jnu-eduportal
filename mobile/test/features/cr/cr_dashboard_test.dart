@@ -1,3 +1,5 @@
+import 'package:cse_jnu_eduportal/features/curriculum/data/repositories/class_change_repository.dart';
+import 'package:cse_jnu_eduportal/features/curriculum/domain/entities/class_change.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -215,11 +217,16 @@ void main() {
     addSlotUseCase = AddTomorrowSlotUseCase(mockCrRepo);
 
     when(() => mockAuthController.state).thenReturn(const Authenticated(user: sampleCr));
+    when(() => mockAuthController.currentUser).thenReturn(sampleCr);
 
     if (sl.isRegistered<AuthController>()) {
       sl.unregister<AuthController>();
     }
     sl.registerLazySingleton<AuthController>(() => mockAuthController);
+    if (sl.isRegistered<ClassChangeRepository>()) {
+      sl.unregister<ClassChangeRepository>();
+    }
+    sl.registerLazySingleton<ClassChangeRepository>(() => _FakeClassChangeRepository());
 
     if (sl.isRegistered<ThemeController>()) {
       sl.unregister<ThemeController>();
@@ -361,6 +368,7 @@ void main() {
 
     test('CrDashboardController emits CrDashboardError when unauthenticated', () async {
       when(() => mockAuthController.state).thenReturn(const Unauthenticated());
+      when(() => mockAuthController.currentUser).thenReturn(null);
 
       final controller = CrDashboardController(
         getCrDashboardDataUseCase: getDataUseCase,
@@ -481,7 +489,7 @@ void main() {
       // Semester Box
       expect(find.text('Active Semester'), findsOneWidget);
       expect(find.text('Year 3 · Semester 1'), findsOneWidget);
-      expect(find.text('Request Change'), findsOneWidget);
+      expect(find.text('Request change'), findsOneWidget);
     });
 
     testWidgets('Renders 4 Bento Metric Cards with counts and badges', (tester) async {
@@ -515,13 +523,13 @@ void main() {
       expect(find.text('5 Available'), findsOneWidget);
       expect(find.text('1 Booked'), findsOneWidget);
 
-      // Metric 4: Upcoming Exams
+      // Metric 4: Upcoming Exams (no decorative "Term Exam" badge)
       expect(find.text('Upcoming'), findsOneWidget);
       expect(find.text('1 Exams'), findsOneWidget);
-      expect(find.text('Term Exam'), findsOneWidget);
+      expect(find.text('Term Exam'), findsNothing);
     });
 
-    testWidgets('Renders Manage Tomorrow Schedule card and Broadcast dialog', (tester) async {
+    testWidgets('Tomorrow view of Classes card shares the routine on WhatsApp', (tester) async {
       when(() => mockCrRepo.getCrDashboardData(
             crUser: any(named: 'crUser'),
             currentTime: any(named: 'currentTime'),
@@ -536,14 +544,19 @@ void main() {
       await tester.pumpWidget(buildTestableWidget(CrDashboardScreen(controller: controller)));
       await tester.pumpAndSettle();
 
-      expect(find.text("Manage Tomorrow's Schedule"), findsOneWidget);
-      expect(find.text('Broadcast'), findsOneWidget);
-      expect(find.text('Add Class Slot'), findsAtLeastNWidgets(1));
-
-      // Tap Broadcast on WhatsApp
-      await tester.ensureVisible(find.text('Broadcast'));
+      // Add / share actions live in the Classes card's Tomorrow view.
+      await tester.ensureVisible(find.text('Tomorrow').first);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Broadcast'));
+      await tester.tap(find.text('Tomorrow').first);
+      await tester.pumpAndSettle();
+      expect(find.text('Plan Tomorrow'), findsNothing); // duplicate card removed
+      expect(find.text('Share on WhatsApp'), findsOneWidget);
+      expect(find.text('Change a Class'), findsAtLeastNWidgets(1));
+
+      // Tap Share on WhatsApp
+      await tester.ensureVisible(find.text('Share on WhatsApp'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Share on WhatsApp'));
       await tester.pumpAndSettle();
 
       expect(find.text('WhatsApp Broadcast'), findsOneWidget);
@@ -554,7 +567,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('Tapping Add Class Slot opens CrAddSlotDialog', (tester) async {
+    testWidgets('Tapping Change a Class (Tomorrow view) opens the class change form', (tester) async {
       when(() => mockCrRepo.getCrDashboardData(
             crUser: any(named: 'crUser'),
             currentTime: any(named: 'currentTime'),
@@ -569,17 +582,19 @@ void main() {
       await tester.pumpWidget(buildTestableWidget(CrDashboardScreen(controller: controller)));
       await tester.pumpAndSettle();
 
-      await tester.ensureVisible(find.text('Add Class Slot').first);
+      // Add / share actions live in the Classes card's Tomorrow view.
+      await tester.ensureVisible(find.text('Tomorrow').first);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Add Class Slot').first);
+      await tester.tap(find.text('Tomorrow').first);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Change a Class').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Change a Class').first);
       await tester.pumpAndSettle();
 
-      expect(find.text('Add Class for Tomorrow'), findsOneWidget);
-      expect(find.text('Save Class Slot'), findsOneWidget);
-
-      // Close dialog
-      await tester.tap(find.byIcon(Icons.close_rounded));
-      await tester.pumpAndSettle();
+      // One form for extra / cancel / move, opened on tomorrow.
+      expect(find.byKey(const ValueKey('change_type')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('change_type')), matching: find.text('Extra')), findsOneWidget);
     });
 
     testWidgets("Renders Today's Schedule timeline with slots", (tester) async {
@@ -597,10 +612,15 @@ void main() {
       await tester.pumpWidget(buildTestableWidget(CrDashboardScreen(controller: controller)));
       await tester.pumpAndSettle();
 
-      expect(find.text("Today's Schedule"), findsOneWidget);
-      expect(find.text('CSE-3101: Data Structures & Algorithms'), findsOneWidget);
-      expect(find.text('CSE-3102: Database Management Lab'), findsOneWidget);
-      expect(find.text('09:00 AM'), findsOneWidget);
+      expect(find.text('Classes'), findsWidgets);
+      // Course name without the code, then the time range.
+      expect(find.text('Data Structures & Algorithms'), findsOneWidget);
+      expect(find.text('Database Management Lab'), findsOneWidget);
+      // Calendar-style time line above the name.
+      expect(find.text('9:00 – 10:30 AM'), findsOneWidget);
+      expect(find.text('11:30 AM – 1:00 PM'), findsOneWidget);
+      // Each class is its own box; no "end of list" marker.
+      expect(find.text('End of scheduled classes'), findsNothing);
       expect(find.text('Room 302, Block A'), findsOneWidget);
       expect(find.text('Lab 4, Block C'), findsOneWidget);
       expect(find.text('Theory'), findsOneWidget);
@@ -706,6 +726,8 @@ void main() {
       await tester.pumpWidget(buildTestableWidget(CrDashboardScreen(controller: controller)));
       await tester.pumpAndSettle();
 
+      await tester.ensureVisible(find.text('Upcoming'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Upcoming'));
       await tester.pumpAndSettle();
 
@@ -741,4 +763,21 @@ void main() {
       expect(find.text('Feedback'), findsWidgets);
     });
   });
+}
+
+class _FakeClassChangeRepository implements ClassChangeRepository {
+  @override
+  Future<List<ScheduleSlot>> routineForDay(String dayOfWeek) async => const [];
+  @override
+  Future<List<ClassChange>> changesOn(DateTime date) async => const [];
+  @override
+  Future<List<ClassChange>> changesForBatch({required int year, required int semester, required DateTime from, required DateTime to}) async => const [];
+  @override
+  Future<List<ClassChange>> changesForCourses({required Set<String> courseIds, required DateTime from, required DateTime to}) async => const [];
+  @override
+  Future<List<Course>> plannableCourses(User user) async => const [];
+  @override
+  Future<void> create(ClassChange change) async {}
+  @override
+  Future<void> undo(String changeId) async {}
 }

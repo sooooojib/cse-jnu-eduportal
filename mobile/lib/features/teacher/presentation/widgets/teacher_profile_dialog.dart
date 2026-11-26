@@ -625,13 +625,6 @@ class _TeacherProfileDialogState extends State<TeacherProfileDialog> {
                         color: isDark ? const Color(0xFF13263E) : Colors.white,
                         width: 2.5,
                       ),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Colors.black26,
-                          blurRadius: 4,
-                          offset: Offset(0, 2),
-                        ),
-                      ],
                     ),
                     child: const Icon(Icons.camera_alt_rounded, size: 15, color: Colors.white),
                   ),
@@ -800,9 +793,7 @@ class _TeacherProfileDialogState extends State<TeacherProfileDialog> {
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: Color(0xFFFCA5A5)),
               padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
+              shape: const StadiumBorder(),
             ),
           ),
         ),
@@ -839,7 +830,7 @@ class _TeacherProfileDialogState extends State<TeacherProfileDialog> {
               foregroundColor: AppColors.primaryLight,
               side: const BorderSide(color: AppColors.primaryLight),
               padding: const EdgeInsets.symmetric(vertical: 11),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              shape: const StadiumBorder(),
             ),
           ),
         ),
@@ -950,7 +941,7 @@ class _TeacherProfileDialogState extends State<TeacherProfileDialog> {
                       },
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: const StadiumBorder(),
                 ),
                 child: const Text('Cancel'),
               ),
@@ -963,7 +954,7 @@ class _TeacherProfileDialogState extends State<TeacherProfileDialog> {
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: const StadiumBorder(),
                 ),
                 child: _isSaving
                     ? const SizedBox(

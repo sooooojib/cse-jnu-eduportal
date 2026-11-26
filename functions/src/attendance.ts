@@ -1,6 +1,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import * as crypto from "crypto";
+import { isAdminRole, isTeacherRole } from "./roles";
 
 // Ensure Firebase Admin is initialized
 if (!admin.apps.length) {
@@ -43,7 +44,7 @@ export const startAttendanceSession = onCall(async (request) => {
   }
 
   const role = await getUserRole(request.auth);
-  const isTeacher = role === "TEACHER" || role === "ADMIN";
+  const isTeacher = isTeacherRole(role) || isAdminRole(role);
   if (!isTeacher) {
     throw new HttpsError("permission-denied", "Only teachers or administrators can start an attendance session.");
   }
@@ -69,7 +70,7 @@ export const startAttendanceSession = onCall(async (request) => {
   const isDirectTeacher = courseData.teacherId === teacherUid;
 
   // Also check courseAssignments table in case of secondary assignment
-  let isAssigned = isDirectTeacher || role === "ADMIN";
+  let isAssigned = isDirectTeacher || isAdminRole(role);
   if (!isAssigned) {
     const assignCheck = await db.collection("courseAssignments")
       .where("courseId", "==", courseId)
@@ -188,8 +189,8 @@ export const deactivateAttendanceSession = onCall(async (request) => {
 
   const sessionData = sessionDoc.data()!;
   const isOwner = sessionData.teacherId === request.auth.uid;
-  const isTeacherOrAdmin = role === "TEACHER" || role === "ADMIN";
-  if (!isOwner && role !== "ADMIN" && !isTeacherOrAdmin) {
+  const isTeacherOrAdmin = isTeacherRole(role) || isAdminRole(role);
+  if (!isOwner && !isAdminRole(role) && !isTeacherOrAdmin) {
     throw new HttpsError("permission-denied", "Unauthorized. You cannot deactivate another teacher's attendance session.");
   }
 
@@ -381,8 +382,8 @@ export const getAttendanceSessionRoster = onCall(async (request) => {
 
   const sessionData = sessionDoc.data()!;
   const isOwner = sessionData.teacherId === request.auth.uid;
-  const isTeacherOrAdmin = role === "TEACHER" || role === "ADMIN";
-  if (!isOwner && role !== "ADMIN" && !isTeacherOrAdmin) {
+  const isTeacherOrAdmin = isTeacherRole(role) || isAdminRole(role);
+  if (!isOwner && !isAdminRole(role) && !isTeacherOrAdmin) {
     throw new HttpsError("permission-denied", "Unauthorized to view this attendance roster.");
   }
 
@@ -480,8 +481,8 @@ export const updateAttendanceRoster = onCall(async (request) => {
 
   const sessionData = sessionDoc.data()!;
   const isOwner = sessionData.teacherId === request.auth.uid;
-  const isTeacherOrAdmin = role === "TEACHER" || role === "ADMIN";
-  if (!isOwner && role !== "ADMIN" && !isTeacherOrAdmin) {
+  const isTeacherOrAdmin = isTeacherRole(role) || isAdminRole(role);
+  if (!isOwner && !isAdminRole(role) && !isTeacherOrAdmin) {
     throw new HttpsError("permission-denied", "Unauthorized to update this attendance roster.");
   }
 

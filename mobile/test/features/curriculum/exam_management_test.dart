@@ -302,7 +302,7 @@ void main() {
       expect(find.byIcon(Icons.delete_outline_rounded), findsNothing);
     });
 
-    testWidgets('9. Authorized CR can see Edit and Delete buttons for their cohort', (tester) async {
+    testWidgets('9. Authorized CR can Edit and Cancel (not delete) exams of their cohort', (tester) async {
       when(() => mockAuth.currentUser).thenReturn(sampleCr);
 
       await tester.pumpWidget(
@@ -328,9 +328,10 @@ void main() {
       await tester.tap(find.text('Open Details'));
       await tester.pumpAndSettle();
 
-      // CR for Year 3 Semester 1 CAN modify this exam
+      // CR for Year 3 Semester 1 CAN modify this exam, and cancels instead of deleting.
       expect(find.text('Edit'), findsOneWidget);
-      expect(find.byIcon(Icons.delete_outline_rounded), findsOneWidget);
+      expect(find.text('Cancel exam'), findsOneWidget);
+      expect(find.byIcon(Icons.delete_outline_rounded), findsNothing);
     });
 
     testWidgets('10. CR from another cohort CANNOT modify exam of different cohort', (tester) async {
@@ -362,7 +363,7 @@ void main() {
       expect(find.byIcon(Icons.delete_outline_rounded), findsNothing);
     });
 
-    testWidgets('11. Delete exam triggers AppConfirmationDialog before executing', (tester) async {
+    testWidgets('11. Admin delete triggers AppConfirmationDialog before executing', (tester) async {
       when(() => mockAuth.currentUser).thenReturn(sampleCr);
       when(() => mockRepo.deleteExam('exam_up_1')).thenAnswer((_) async {});
       when(() => mockRepo.getExams(
@@ -379,10 +380,8 @@ void main() {
                 onPressed: () => ExamDetailsDialog.show(
                   context: context,
                   exam: upcomingExam,
-                  userRole: UserRole.cr,
-                  userYear: 3,
-                  userSemester: 1,
-                  userId: 'cr_1',
+                  userRole: UserRole.admin,
+                  userId: 'admin_1',
                 ),
                 child: const Text('Open Details'),
               ),
@@ -394,7 +393,7 @@ void main() {
       await tester.tap(find.text('Open Details'));
       await tester.pumpAndSettle();
 
-      // Tap Delete icon
+      // Tap Delete icon (Admin / Chairman only)
       await tester.tap(find.byIcon(Icons.delete_outline_rounded));
       await tester.pumpAndSettle();
 
@@ -441,7 +440,9 @@ void main() {
       final titleField = find.widgetWithText(TextFormField, 'Mid-Term Examination');
       await tester.enterText(titleField, '');
 
-      // Tap Schedule Exam
+      // Tap Schedule Exam (scroll the form to it first)
+      await tester.ensureVisible(find.text('Schedule Exam'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Schedule Exam'));
       await tester.pumpAndSettle();
 
@@ -485,7 +486,7 @@ void main() {
 
       // Past exam is displayed
       expect(find.text('Database Systems'), findsOneWidget);
-      expect(find.text('Class Test 1'), findsOneWidget);
+      expect(find.textContaining('Class Test 1'), findsOneWidget);
     });
 
     testWidgets('14. ExamManagementView shows error view and retries on failure', (tester) async {

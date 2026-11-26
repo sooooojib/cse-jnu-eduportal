@@ -10,6 +10,10 @@ import '../../../counseling/domain/entities/counseling_entities.dart';
 import '../../../curriculum/data/models/curriculum_models.dart';
 import '../../../curriculum/domain/entities/curriculum_entities.dart';
 import '../../domain/entities/cr_dashboard_data.dart';
+import '../../../../core/utils/class_time.dart';
+import '../../../curriculum/data/repositories/class_change_repository.dart';
+import '../../../curriculum/domain/entities/class_change.dart';
+import '../../../curriculum/domain/services/effective_schedule.dart';
 
 abstract class CrRemoteDataSource {
   Future<CrDashboardData> getCrDashboardData({
@@ -55,10 +59,11 @@ class CrRemoteDataSourceImpl implements CrRemoteDataSource {
       final attendanceSummary = await _fetchPersonalAttendance(crUser, enrolledCourses);
 
       // 3. Fetch Classes Today & Tomorrow
+      // Weekly routine + one-day changes (extra / cancelled / moved) per date.
       final List<ScheduleSlot> todayClasses =
-          await _fetchClassesForDay(crUser, dayOfWeek);
+          await _fetchClassesForDate(crUser, now, dayOfWeek);
       final List<ScheduleSlot> tomorrowClasses =
-          await _fetchClassesForDay(crUser, tomorrowDayOfWeek);
+          await _fetchClassesForDate(crUser, tomorrow, tomorrowDayOfWeek);
 
       // 4. Fetch Counseling Info (Available Faculty Slots & My Bookings)
       final counselingInfo = await _fetchCounselingInfo(crUser);
@@ -91,13 +96,14 @@ class CrRemoteDataSourceImpl implements CrRemoteDataSource {
         totalClasses: attendanceSummary.totalSessions,
         isAttendanceEligible: attendanceSummary.overallPercentage >= 75.0,
         courseAttendances: attendanceSummary.courseSummaries,
-        classesTodayCount: todayClasses.length,
+        classesTodayCount: todayClasses.where((c) => !c.isCancelled).length,
         todayClasses: todayClasses,
         tomorrowClasses: tomorrowClasses,
         availableCounselingSlotsCount: counselingInfo.availableSlotsCount,
         myActiveCounselingCount: counselingInfo.myBookings.length,
         myBookings: counselingInfo.myBookings,
-        upcomingExamsCount: upcomingExams.length,
+        // Cancelled exams stay listed (struck through) but are not counted.
+        upcomingExamsCount: upcomingExams.where((e) => !e.isCancelled).length,
         upcomingExams: upcomingExams,
         enrolledCourses: enrolledCourses,
         targetDateLabel: targetDateLabel,
@@ -280,6 +286,25 @@ class CrRemoteDataSourceImpl implements CrRemoteDataSource {
     }
   }
 
+  /// Effective classes for [date]: the routine for that weekday plus the
+  /// batch's one-day changes for that exact date.
+  Future<List<ScheduleSlot>> _fetchClassesForDate(User crUser, DateTime date, String targetDay) async {
+    final routine = await _fetchClassesForDay(crUser, targetDay);
+    List<ClassChange> changes = const [];
+    try {
+      final snap = await _firestore
+          .collection('classChanges')
+          .where('targetYear', isEqualTo: crUser.year ?? 1)
+          .where('targetSemester', isEqualTo: crUser.semester ?? 1)
+          .where('date', isEqualTo: ClassTime.dateKey(date))
+          .get();
+      changes = snap.docs.map(ClassChangeRepositoryImpl.fromDoc).toList();
+    } catch (e) {
+      AppLogger.w('Failed to load class changes for ${ClassTime.dateKey(date)}: $e');
+    }
+    return EffectiveSchedule.forDate(routine: routine, changes: changes, date: date);
+  }
+
   Future<List<ScheduleSlot>> _fetchClassesForDay(User crUser, String targetDay) async {
     try {
       final Map<String, ScheduleSlot> slotMap = {};
@@ -373,7 +398,12 @@ class CrRemoteDataSourceImpl implements CrRemoteDataSource {
           .where('semester', isEqualTo: crUser.semester ?? 1)
           .get();
 
-      final List<Exam> exams = snap.docs.map((d) => ExamModel.fromFirestore(d)).toList();
+      // Upcoming only: today or later (past exams live in the Exam Schedule's Past tab).
+      final todayKey = ClassTime.dateKey(now);
+      final List<Exam> exams = snap.docs
+          .map((d) => ExamModel.fromFirestore(d))
+          .where((e) => e.examDate.compareTo(todayKey) >= 0)
+          .toList();
 
       exams.sort((a, b) => a.examDate.compareTo(b.examDate));
       return exams;

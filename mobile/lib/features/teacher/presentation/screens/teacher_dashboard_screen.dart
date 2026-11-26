@@ -3,14 +3,15 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../../../../app/router/route_names.dart';
 import '../../../../app/theme/app_colors.dart';
+import '../../../../core/constants/role_constants.dart';
 import '../../../../core/di/injection_container.dart';
-import '../../../../shared/widgets/cards/role_badge_chip.dart';
+import '../../../../core/network/cache_metadata.dart';
 import '../../../../shared/widgets/dialogs/app_confirmation_dialog.dart';
 import '../../../../shared/widgets/states/app_error_state_view.dart';
 import '../../../../shared/widgets/states/app_loading_view.dart';
+import '../../../../shared/widgets/states/cached_data_badge.dart';
 import '../../../../shared/widgets/theme/theme_toggle_button.dart';
 import '../../../auth/domain/entities/user.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
@@ -19,9 +20,13 @@ import '../controllers/teacher_dashboard_controller.dart';
 import '../controllers/teacher_dashboard_state.dart';
 import '../widgets/assigned_course_card.dart';
 import '../widgets/teacher_metric_card.dart';
+import '../../../../shared/widgets/cards/role_badge_chip.dart';
 import '../widgets/teacher_profile_dialog.dart';
 import '../widgets/teacher_quick_actions.dart';
 import '../widgets/time_aware_classes_card.dart';
+import '../widgets/faculty_admin_view.dart';
+import '../../../curriculum/presentation/widgets/class_changes_card.dart';
+import '../../../dashboard/presentation/widgets/dashboard_mode_selector.dart';
 import '../../../attendance/presentation/screens/teacher_attendance_terminal_screen.dart';
 import 'teacher_schedule_screen.dart';
 import '../../../counseling/presentation/screens/teacher_counseling_screen.dart';
@@ -46,6 +51,22 @@ class TeacherDashboardScreen extends StatefulWidget {
 class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   late final TeacherDashboardController _controller;
   int _currentNavIndex = 0;
+  final _changesKey = GlobalKey<ClassChangesCardState>();
+
+  /// Faculty / Admin view (Chairman & delegated faculty only). Null until the
+  /// saved preference has been read for the signed-in user.
+  DashboardMode? _mode;
+
+  DashboardMode _modeFor(User user) {
+    return _mode ??= user.canSwitchToAdminView
+        ? DashboardModePreference.read(user.id)
+        : DashboardMode.faculty;
+  }
+
+  void _setMode(User user, DashboardMode mode) {
+    setState(() => _mode = mode);
+    DashboardModePreference.write(user.id, mode);
+  }
 
   @override
   void initState() {
@@ -141,9 +162,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  shape: const StadiumBorder(),
                 ),
                 child: const Text('Understood'),
               ),
@@ -163,14 +182,17 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     );
   }
 
+  /// Opens attendance for this exact class (course + slot), not just the tab.
   void _handleStartAttendance(ScheduleSlot slot) {
-    if (widget.onNavigateTab != null) {
-      widget.onNavigateTab!(1);
+    if (slot.isCancelled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This class is not happening today.')),
+      );
       return;
     }
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => TeacherAttendanceTerminalScreen(preselectedCourseId: slot.courseId),
+        builder: (_) => TeacherAttendanceTerminalScreen(preselectedCourseId: slot.courseId, slotId: slot.id),
       ),
     );
   }
@@ -311,7 +333,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         title: Center(
           child: Text(
             'JnU EduPortal',
-            style: GoogleFonts.plusJakartaSans(
+            style: TextStyle(fontFamily: 'PlusJakartaSans', 
               fontWeight: FontWeight.w800,
               fontSize: 19,
               letterSpacing: -0.4,
@@ -361,6 +383,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
     if (state is TeacherDashboardLoaded) {
       final data = state.data;
+      final canSwitch = currentUser != null && currentUser.canSwitchToAdminView;
+      final mode = currentUser == null ? DashboardMode.faculty : _modeFor(currentUser);
 
       return RefreshIndicator(
         color: AppColors.primary,
@@ -371,99 +395,131 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (data.isFromCache)
+                CachedDataBadge(
+                  metadata: CacheMetadata.cached(
+                    message: 'Showing cached faculty routine (Offline)',
+                  ),
+                  onRefresh: () => _controller.refreshData(),
+                ),
               // 1. Teacher Welcome & Role Header
               _buildTeacherHeader(data, isDark),
 
+              if (canSwitch) ...[
+                const SizedBox(height: 14),
+                DashboardModeSelector(
+                  currentMode: mode,
+                  adminLabel: currentUser.role.isChairman ? 'Department Admin' : 'Signup Committee',
+                  onModeChanged: (m) => _setMode(currentUser, m),
+                ),
+              ],
+
               const SizedBox(height: 20),
 
-              // 2. Metrics Grid
-              _buildMetricsSection(data, isDark),
+              if (mode == DashboardMode.admin && canSwitch)
+                currentUser.role.isChairman ? const ChairmanAdminView() : const DelegateAdminView()
+              else ...[
+                // 2. Metrics Grid
+                _buildMetricsSection(data, isDark),
 
-              const SizedBox(height: 24),
+                const SizedBox(height: 24),
 
-              // 3. Time-Aware Classes & Today's Exams Section (with toggle)
-              TimeAwareClassesCard(
-                classes: data.timeAwareClasses,
-                exams: data.timeAwareExams,
-                todayClasses: data.effectiveTodayClasses,
-                tomorrowClasses: data.effectiveTomorrowClasses,
-                todayExams: data.effectiveTodayExams,
-                tomorrowExams: data.effectiveTomorrowExams,
-                todayDateLabel: data.todayDateLabel.isNotEmpty ? data.todayDateLabel : data.targetDateLabel,
-                tomorrowDateLabel: data.tomorrowDateLabel.isNotEmpty ? data.tomorrowDateLabel : data.targetDateLabel,
-                isTomorrow: data.isTomorrow,
-                dateLabel: data.targetDateLabel,
-                onStartAttendance: _handleStartAttendance,
-                onExamTap: (exam) => _showModuleComingSoon('Exam Invigilation (${exam.courseCode})'),
-                onViewFullSchedule: () {
-                  if (widget.onNavigateTab != null) {
-                    widget.onNavigateTab!(2);
-                    return;
-                  }
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const TeacherScheduleScreen(),
-                    ),
-                  );
-                },
-              ),
+                // 3. Time-Aware Classes & Today's Exams Section (with toggle)
+                TimeAwareClassesCard(
+                  user: currentUser,
+                  onChanged: () {
+                    _controller.refreshData();
+                    _changesKey.currentState?.reload();
+                  },
+                  classes: data.timeAwareClasses,
+                  exams: data.timeAwareExams,
+                  todayClasses: data.effectiveTodayClasses,
+                  tomorrowClasses: data.effectiveTomorrowClasses,
+                  todayExams: data.effectiveTodayExams,
+                  tomorrowExams: data.effectiveTomorrowExams,
+                  todayDateLabel: data.todayDateLabel.isNotEmpty ? data.todayDateLabel : data.targetDateLabel,
+                  tomorrowDateLabel: data.tomorrowDateLabel.isNotEmpty ? data.tomorrowDateLabel : data.targetDateLabel,
+                  isTomorrow: data.isTomorrow,
+                  dateLabel: data.targetDateLabel,
+                  onStartAttendance: _handleStartAttendance,
+                  onExamTap: (exam) => _showModuleComingSoon('Exam Invigilation (${exam.courseCode})'),
+                  onViewFullSchedule: () {
+                    if (widget.onNavigateTab != null) {
+                      widget.onNavigateTab!(2);
+                      return;
+                    }
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const TeacherScheduleScreen(),
+                      ),
+                    );
+                  },
+                ),
 
-              const SizedBox(height: 24),
+                const SizedBox(height: 24),
 
-              // 4. Quick Actions (below Today's Classes)
-              TeacherQuickActions(
-                onAttendance: () {
-                  if (widget.onNavigateTab != null) {
-                    widget.onNavigateTab!(1);
-                    return;
-                  }
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const TeacherAttendanceTerminalScreen(),
-                    ),
-                  );
-                },
-                onSchedule: () {
-                  if (widget.onNavigateTab != null) {
-                    widget.onNavigateTab!(2);
-                    return;
-                  }
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const TeacherScheduleScreen(),
-                    ),
-                  );
-                },
-                onCounseling: () {
-                  if (widget.onNavigateTab != null) {
-                    widget.onNavigateTab!(3);
-                    return;
-                  }
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const TeacherCounselingScreen(),
-                    ),
-                  );
-                },
-                onFeedback: () {
-                  if (widget.onNavigateTab != null) {
-                    widget.onNavigateTab!(4);
-                    return;
-                  }
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const TeacherFeedbackScreen(),
-                    ),
-                  );
-                },
-                onCourses: () => _showCoursesBottomSheet(data.assignedCourses),
-                onNotifications: () => context.push(RouteNames.notifications),
-                onProfile: () {
-                  if (currentUser != null) {
-                    _openProfileDialog(currentUser, data.assignedCourses.length);
-                  }
-                },
-              ),
+                // One-day class changes for my courses (extra / cancel / move)
+                if (currentUser != null) ...[
+                  ClassChangesCard(key: _changesKey, user: currentUser, onChanged: () => _controller.refreshData()),
+                  const SizedBox(height: 24),
+                ],
+
+                // 4. Quick Actions (below Today's Classes)
+                TeacherQuickActions(
+                  onAttendance: () {
+                    if (widget.onNavigateTab != null) {
+                      widget.onNavigateTab!(1);
+                      return;
+                    }
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const TeacherAttendanceTerminalScreen(),
+                      ),
+                    );
+                  },
+                  onSchedule: () {
+                    if (widget.onNavigateTab != null) {
+                      widget.onNavigateTab!(2);
+                      return;
+                    }
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const TeacherScheduleScreen(),
+                      ),
+                    );
+                  },
+                  onCounseling: () {
+                    if (widget.onNavigateTab != null) {
+                      widget.onNavigateTab!(3);
+                      return;
+                    }
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const TeacherCounselingScreen(),
+                      ),
+                    );
+                  },
+                  onFeedback: () {
+                    if (widget.onNavigateTab != null) {
+                      widget.onNavigateTab!(4);
+                      return;
+                    }
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const TeacherFeedbackScreen(),
+                      ),
+                    );
+                  },
+                  onCourses: () => _showCoursesBottomSheet(data.assignedCourses),
+                  onNotifications: () => context.push(RouteNames.notifications),
+                  onProfile: () {
+                    if (currentUser != null) {
+                      _openProfileDialog(currentUser, data.assignedCourses.length);
+                    }
+                  },
+                ),
+
+              ],
 
               const SizedBox(height: 32),
             ],
@@ -483,14 +539,30 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
-            child: Text(
-              'Welcome back, ${data.teacherName.isNotEmpty ? data.teacherName : "Professor"}.',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.5,
-                color: isDark ? Colors.white : const Color(0xFF0F172A),
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Welcome back, ${data.teacherName.isNotEmpty ? data.teacherName : "Professor"}.',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
+                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  ),
+                ),
+                if (data.role == UserRole.chairman) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Chairman, Department of CSE',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
           const SizedBox(width: 8),
@@ -738,9 +810,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
+                    shape: const StadiumBorder(),
                   ),
                 ),
               ),

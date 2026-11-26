@@ -92,6 +92,7 @@ class CounselingBookingModel extends CounselingBooking {
     required super.notes,
     required super.status,
     super.rejectionReason,
+    super.teacherMessage,
     super.reviewedAt,
     required super.createdAt,
   });
@@ -111,6 +112,7 @@ class CounselingBookingModel extends CounselingBooking {
       notes: json['notes'] as String? ?? '',
       status: json['status'] as String? ?? 'PENDING',
       rejectionReason: json['rejectionReason'] as String?,
+      teacherMessage: json['teacherMessage'] as String?,
       reviewedAt: json['reviewedAt'] != null ? _tsToString(json['reviewedAt']) : null,
       createdAt: _tsToString(json['createdAt']),
     );
@@ -136,6 +138,7 @@ class CounselingBookingModel extends CounselingBooking {
       'notes': notes,
       'status': status,
       if (rejectionReason != null) 'rejectionReason': rejectionReason,
+      if (teacherMessage != null) 'teacherMessage': teacherMessage,
       'reviewedAt': reviewedAt,
       'createdAt': createdAt,
     };
@@ -155,6 +158,7 @@ class CounselingBookingModel extends CounselingBooking {
       'notes': notes,
       'status': status,
       if (rejectionReason != null) 'rejectionReason': rejectionReason,
+      if (teacherMessage != null) 'teacherMessage': teacherMessage,
       'reviewedAt': reviewedAt != null ? FieldValue.serverTimestamp() : null,
       'createdAt': FieldValue.serverTimestamp(),
     };

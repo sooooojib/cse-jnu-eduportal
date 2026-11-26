@@ -1,10 +1,27 @@
 import 'package:flutter/material.dart';
-import '../../../../app/theme/app_colors.dart';
+import 'package:intl/intl.dart';
 import '../../../../core/constants/role_constants.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/utils/class_time.dart';
+import '../../../auth/domain/entities/user.dart';
+import '../../../auth/presentation/controllers/auth_controller.dart';
+import '../../data/repositories/exam_support_repository.dart';
 import '../../domain/entities/curriculum_entities.dart';
+import '../../domain/services/effective_schedule.dart';
+import '../../domain/services/exam_rules.dart';
 import '../controllers/schedule_controller.dart';
+import 'time_range_field.dart';
 
+/// Schedule or edit an exam. Same calm style as the class forms:
+/// type, course, title, date, From / To, room (with suggestions), invigilator,
+/// instructions, and a clash check before saving.
+///
+/// * Admin / Chairman: any semester and course.
+/// * Teacher: only their own courses (the semester comes from the course).
+/// * CR: their own semester; every type except Final.
+///
+/// Changing the date or start time of an existing exam records where it was
+/// ("Postponed from …"). After saving, the semester's students are notified.
 class ExamFormDialog extends StatefulWidget {
   final Exam? existingExam;
   final UserRole userRole;
@@ -35,9 +52,11 @@ class ExamFormDialog extends StatefulWidget {
     String? preselectedTeacherName,
     List<String>? teacherAssignedCourseIds,
   }) {
-    return showDialog<bool>(
+    return showModalBottomSheet<bool>(
       context: context,
-      barrierDismissible: false,
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (_) => ExamFormDialog(
         existingExam: existingExam,
         userRole: userRole,
@@ -57,73 +76,62 @@ class ExamFormDialog extends StatefulWidget {
 class _ExamFormDialogState extends State<ExamFormDialog> {
   final _formKey = GlobalKey<FormState>();
   late final ExamsController _examsController;
+  ExamSupportRepository? _support;
+  User? _user;
 
-  // Form State
+  final _titleController = TextEditingController();
+  final _instructionsController = TextEditingController();
+  final _invigilatorController = TextEditingController();
+  TextEditingController? _roomController;
+
   Course? _selectedCourse;
-  final TextEditingController _titleController = TextEditingController();
-  final TextEditingController _instructionsController = TextEditingController();
-  final TextEditingController _invigilatorController = TextEditingController();
+  String _type = 'MID_TERM';
+  late DateTime _date;
+  String? _start;
+  String? _end;
+  String _initialRoom = '';
+  late int _year;
+  late int _semester;
 
-  String _selectedType = 'MID_TERM';
-  String _selectedRoom = 'Room 401';
-  DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
-  TimeOfDay _startTime = const TimeOfDay(hour: 10, minute: 0);
-  TimeOfDay _endTime = const TimeOfDay(hour: 12, minute: 0);
-  int _targetYear = 1;
-  int _targetSemester = 1;
-
-  // Options & Loading
-  List<Course> _availableCourses = [];
-  bool _isLoadingOptions = true;
+  List<Course> _courses = [];
+  List<String> _rooms = [];
+  List<Exam> _examsThatDay = const [];
+  List<ScheduleSlot> _classesThatDay = const [];
+  bool _loadingCourses = true;
+  bool _submitting = false;
   String? _formError;
-  bool _isSubmitting = false;
 
-  final List<String> _examTypes = [
-    'MID_TERM',
-    'FINAL',
-    'QUIZ',
-    'LAB_EXAM',
-    'CT',
-  ];
+  bool get _isEdit => widget.existingExam != null;
+  bool get _isCr => widget.userRole == UserRole.cr;
+  bool get _isTeacherOnly => widget.userRole.hasTeacherAccess && !widget.userRole.hasAdminAccess;
+  bool get _isAdmin => widget.userRole.hasAdminAccess;
 
-  final List<String> _availableRooms = [
-    'Room 401',
-    'Room 402',
-    'Room 403',
-    'Room 501',
-    'Main Exam Hall A',
-    'Main Exam Hall B',
-    'Lab 1 (Networking)',
-    'Lab 2 (Software)',
-    'Lab 4 (Systems)',
-  ];
+  List<String> get _types => _isCr ? ExamTypes.all.where((t) => t != 'FINAL').toList() : ExamTypes.all;
 
   @override
   void initState() {
     super.initState();
     _examsController = sl<ExamsController>();
+    _support = sl.isRegistered<ExamSupportRepository>() ? sl<ExamSupportRepository>() : null;
+    _user = sl.isRegistered<AuthController>() ? sl<AuthController>().currentUser : null;
 
-    _targetYear = widget.existingExam?.year ?? widget.defaultYear ?? 1;
-    _targetSemester = widget.existingExam?.semester ?? widget.defaultSemester ?? 1;
-    _selectedType = widget.existingExam?.type ?? 'MID_TERM';
-    _selectedRoom = widget.existingExam?.room ?? 'Room 401';
-    _titleController.text = widget.existingExam?.title ?? 'Mid-Term Examination';
-    _instructionsController.text = widget.existingExam?.instructions ?? '';
-    _invigilatorController.text = widget.existingExam?.invigilatorName ?? widget.preselectedTeacherName ?? '';
-
-    if (widget.existingExam != null) {
-      try {
-        final parts = widget.existingExam!.examDate.split('-');
-        if (parts.length == 3) {
-          _selectedDate = DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
-        }
-      } catch (_) {}
-
-      _startTime = _parseTimeOfDay(widget.existingExam!.startTime) ?? const TimeOfDay(hour: 10, minute: 0);
-      _endTime = _parseTimeOfDay(widget.existingExam!.endTime) ?? const TimeOfDay(hour: 12, minute: 0);
-    }
+    final e = widget.existingExam;
+    _year = e?.year ?? widget.defaultYear ?? _user?.year ?? 1;
+    _semester = e?.semester ?? widget.defaultSemester ?? _user?.semester ?? 1;
+    _type = e?.type ?? 'MID_TERM';
+    if (!_types.contains(_type) && !_isEdit) _type = _types.first;
+    final preset = ExamTypes.preset(_type);
+    _titleController.text = e?.title ?? preset.$1;
+    _instructionsController.text = e?.instructions ?? '';
+    _invigilatorController.text = e?.invigilatorName ?? widget.preselectedTeacherName ?? '';
+    _initialRoom = e?.room ?? '';
+    _date = DateTime.tryParse(e?.examDate ?? '') ?? ClassTime.dateOnly(DateTime.now()).add(const Duration(days: 1));
+    _start = e == null ? '10:00 AM' : ClassTime.normalize(e.startTime);
+    _end = e == null ? ClassTime.format(600 + preset.$2) : ClassTime.normalize(e.endTime);
 
     _loadCourses();
+    _loadRooms();
+    _loadDay();
   }
 
   @override
@@ -134,709 +142,451 @@ class _ExamFormDialogState extends State<ExamFormDialog> {
     super.dispose();
   }
 
-  TimeOfDay? _parseTimeOfDay(String timeStr) {
-    try {
-      final clean = timeStr.trim();
-      final isPm = clean.toUpperCase().contains('PM');
-      final isAm = clean.toUpperCase().contains('AM');
-      final timeParts = clean.split(' ')[0].split(':');
-      if (timeParts.length == 2) {
-        int h = int.parse(timeParts[0]);
-        final m = int.parse(timeParts[1]);
-        if (isPm && h < 12) h += 12;
-        if (isAm && h == 12) h = 0;
-        return TimeOfDay(hour: h, minute: m);
-      }
-    } catch (_) {}
-    return null;
-  }
-
-  String _formatTimeOfDay(TimeOfDay time) {
-    final hour = time.hourOfPeriod == 0 ? 12 : time.hourOfPeriod;
-    final minute = time.minute.toString().padLeft(2, '0');
-    final period = time.period == DayPeriod.am ? 'AM' : 'PM';
-    return '${hour.toString().padLeft(2, '0')}:$minute $period';
-  }
-
-  String _formatDate(DateTime d) {
-    return "${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}";
-  }
-
-  int _calculateDurationMinutes() {
-    final startMinutes = _startTime.hour * 60 + _startTime.minute;
-    final endMinutes = _endTime.hour * 60 + _endTime.minute;
-    return endMinutes - startMinutes;
-  }
-
-  String _formatDurationString() {
-    final mins = _calculateDurationMinutes();
-    if (mins <= 0) return 'Invalid Time';
-    final hours = mins ~/ 60;
-    final rem = mins % 60;
-    if (hours > 0 && rem > 0) return '${hours}h ${rem}m';
-    if (hours > 0) return '${hours}h';
-    return '${rem}m';
-  }
+  // ─── Data ──────────────────────────────────────────────────────────────
 
   Future<void> _loadCourses() async {
-    setState(() => _isLoadingOptions = true);
+    setState(() => _loadingCourses = true);
     try {
-      final courses = await _examsController.fetchAvailableCourses(
-        year: _targetYear,
-        semester: _targetSemester,
-      );
-
+      List<Course> list;
+      if (_isTeacherOnly) {
+        // Teachers: only their own courses, any semester.
+        final all = await _examsController.fetchAvailableCourses();
+        final uid = _user?.id ?? widget.preselectedTeacherId;
+        final assigned = {...?widget.teacherAssignedCourseIds, ...?_user?.assignedCourseIds};
+        list = all.where((c) => c.teacherId == uid || assigned.contains(c.id)).toList();
+      } else {
+        list = await _examsController.fetchAvailableCourses(year: _year, semester: _semester);
+      }
+      list.sort((a, b) => a.code.compareTo(b.code));
+      if (!mounted) return;
       setState(() {
-        _availableCourses = courses;
-        if (widget.existingExam != null) {
-          _selectedCourse = courses.cast<Course?>().firstWhere(
-            (c) => c?.id == widget.existingExam!.courseId || c?.code == widget.existingExam!.courseCode,
-            orElse: () => null,
-          );
-        } else if (widget.userRole == UserRole.teacher && widget.teacherAssignedCourseIds != null) {
-          _selectedCourse = courses.cast<Course?>().firstWhere(
-            (c) => widget.teacherAssignedCourseIds!.contains(c?.id),
-            orElse: () => courses.isNotEmpty ? courses.first : null,
-          );
-        } else if (courses.isNotEmpty) {
-          _selectedCourse = courses.first;
-        }
-        _isLoadingOptions = false;
+        _courses = list;
+        final e = widget.existingExam;
+        _selectedCourse = e != null
+            ? list.where((c) => c.id == e.courseId || c.code == e.courseCode).firstOrNull
+            : (list.isNotEmpty ? list.first : null);
+        _applyCourseSemester();
+        _loadingCourses = false;
       });
-    } catch (e) {
+    } catch (_) {
+      if (!mounted) return;
       setState(() {
-        _isLoadingOptions = false;
-        _formError = 'Failed to load courses for Year $_targetYear Semester $_targetSemester.';
+        _loadingCourses = false;
+        _formError = 'Could not load the courses.';
       });
     }
   }
 
-  void _onTypePresetSelected(String type) {
+  /// For teachers the semester follows the chosen course.
+  void _applyCourseSemester() {
+    final c = _selectedCourse;
+    if (c != null && _isTeacherOnly) {
+      _year = c.year;
+      _semester = c.semester;
+    }
+  }
+
+  Future<void> _loadRooms() async {
+    final s = _support;
+    if (s == null) return;
+    try {
+      final rooms = await s.knownRooms();
+      if (mounted) setState(() => _rooms = rooms);
+    } catch (_) {}
+  }
+
+  Future<void> _loadDay() async {
+    final s = _support;
+    if (s == null) return;
+    try {
+      final key = ClassTime.dateKey(_date);
+      final results = await Future.wait([s.examsOn(key), s.classesOn(_date)]);
+      if (!mounted) return;
+      setState(() {
+        _examsThatDay = results[0] as List<Exam>;
+        _classesThatDay = results[1] as List<ScheduleSlot>;
+      });
+    } catch (_) {
+      // Without the data the server rules still apply; the clash check is skipped.
+    }
+  }
+
+  // ─── Building the exam ─────────────────────────────────────────────────
+
+  String get _room => (_roomController?.text ?? _initialRoom).trim();
+
+  Exam? get _draft {
+    final c = _selectedCourse;
+    if (c == null || _start == null || _end == null) return null;
+    final old = widget.existingExam;
+    final key = ClassTime.dateKey(_date);
+    final moved = old != null && (old.examDate != key || ClassTime.normalize(old.startTime) != _start);
+    final teacherSelf = widget.userRole.hasTeacherAccess ? (_user?.id ?? widget.preselectedTeacherId) : null;
+    return Exam(
+      id: old?.id ?? '',
+      courseId: c.id,
+      courseCode: c.code,
+      courseTitle: c.title,
+      title: _titleController.text.trim(),
+      examDate: key,
+      startTime: _start!,
+      endTime: _end!,
+      room: _room,
+      year: _year,
+      semester: _semester,
+      type: _type,
+      instructions: _instructionsController.text.trim().isEmpty ? null : _instructionsController.text.trim(),
+      invigilatorName: _invigilatorController.text.trim().isEmpty ? null : _invigilatorController.text.trim(),
+      invigilatorId: old?.invigilatorId ?? teacherSelf,
+      createdBy: old?.createdBy ?? _user?.id,
+      creatorRole: old?.creatorRole ?? widget.userRole.value,
+      // Editing a cancelled exam reschedules it.
+      status: 'SCHEDULED',
+      statusNote: old?.isCancelled == true ? '' : old?.statusNote,
+      previousDate: moved ? old.examDate : old?.previousDate,
+      previousStartTime: moved ? ClassTime.normalize(old.startTime) : old?.previousStartTime,
+    );
+  }
+
+  List<ScheduleClash> get _clashes {
+    final d = _draft;
+    if (d == null) return const [];
+    return ExamClashes.find(exam: d, examsThatDay: _examsThatDay, classesThatDay: _classesThatDay);
+  }
+
+  int get _duration {
+    final a = ClassTime.toMinutes(_start ?? '');
+    final b = ClassTime.toMinutes(_end ?? '');
+    return (a == null || b == null) ? 0 : b - a;
+  }
+
+  void _selectType(String t) {
+    final preset = ExamTypes.preset(t);
     setState(() {
-      _selectedType = type;
-      switch (type) {
-        case 'MID_TERM':
-          _titleController.text = 'Mid-Term Examination';
-          _startTime = const TimeOfDay(hour: 10, minute: 0);
-          _endTime = const TimeOfDay(hour: 12, minute: 0);
-          break;
-        case 'FINAL':
-          _titleController.text = 'Semester Final Examination';
-          _startTime = const TimeOfDay(hour: 10, minute: 0);
-          _endTime = const TimeOfDay(hour: 13, minute: 0);
-          break;
-        case 'QUIZ':
-          _titleController.text = 'Quiz Examination';
-          _startTime = const TimeOfDay(hour: 10, minute: 0);
-          _endTime = const TimeOfDay(hour: 10, minute: 45);
-          break;
-        case 'LAB_EXAM':
-          _titleController.text = 'Lab Practical Examination';
-          _startTime = const TimeOfDay(hour: 9, minute: 0);
-          _endTime = const TimeOfDay(hour: 12, minute: 0);
-          if (!_selectedRoom.contains('Lab')) {
-            _selectedRoom = 'Lab 2 (Software)';
-          }
-          break;
-        case 'CT':
-          _titleController.text = 'Class Test';
-          _startTime = const TimeOfDay(hour: 11, minute: 0);
-          _endTime = const TimeOfDay(hour: 11, minute: 45);
-          break;
+      // Only replace the title if it is still a default one.
+      final defaults = ExamTypes.all.map((x) => ExamTypes.preset(x).$1).toSet();
+      if (_titleController.text.trim().isEmpty || defaults.contains(_titleController.text.trim())) {
+        _titleController.text = preset.$1;
       }
+      _type = t;
+      final s = ClassTime.toMinutes(_start ?? '') ?? 600;
+      _end = ClassTime.format((s + preset.$2).clamp(0, 23 * 60 + 59));
     });
   }
 
   Future<void> _pickDate() async {
-    final now = DateTime.now();
-    final firstAllowedDate = widget.existingExam == null
-        ? DateTime(now.year, now.month, now.day)
-        : DateTime(now.year - 2);
-
+    final today = ClassTime.dateOnly(DateTime.now());
+    final first = _isEdit && _date.isBefore(today) ? _date : today;
     final picked = await showDatePicker(
       context: context,
-      initialDate: _selectedDate.isBefore(firstAllowedDate) ? firstAllowedDate : _selectedDate,
-      firstDate: firstAllowedDate,
-      lastDate: DateTime(now.year + 2),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(
-              primary: AppColors.primary,
-              onPrimary: Colors.white,
-              surface: Theme.of(context).cardColor,
-            ),
-          ),
-          child: child!,
-        );
-      },
+      initialDate: _date.isBefore(first) ? first : _date,
+      firstDate: first,
+      lastDate: DateTime(today.year + 2),
     );
-
-    if (picked != null) {
-      setState(() => _selectedDate = picked);
-    }
+    if (picked == null) return;
+    setState(() => _date = picked);
+    _loadDay();
   }
 
-  Future<void> _pickStartTime() async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: _startTime,
-    );
-    if (picked != null) {
-      setState(() {
-        _startTime = picked;
-        // Adjust end time if end <= start
-        final startM = picked.hour * 60 + picked.minute;
-        final endM = _endTime.hour * 60 + _endTime.minute;
-        if (endM <= startM) {
-          final newEndM = startM + 90; // Default 1.5 hour duration
-          _endTime = TimeOfDay(hour: (newEndM ~/ 60) % 24, minute: newEndM % 60);
-        }
-      });
-    }
-  }
-
-  Future<void> _pickEndTime() async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: _endTime,
-    );
-    if (picked != null) {
-      setState(() => _endTime = picked);
-    }
-  }
-
-  Future<void> _handleSubmit() async {
+  Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedCourse == null) {
-      setState(() => _formError = 'Please select a valid course for this exam.');
+    final draft = _draft;
+    if (draft == null) {
+      setState(() => _formError = 'Choose a course and a time.');
       return;
     }
-
-    final durationMins = _calculateDurationMinutes();
-    if (durationMins <= 0) {
-      setState(() => _formError = 'Exam end time must be strictly after start time.');
+    if (_duration < 15 || _duration > 300) {
+      setState(() => _formError = 'An exam must be between 15 minutes and 5 hours.');
       return;
     }
-    if (durationMins < 15 || durationMins > 300) {
-      setState(() => _formError = 'Exam duration must be between 15 minutes and 5 hours.');
-      return;
-    }
+    if (_clashes.isNotEmpty) return;
 
     setState(() {
-      _isSubmitting = true;
+      _submitting = true;
       _formError = null;
     });
-
-    final examDateStr = _formatDate(_selectedDate);
-    final startTimeStr = _formatTimeOfDay(_startTime);
-    final endTimeStr = _formatTimeOfDay(_endTime);
-
-    final examToSave = Exam(
-      id: widget.existingExam?.id ?? '',
-      courseId: _selectedCourse!.id,
-      courseCode: _selectedCourse!.code,
-      courseTitle: _selectedCourse!.title,
-      title: _titleController.text.trim(),
-      examDate: examDateStr,
-      startTime: startTimeStr,
-      endTime: endTimeStr,
-      room: _selectedRoom,
-      year: _targetYear,
-      semester: _targetSemester,
-      type: _selectedType,
-      instructions: _instructionsController.text.trim().isEmpty ? null : _instructionsController.text.trim(),
-      invigilatorName: _invigilatorController.text.trim().isEmpty ? null : _invigilatorController.text.trim(),
-      invigilatorId: widget.userRole == UserRole.teacher ? widget.preselectedTeacherId : null,
-    );
-
-    bool success = false;
-    if (widget.existingExam == null) {
-      success = await _examsController.createExam(examToSave);
-    } else {
-      success = await _examsController.updateExam(examToSave);
+    final ok = _isEdit ? await _examsController.updateExam(draft) : await _examsController.createExam(draft);
+    if (!mounted) return;
+    if (!ok) {
+      setState(() {
+        _submitting = false;
+        _formError = _examsController.actionError ?? 'Could not save the exam. Please try again.';
+      });
+      return;
     }
 
-    if (mounted) {
-      setState(() => _isSubmitting = false);
-      if (success) {
-        Navigator.of(context).pop(true);
-      } else {
-        setState(() {
-          _formError = _examsController.actionError ?? 'Failed to save exam schedule. Please try again.';
-        });
-      }
+    // Tell the semester (best effort; the exam is already saved).
+    final s = _support;
+    final u = _user;
+    if (s != null && u != null) {
+      final msg = ExamSupportRepositoryImpl.message(draft, kind: _isEdit ? 'change' : 'new');
+      s.notifySemester(draft, title: msg.$1, body: msg.$2, sender: u);
     }
+    Navigator.of(context).pop(true);
   }
+
+  // ─── UI ────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isEdit = widget.existingExam != null;
-    final isCr = widget.userRole == UserRole.cr;
-    final durationMins = _calculateDurationMinutes();
-    final isDurationValid = durationMins >= 15 && durationMins <= 300;
+    final muted = isDark ? Colors.white60 : const Color(0xFF64748B);
+    final clashes = _clashes;
+    final old = widget.existingExam;
 
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      backgroundColor: isDark ? AppColors.surfaceContainerDark : Colors.white,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 540),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.surfaceContainerHighDark : AppColors.surfaceContainerHigh,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(color: muted.withValues(alpha: 0.4), borderRadius: BorderRadius.circular(2)),
+                ),
               ),
-              child: Row(
+              const SizedBox(height: 14),
+              Text(_isEdit ? 'Edit Exam' : 'Schedule Examination',
+                  style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 2),
+              Text(
+                _isCr
+                    ? 'Year $_year · Semester $_semester. Finals are set by the course teacher or the Chairman.'
+                    : (old != null && old.isCancelled
+                        ? 'This exam is cancelled. Saving will reschedule it.'
+                        : 'The semester\'s students are notified when you save.'),
+                style: TextStyle(fontSize: 12.5, color: muted),
+              ),
+              const SizedBox(height: 16),
+
+              if (_formError != null) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: const Color(0xFFFEF2F2), borderRadius: BorderRadius.circular(16)),
+                  child: Text(_formError!, style: const TextStyle(color: Color(0xFFB91C1C), fontSize: 13)),
+                ),
+                const SizedBox(height: 14),
+              ],
+
+              // Type
+              _label('Type'),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.12),
-                      shape: BoxShape.circle,
+                  for (final t in _types)
+                    ChoiceChip(
+                      key: ValueKey('exam_type_$t'),
+                      label: Text(ExamTypes.label(t)),
+                      selected: _type == t,
+                      onSelected: _submitting ? null : (_) => _selectType(t),
                     ),
-                    child: Icon(
-                      isEdit ? Icons.edit_calendar_rounded : Icons.add_circle_outline_rounded,
-                      color: AppColors.primary,
-                      size: 22,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          isEdit ? 'Edit Exam Schedule' : 'Schedule Examination',
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
-                        Text(
-                          isCr
-                              ? 'Year $_targetYear • Semester $_targetSemester (CR Cohort)'
-                              : 'Academic Examination Management',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: isDark ? AppColors.onSurfaceVariantDark : AppColors.onSurfaceVariantLight,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(false),
-                    icon: const Icon(Icons.close_rounded, size: 20),
-                    tooltip: 'Close',
-                  ),
                 ],
               ),
-            ),
+              const SizedBox(height: 16),
 
-            // Body
-            Flexible(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                child: Form(
-                  key: _formKey,
+              // Semester (admins only pick it; teachers get it from the course; CR is fixed)
+              if (_isAdmin) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<int>(
+                        initialValue: _year,
+                        decoration: const InputDecoration(labelText: 'Year'),
+                        items: [for (final y in [1, 2, 3, 4]) DropdownMenuItem(value: y, child: Text('Year $y'))],
+                        onChanged: (v) {
+                          if (v == null) return;
+                          setState(() => _year = v);
+                          _loadCourses();
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: DropdownButtonFormField<int>(
+                        initialValue: _semester,
+                        decoration: const InputDecoration(labelText: 'Semester'),
+                        items: [for (final s in [1, 2]) DropdownMenuItem(value: s, child: Text('Semester $s'))],
+                        onChanged: (v) {
+                          if (v == null) return;
+                          setState(() => _semester = v);
+                          _loadCourses();
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+              ],
+
+              // Course
+              if (_loadingCourses)
+                const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: LinearProgressIndicator(minHeight: 3))
+              else
+                DropdownButtonFormField<String>(
+                  key: const ValueKey('exam_course'),
+                  initialValue: _selectedCourse?.id,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Course', prefixIcon: Icon(Icons.menu_book_outlined)),
+                  hint: Text(_courses.isEmpty ? 'No courses available' : 'Choose a course'),
+                  items: [
+                    for (final c in _courses)
+                      DropdownMenuItem(
+                        value: c.id,
+                        child: Text(
+                          _isTeacherOnly ? '${c.title} · Y${c.year}S${c.semester}' : c.title,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: _submitting
+                      ? null
+                      : (id) => setState(() {
+                            _selectedCourse = _courses.where((c) => c.id == id).firstOrNull;
+                            _applyCourseSemester();
+                          }),
+                  validator: (v) => v == null ? 'Choose a course' : null,
+                ),
+              const SizedBox(height: 14),
+
+              // Title
+              TextFormField(
+                controller: _titleController,
+                decoration: const InputDecoration(labelText: 'Title', prefixIcon: Icon(Icons.edit_note_rounded)),
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Exam title is required' : null,
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 16),
+
+              // Date
+              InkWell(
+                key: const ValueKey('exam_date'),
+                onTap: _submitting ? null : _pickDate,
+                borderRadius: BorderRadius.circular(20),
+                child: InputDecorator(
+                  isEmpty: false,
+                  decoration: const InputDecoration(
+                    labelText: 'Date',
+                    floatingLabelBehavior: FloatingLabelBehavior.always,
+                    prefixIcon: Icon(Icons.event_rounded),
+                  ),
+                  child: Text(
+                    '${DateFormat('EEE, MMM d, yyyy').format(_date)} · ${ExamDates.relative(ClassTime.dateKey(_date), DateTime.now())}',
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              // From / To
+              TimeRangeField(
+                start: _start,
+                end: _end,
+                defaultMinutes: ExamTypes.preset(_type).$2,
+                onChanged: (a, b) => setState(() {
+                  _start = a;
+                  _end = b;
+                }),
+              ),
+              if (old != null && old.wasMoved)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6, left: 6),
+                  child: Text('Originally ${old.previousDate}, ${old.previousStartTime ?? ''}',
+                      style: TextStyle(fontSize: 12, color: muted)),
+                ),
+              const SizedBox(height: 14),
+
+              // Room with suggestions from the routine and other exams
+              Autocomplete<String>(
+                initialValue: TextEditingValue(text: _initialRoom),
+                optionsBuilder: (v) {
+                  final q = v.text.trim().toLowerCase();
+                  return q.isEmpty ? _rooms : _rooms.where((r) => r.toLowerCase().contains(q));
+                },
+                onSelected: (_) => setState(() {}),
+                fieldViewBuilder: (context, controller, focusNode, onSubmit) {
+                  _roomController = controller;
+                  return TextFormField(
+                    key: const ValueKey('exam_room'),
+                    controller: controller,
+                    focusNode: focusNode,
+                    decoration: const InputDecoration(labelText: 'Room', prefixIcon: Icon(Icons.meeting_room_outlined)),
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter a room' : null,
+                    onChanged: (_) => setState(() {}),
+                  );
+                },
+              ),
+              const SizedBox(height: 14),
+
+              TextFormField(
+                controller: _invigilatorController,
+                decoration: const InputDecoration(
+                  labelText: 'Invigilator (optional)',
+                  prefixIcon: Icon(Icons.person_outline_rounded),
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextFormField(
+                controller: _instructionsController,
+                maxLines: 3,
+                minLines: 1,
+                decoration: const InputDecoration(
+                  labelText: 'Syllabus / instructions (optional)',
+                  prefixIcon: Icon(Icons.notes_rounded),
+                ),
+              ),
+
+              if (clashes.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                Container(
+                  key: const ValueKey('exam_clashes'),
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFFECACA)),
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Error Banner
-                      if (_formError != null) ...[
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.redAccent.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 20),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  _formError!,
-                                  style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w500),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-
-                      // CR Cohort Locked Banner or Year/Sem Selector
-                      if (isCr) ...[
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withOpacity(0.08),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppColors.primary.withOpacity(0.2)),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.lock_rounded, size: 16, color: AppColors.primary),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Class Representative: Locked to your registered academic cohort (Year $_targetYear, Semester $_targetSemester).',
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                      ] else ...[
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('Academic Year', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                  const SizedBox(height: 6),
-                                  DropdownButtonFormField<int>(
-                                    value: _targetYear,
-                                    decoration: InputDecoration(
-                                      isDense: true,
-                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                    ),
-                                    items: [1, 2, 3, 4].map((y) => DropdownMenuItem(value: y, child: Text('Year $y'))).toList(),
-                                    onChanged: _isSubmitting
-                                        ? null
-                                        : (v) {
-                                            if (v != null) {
-                                              setState(() => _targetYear = v);
-                                              _loadCourses();
-                                            }
-                                          },
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('Semester', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                  const SizedBox(height: 6),
-                                  DropdownButtonFormField<int>(
-                                    value: _targetSemester,
-                                    decoration: InputDecoration(
-                                      isDense: true,
-                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                    ),
-                                    items: [1, 2].map((s) => DropdownMenuItem(value: s, child: Text('Semester $s'))).toList(),
-                                    onChanged: _isSubmitting
-                                        ? null
-                                        : (v) {
-                                            if (v != null) {
-                                              setState(() => _targetSemester = v);
-                                              _loadCourses();
-                                            }
-                                          },
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-
-                      // Course Dropdown
-                      const Text('Course *', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      const SizedBox(height: 6),
-                      if (_isLoadingOptions)
-                        const LinearProgressIndicator()
-                      else
-                        DropdownButtonFormField<Course>(
-                          value: _selectedCourse,
-                          isExpanded: true,
-                          decoration: InputDecoration(
-                            isDense: true,
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                            prefixIcon: const Icon(Icons.school_outlined, size: 20),
-                          ),
-                          items: _availableCourses.map((c) {
-                            return DropdownMenuItem<Course>(
-                              value: c,
-                              child: Text(
-                                '${c.code}: ${c.title}',
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 13),
-                              ),
-                            );
-                          }).toList(),
-                          onChanged: _isSubmitting
-                              ? null
-                              : (c) {
-                                  if (c != null) {
-                                    setState(() => _selectedCourse = c);
-                                  }
-                                },
-                          validator: (v) => v == null ? 'Course selection is required' : null,
-                        ),
-                      const SizedBox(height: 16),
-
-                      // Exam Type Preset Chips
-                      const Text('Exam Type & Title Preset', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 6,
-                        children: _examTypes.map((type) {
-                          final isSelected = _selectedType == type;
-                          String label = type;
-                          if (type == 'MID_TERM') label = 'Mid-Term';
-                          if (type == 'FINAL') label = 'Final';
-                          if (type == 'QUIZ') label = 'Quiz';
-                          if (type == 'LAB_EXAM') label = 'Lab Exam';
-                          if (type == 'CT') label = 'Class Test';
-
-                          return ChoiceChip(
-                            label: Text(label, style: TextStyle(fontSize: 12, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-                            selected: isSelected,
-                            selectedColor: AppColors.primary.withOpacity(0.15),
-                            labelStyle: TextStyle(color: isSelected ? AppColors.primary : null),
-                            onSelected: _isSubmitting ? null : (_) => _onTypePresetSelected(type),
-                          );
-                        }).toList(),
-                      ),
-                      const SizedBox(height: 14),
-
-                      // Title field
-                      const Text('Exam Title *', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _titleController,
-                        decoration: InputDecoration(
-                          isDense: true,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          hintText: 'e.g. Mid-Term Examination',
-                        ),
-                        validator: (v) => (v == null || v.trim().isEmpty) ? 'Exam title is required' : null,
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Exam Date Picker
-                      const Text('Exam Date *', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      const SizedBox(height: 6),
-                      InkWell(
-                        onTap: _isSubmitting ? null : _pickDate,
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey.withOpacity(0.4)),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.calendar_today_rounded, size: 18, color: AppColors.primary),
-                              const SizedBox(width: 10),
-                              Text(
-                                _formatDate(_selectedDate),
-                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                              ),
-                              const Spacer(),
-                              const Text('Change Date', style: TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Start & End Time Pickers + Duration Badge
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('Start Time *', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                const SizedBox(height: 6),
-                                InkWell(
-                                  onTap: _isSubmitting ? null : _pickStartTime,
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                    decoration: BoxDecoration(
-                                      border: Border.all(color: Colors.grey.withOpacity(0.4)),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        const Icon(Icons.access_time_rounded, size: 16, color: AppColors.primary),
-                                        const SizedBox(width: 6),
-                                        Text(_formatTimeOfDay(_startTime), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('End Time *', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                const SizedBox(height: 6),
-                                InkWell(
-                                  onTap: _isSubmitting ? null : _pickEndTime,
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                    decoration: BoxDecoration(
-                                      border: Border.all(color: Colors.grey.withOpacity(0.4)),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        const Icon(Icons.schedule_rounded, size: 16, color: AppColors.primary),
-                                        const SizedBox(width: 6),
-                                        Text(_formatTimeOfDay(_endTime), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-
-                      // Duration info pill
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: isDurationValid ? Colors.green.withOpacity(0.08) : Colors.redAccent.withOpacity(0.08),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: isDurationValid ? Colors.green.withOpacity(0.3) : Colors.redAccent.withOpacity(0.3)),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              isDurationValid ? Icons.check_circle_outline_rounded : Icons.info_outline_rounded,
-                              size: 14,
-                              color: isDurationValid ? Colors.green : Colors.redAccent,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Duration: ${_formatDurationString()} ${isDurationValid ? "" : "(Valid: 15m - 5h)"}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: isDurationValid ? Colors.green : Colors.redAccent,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Exam Room Dropdown
-                      const Text('Exam Room / Hall *', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      const SizedBox(height: 6),
-                      DropdownButtonFormField<String>(
-                        value: _selectedRoom,
-                        decoration: InputDecoration(
-                          isDense: true,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          prefixIcon: const Icon(Icons.room_outlined, size: 20),
-                        ),
-                        items: _availableRooms.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
-                        onChanged: _isSubmitting ? null : (r) => setState(() => _selectedRoom = r ?? _selectedRoom),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Invigilator Name
-                      const Text('Invigilator Duty / Supervisor', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _invigilatorController,
-                        decoration: InputDecoration(
-                          isDense: true,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          hintText: 'e.g. Dr. Anisur Rahman',
-                          prefixIcon: const Icon(Icons.person_outline_rounded, size: 20),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Instructions / Syllabus Notes
-                      const Text('Syllabus / Instructions (Optional)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _instructionsController,
-                        maxLines: 3,
-                        decoration: InputDecoration(
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          hintText: 'e.g. Chapters 1-4. Scientific calculators are permitted. Bring departmental ID.',
-                        ),
-                      ),
+                      const Text('This time doesn\'t work:',
+                          style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFFB91C1C))),
+                      const SizedBox(height: 4),
+                      ...clashes.map((c) => Text('• ${c.message}',
+                          style: const TextStyle(color: Color(0xFFB91C1C), fontSize: 13))),
                     ],
                   ),
                 ),
-              ),
-            ),
+              ],
 
-            // Footer Actions
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(
-                    color: isDark ? AppColors.outlineDark.withOpacity(0.15) : AppColors.outlineLight.withOpacity(0.15),
-                  ),
+              const SizedBox(height: 18),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  key: const ValueKey('exam_save'),
+                  onPressed: (_submitting || clashes.isNotEmpty) ? null : _submit,
+                  child: _submitting
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                      : Text(_isEdit ? 'Update Exam' : 'Schedule Exam'),
                 ),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(false),
-                    child: const Text('Cancel'),
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton(
-                    onPressed: _isSubmitting ? null : _handleSubmit,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    ),
-                    child: _isSubmitting
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : Text(
-                            isEdit ? 'Update Exam' : 'Schedule Exam',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
+
+  Widget _label(String text) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Text(text, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700)),
+      );
 }

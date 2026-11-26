@@ -27,6 +27,15 @@ abstract class AdminRepository {
   Future<void> deleteUser({required String userId});
   Future<void> toggleUserActiveStatus({required String userId, required bool isActive});
 
+  /// Grant / revoke the limited Admin View (signup committee) for a faculty member.
+  Future<void> setAdminDelegate({required String userId, required bool enabled});
+
+  /// Change a staff member's role (e.g. TEACHER -> CHAIRMAN). System admin only.
+  Future<void> updateUserRole({required String userId, required UserRole role});
+
+  /// Set or clear a student's academic session (e.g. "2021-2022").
+  Future<void> updateUserSession({required String userId, required String? session});
+
   // ─── COURSE MANAGEMENT ─────────────────────────────────────────────────────
   Future<List<Course>> getAllCourses();
   Future<void> createCourse(Course course);

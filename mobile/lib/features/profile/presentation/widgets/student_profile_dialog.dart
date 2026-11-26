@@ -529,7 +529,6 @@ class _StudentProfileDialogState extends State<StudentProfileDialog> {
                       value: targetYear,
                       decoration: InputDecoration(
                         labelText: 'Target Year',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       ),
                       items: [1, 2, 3, 4].map((y) => DropdownMenuItem(value: y, child: Text('Year $y'))).toList(),
                       onChanged: (val) {
@@ -543,7 +542,6 @@ class _StudentProfileDialogState extends State<StudentProfileDialog> {
                       value: targetSemester,
                       decoration: InputDecoration(
                         labelText: 'Target Sem',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       ),
                       items: [1, 2].map((s) => DropdownMenuItem(value: s, child: Text('Sem $s'))).toList(),
                       onChanged: (val) {
@@ -759,7 +757,6 @@ class _StudentProfileDialogState extends State<StudentProfileDialog> {
                     labelText: 'Full Name',
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
               )
@@ -904,7 +901,7 @@ class _StudentProfileDialogState extends State<StudentProfileDialog> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF047857),
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    shape: const StadiumBorder(),
                   ),
                   child: _isSaving
                       ? const SizedBox(
@@ -954,9 +951,7 @@ class _StudentProfileDialogState extends State<StudentProfileDialog> {
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: Color(0xFFFCA5A5)),
                   padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
+                  shape: const StadiumBorder(),
                 ),
               ),
             ),

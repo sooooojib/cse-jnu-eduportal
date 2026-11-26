@@ -242,7 +242,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Live Attendance Terminal'), findsOneWidget);
+      expect(find.text('Enter code'), findsOneWidget);
       expect(find.text('Verify & Record Presence'), findsOneWidget);
       expect(find.byType(TextField), findsOneWidget);
     });
@@ -341,18 +341,18 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Check course pill
-      expect(find.text('CSE-3101'), findsWidgets);
+      // While a session is live the course is shown on the live card (no picker).
 
       // Check active code banner with 6-char code (rendered with spaced letters)
       expect(find.text('K 9 X 2 P 4'), findsOneWidget);
-      expect(find.textContaining('SESSION ACTIVE'), findsOneWidget);
-      expect(find.text('Deactivate Attendance Session'), findsOneWidget);
+      expect(find.text('Operating Systems'), findsOneWidget); // live session for this course
+      expect(find.text('Close & Save'), findsOneWidget);
+      expect(find.textContaining('Present: 1 / 3'), findsOneWidget);
 
       // Check roster section
-      expect(find.textContaining('Enrolled Student Roster'), findsOneWidget);
+      expect(find.textContaining('Students (3)'), findsOneWidget);
       expect(find.text('Rahim Khan'), findsOneWidget);
-      expect(find.text('B200101001'), findsOneWidget);
+      expect(find.textContaining('B200101001'), findsOneWidget);
       expect(find.text('Karim Ahmed'), findsOneWidget);
       expect(find.text('Nusrat Jahan'), findsOneWidget);
 
@@ -415,11 +415,10 @@ void main() {
       // Initial state: Karim Ahmed is ABSENT
       expect(controller.editableRoster.firstWhere((r) => r.studentId == 'stud_2').status, 'ABSENT');
 
-      // Tap Karim Ahmed's status chip
-      final absentChips = find.widgetWithText(GestureDetector, 'ABSENT');
-      expect(absentChips, findsWidgets);
-      await tester.ensureVisible(absentChips.first);
-      await tester.tap(absentChips.first);
+      // Tap Karim Ahmed's P (present) button
+      final present = find.byKey(const ValueKey('mark_stud_2_PRESENT'));
+      await tester.ensureVisible(present);
+      await tester.tap(present);
       await tester.pumpAndSettle();
 
       // Should now be PRESENT
@@ -427,7 +426,7 @@ void main() {
       expect(find.textContaining('Save Attendance'), findsOneWidget);
     });
 
-    testWidgets('Tapping Deactivate triggers confirmation dialog', (tester) async {
+    testWidgets('Tapping Close & Save asks first, then closes the session', (tester) async {
       tester.view.physicalSize = const Size(1080, 1920);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -451,17 +450,17 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final deactivateBtn = find.text('Deactivate Attendance Session');
-      await tester.ensureVisible(deactivateBtn);
-      await tester.tap(deactivateBtn);
+      final closeBtn = find.text('Close & Save');
+      await tester.ensureVisible(closeBtn);
+      await tester.tap(closeBtn);
       await tester.pumpAndSettle();
 
-      // Confirmation dialog should appear
-      expect(find.text('Deactivate Session?'), findsOneWidget);
-      expect(find.textContaining('Students will no longer be able to submit attendance'), findsOneWidget);
+      // Confirmation dialog explains that unmarked students become absent
+      expect(find.text('Close attendance?'), findsOneWidget);
+      expect(find.textContaining('recorded absent'), findsOneWidget);
 
-      // Confirm deactivation
-      await tester.tap(find.text('Deactivate'));
+      // Confirm
+      await tester.tap(find.text('Close & Save').last);
       await tester.pumpAndSettle();
 
       verify(() => mockRepo.deactivateSession(sessionId: 'sess_os_101')).called(1);
@@ -486,9 +485,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Launch Live Attendance'), findsOneWidget);
+      expect(find.text('Take Attendance'), findsOneWidget);
       expect(find.text('Start Attendance Session'), findsOneWidget);
-      expect(find.text('15 Minutes'), findsOneWidget);
+      expect(find.text('15 min'), findsNWidgets(2)); // code open for + late after
+      expect(find.byKey(const ValueKey('attendance_course')), findsOneWidget); // course picker inside the card
     });
   });
 }

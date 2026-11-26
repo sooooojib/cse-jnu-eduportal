@@ -21,6 +21,7 @@ class CourseModel extends Course {
     super.teacherName,
     super.coordinatorId,
     super.createdAt,
+    super.targetClassCount,
   });
 
   factory CourseModel.fromJson(Map<String, dynamic> json) {
@@ -37,6 +38,7 @@ class CourseModel extends Course {
       teacherName: json['teacherName'] as String?,
       coordinatorId: json['coordinatorId'] as String?,
       createdAt: json['createdAt'] != null ? _tsToString(json['createdAt']) : null,
+      targetClassCount: (json['targetClassCount'] as num?)?.toInt(),
     );
   }
 
@@ -59,6 +61,7 @@ class CourseModel extends Course {
       if (teacherName != null) 'teacherName': teacherName,
       if (coordinatorId != null) 'coordinatorId': coordinatorId,
       if (createdAt != null) 'createdAt': createdAt,
+      if (targetClassCount != null) 'targetClassCount': targetClassCount,
     };
   }
 
@@ -74,6 +77,7 @@ class CourseModel extends Course {
       if (teacherId != null) 'teacherId': teacherId,
       if (teacherName != null) 'teacherName': teacherName,
       if (coordinatorId != null) 'coordinatorId': coordinatorId,
+      if (targetClassCount != null) 'targetClassCount': targetClassCount,
       'updatedAt': FieldValue.serverTimestamp(),
     };
   }
@@ -298,7 +302,23 @@ class ExamModel extends Exam {
     super.creatorRole,
     super.createdAt,
     super.updatedAt,
+    super.status = 'SCHEDULED',
+    super.statusNote,
+    super.previousDate,
+    super.previousStartTime,
   });
+
+  /// Converts any [Exam] (e.g. from a form) to a model.
+  factory ExamModel.fromEntity(Exam e) => e is ExamModel
+      ? e
+      : ExamModel(
+          id: e.id, courseId: e.courseId, courseCode: e.courseCode, courseTitle: e.courseTitle, title: e.title,
+          examDate: e.examDate, startTime: e.startTime, endTime: e.endTime, room: e.room, year: e.year,
+          semester: e.semester, type: e.type, instructions: e.instructions, invigilatorName: e.invigilatorName,
+          invigilatorId: e.invigilatorId, createdBy: e.createdBy, creatorRole: e.creatorRole, createdAt: e.createdAt,
+          updatedAt: e.updatedAt, status: e.status, statusNote: e.statusNote, previousDate: e.previousDate,
+          previousStartTime: e.previousStartTime,
+        );
 
   factory ExamModel.fromJson(Map<String, dynamic> json) {
     return ExamModel(
@@ -325,6 +345,10 @@ class ExamModel extends Exam {
       updatedAt: json['updatedAt'] is Timestamp
           ? (json['updatedAt'] as Timestamp).toDate().toIso8601String()
           : json['updatedAt'] as String?,
+      status: (json['status'] as String?) ?? 'SCHEDULED',
+      statusNote: json['statusNote'] as String?,
+      previousDate: json['previousDate'] as String?,
+      previousStartTime: json['previousStartTime'] as String?,
     );
   }
 
@@ -354,6 +378,10 @@ class ExamModel extends Exam {
     String? creatorRole,
     String? createdAt,
     String? updatedAt,
+    String? status,
+    String? statusNote,
+    String? previousDate,
+    String? previousStartTime,
   }) {
     return ExamModel(
       id: id ?? this.id,
@@ -375,6 +403,10 @@ class ExamModel extends Exam {
       creatorRole: creatorRole ?? this.creatorRole,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      status: status ?? this.status,
+      statusNote: statusNote ?? this.statusNote,
+      previousDate: previousDate ?? this.previousDate,
+      previousStartTime: previousStartTime ?? this.previousStartTime,
     );
   }
 
@@ -399,6 +431,10 @@ class ExamModel extends Exam {
       'creatorRole': creatorRole,
       'createdAt': createdAt,
       'updatedAt': updatedAt,
+      'status': status,
+      'statusNote': statusNote,
+      'previousDate': previousDate,
+      'previousStartTime': previousStartTime,
     };
   }
 
@@ -418,8 +454,13 @@ class ExamModel extends Exam {
       'instructions': instructions,
       'invigilatorName': invigilatorName,
       'invigilatorId': invigilatorId,
-      'createdBy': createdBy,
-      'creatorRole': creatorRole,
+      // createdBy / creatorRole are only written when known (never wiped on update).
+      if (createdBy != null) 'createdBy': createdBy,
+      if (creatorRole != null) 'creatorRole': creatorRole,
+      'status': status,
+      if (statusNote != null) 'statusNote': statusNote,
+      if (previousDate != null) 'previousDate': previousDate,
+      if (previousStartTime != null) 'previousStartTime': previousStartTime,
       'updatedAt': FieldValue.serverTimestamp(),
     };
   }

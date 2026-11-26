@@ -61,6 +61,21 @@ class AdminRepositoryImpl implements AdminRepository {
     return _remoteDataSource.toggleUserActiveStatus(userId: userId, isActive: isActive);
   }
 
+  @override
+  Future<void> setAdminDelegate({required String userId, required bool enabled}) {
+    return _remoteDataSource.setAdminDelegate(userId: userId, enabled: enabled);
+  }
+
+  @override
+  Future<void> updateUserRole({required String userId, required UserRole role}) {
+    return _remoteDataSource.updateUserRole(userId: userId, role: role);
+  }
+
+  @override
+  Future<void> updateUserSession({required String userId, required String? session}) {
+    return _remoteDataSource.updateUserSession(userId: userId, session: session);
+  }
+
   // ─── COURSE MANAGEMENT ─────────────────────────────────────────────────────
   @override
   Future<List<Course>> getAllCourses() {

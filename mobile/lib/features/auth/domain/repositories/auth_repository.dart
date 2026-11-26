@@ -13,5 +13,6 @@ abstract class AuthRepository {
     required String role,
     String? studentId,
     String? phone,
+    String? session,
   });
 }

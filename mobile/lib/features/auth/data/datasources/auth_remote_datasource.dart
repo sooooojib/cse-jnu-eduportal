@@ -16,6 +16,7 @@ abstract class AuthRemoteDataSource {
     required String role,
     String? studentId,
     String? phone,
+    String? session,
   });
 }
 
@@ -155,6 +156,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     required String role,
     String? studentId,
     String? phone,
+    String? session,
   }) async {
     try {
       final docRef = await _firestore.collection('signupRequests').add({
@@ -163,6 +165,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         'role': role,
         if (studentId != null && studentId.isNotEmpty) 'studentId': studentId.trim(),
         if (phone != null && phone.isNotEmpty) 'phone': phone.trim(),
+        if (session != null && session.isNotEmpty) 'session': session.trim(),
         'status': 'PENDING',
         'createdAt': FieldValue.serverTimestamp(),
       });

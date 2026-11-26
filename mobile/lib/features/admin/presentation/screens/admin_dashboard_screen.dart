@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app/router/route_names.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/network/cache_metadata.dart';
 import '../../../../core/utils/context_extensions.dart';
 import '../../../../shared/widgets/states/app_error_state_view.dart';
 import '../../../../shared/widgets/states/app_loading_view.dart';
+import '../../../../shared/widgets/states/cached_data_badge.dart';
 import '../../../auth/domain/entities/signup_request.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../../../profile/domain/entities/semester_status.dart';
@@ -141,6 +143,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if (state.isFromCache)
+                        CachedDataBadge(
+                          metadata: CacheMetadata.cached(
+                            message: 'Showing cached admin telemetry (Offline)',
+                          ),
+                          onRefresh: () => _controller.loadDashboard(refresh: true),
+                        ),
                       // 1. Admin Header
                       AdminHeader(
                         user: user,
@@ -244,6 +253,12 @@ class _NoOpAdminRepository implements AdminRepository {
 
   @override
   Future<void> toggleUserActiveStatus({required String userId, required bool isActive}) async {}
+  @override
+  Future<void> setAdminDelegate({required String userId, required bool enabled}) async {}
+  @override
+  Future<void> updateUserRole({required String userId, required UserRole role}) async {}
+  @override
+  Future<void> updateUserSession({required String userId, required String? session}) async {}
 
   @override
   Future<List<Course>> getAllCourses() async => [];

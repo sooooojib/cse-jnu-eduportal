@@ -1,6 +1,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { parseTimeToMinutes, checkIntervalOverlap } from "./schedule";
+import { isAdminRole } from "./roles";
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -295,7 +296,7 @@ export async function executeUpdateExam(
   const existingExam = examDoc.data()!;
 
   // Role validation: Admin, CR of that cohort, Teacher assigned to course, or creator
-  if (role === "ADMIN") {
+  if (isAdminRole(role)) {
     // Admin has full edit rights
   } else if (role === "CR") {
     if (userYear !== Number(existingExam.year) || userSemester !== Number(existingExam.semester)) {
@@ -408,7 +409,7 @@ export async function executeDeleteExam(
   const existingExam = examDoc.data()!;
 
   // Role validation: Admin, CR of that cohort, Teacher assigned to course, or creator
-  if (role === "ADMIN") {
+  if (isAdminRole(role)) {
     // Admin has full delete rights
   } else if (role === "CR") {
     if (userYear !== Number(existingExam.year) || userSemester !== Number(existingExam.semester)) {

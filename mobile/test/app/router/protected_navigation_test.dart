@@ -1,3 +1,5 @@
+import 'package:cse_jnu_eduportal/features/admin/domain/entities/teacher_monitoring.dart';
+import 'package:cse_jnu_eduportal/features/admin/domain/repositories/teacher_monitoring_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -54,6 +56,7 @@ class MockSemesterRepo extends Mock implements SemesterRepository {}
 class MockNotificationRepo extends Mock implements NotificationRepository {}
 class MockTeacherRepo extends Mock implements TeacherRepository {}
 class FakeUser extends Fake implements User {}
+class MockTeacherMonitoringRepo extends Mock implements TeacherMonitoringRepository {}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -68,6 +71,13 @@ void main() {
     fullName: 'Teacher User',
     role: UserRole.teacher,
     phone: '+8801700000000',
+  );
+
+  const chairmanUser = User(
+    id: 'uid_chairman',
+    email: 'chairman@cse.jnu.ac.bd',
+    fullName: 'Chairman User',
+    role: UserRole.chairman,
   );
 
   const adminUser = User(
@@ -156,6 +166,12 @@ void main() {
       targetDateLabel: 'Today · Oct 19, 2026',
       dayOfWeek: 'MONDAY',
     ));
+
+    final monitoringRepo = MockTeacherMonitoringRepo();
+    when(() => monitoringRepo.loadReport(periodStart: any(named: 'periodStart'))).thenAnswer(
+      (_) async => TeacherMonitoringReport(teachers: const [], periodStart: null, generatedAt: DateTime(2026, 11, 25)),
+    );
+    sl.registerLazySingleton<TeacherMonitoringRepository>(() => monitoringRepo);
 
     sl.registerFactory<TeacherDashboardController>(() => TeacherDashboardController(
       getTeacherDashboardDataUseCase: GetTeacherDashboardDataUseCase(teacherRepo),
@@ -260,6 +276,58 @@ void main() {
 
       expect(find.text('Administrator'), findsOneWidget);
       expect(find.text('Console'), findsOneWidget);
+    });
+
+    testWidgets('Chairman visiting Admin Dashboard lands on the faculty dashboard with the view switcher', (tester) async {
+      when(() => mockAuthController.state).thenReturn(const Authenticated(user: chairmanUser));
+      when(() => mockAuthController.currentUser).thenReturn(chairmanUser);
+
+      final router = AppRouter.createRouter(
+        themeModeNotifier: themeModeNotifier,
+        initialLocation: RouteNames.adminDashboard,
+        authController: mockAuthController,
+      );
+
+      await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Welcome back'), findsOneWidget);
+      expect(find.text('Faculty View'), findsOneWidget);
+      expect(find.text('Department Admin'), findsOneWidget);
+    });
+
+    testWidgets('Chairman is permitted on the Teacher Monitoring admin route', (tester) async {
+      when(() => mockAuthController.state).thenReturn(const Authenticated(user: chairmanUser));
+      when(() => mockAuthController.currentUser).thenReturn(chairmanUser);
+
+      final router = AppRouter.createRouter(
+        themeModeNotifier: themeModeNotifier,
+        initialLocation: RouteNames.adminTeacherMonitoring,
+        authController: mockAuthController,
+      );
+
+      await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Teacher Course Monitoring'), findsOneWidget);
+    });
+
+    testWidgets('Regular teacher cannot open admin routes and sees no view switcher', (tester) async {
+      when(() => mockAuthController.state).thenReturn(const Authenticated(user: teacherUser));
+      when(() => mockAuthController.currentUser).thenReturn(teacherUser);
+
+      final router = AppRouter.createRouter(
+        themeModeNotifier: themeModeNotifier,
+        initialLocation: RouteNames.adminTeacherMonitoring,
+        authController: mockAuthController,
+      );
+
+      await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Teacher Course Monitoring'), findsNothing);
+      expect(find.textContaining('Welcome back'), findsOneWidget);
+      expect(find.text('Faculty View'), findsNothing);
     });
 
     testWidgets('Disabled account user is redirected to Login Screen', (tester) async {

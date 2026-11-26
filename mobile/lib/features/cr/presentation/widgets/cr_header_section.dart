@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/role_colors.dart';
 import '../../../../core/constants/role_constants.dart';
 import '../../../../shared/widgets/cards/role_badge_chip.dart';
@@ -48,17 +47,12 @@ class CrHeaderSection extends StatelessWidget {
 
         // Active Semester & Change Request Row
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+          // A normal card like the rest of the dashboard (no tinted box).
           decoration: BoxDecoration(
-            color: isDark
-                ? roleColors.background.withValues(alpha: 0.15)
-                : roleColors.background,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: isDark
-                  ? roleColors.border.withValues(alpha: 0.3)
-                  : roleColors.border,
-            ),
+            color: isDark ? const Color(0xFF13263E) : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: isDark ? Colors.white10 : const Color(0xFFE2E8F0)),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -93,7 +87,7 @@ class CrHeaderSection extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w500,
-                              color: isDark ? const Color(0xFF94A3B8) : roleColors.text.withValues(alpha: 0.85),
+                              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                             ),
                           ),
                           Text(
@@ -103,7 +97,7 @@ class CrHeaderSection extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
-                              color: isDark ? Colors.white : roleColors.text,
+                              color: isDark ? Colors.white : const Color(0xFF0F172A),
                             ),
                           ),
                         ],
@@ -114,27 +108,9 @@ class CrHeaderSection extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               TextButton(
+                key: const ValueKey('request_semester_change'),
                 onPressed: onRequestSemesterChange,
-                style: TextButton.styleFrom(
-                  backgroundColor: roleColors.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: const FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    'Request Change',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
+                child: const Text('Request change'),
               ),
             ],
           ),

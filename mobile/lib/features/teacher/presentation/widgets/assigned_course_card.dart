@@ -22,36 +22,20 @@ class AssignedCourseCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         child: Container(
           decoration: BoxDecoration(
             color: isDark ? const Color(0xFF13263E) : Colors.white,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: isDark
                   ? Colors.white.withValues(alpha: 0.08)
                   : const Color(0xFFE2E8F0),
             ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Top Accent Border (Matches border-t-4 in HTML reference)
-              Container(
-                height: 4,
-                decoration: BoxDecoration(
-                  color: isLab ? const Color(0xFF7C3AED) : AppColors.primaryLight,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                ),
-              ),
-
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(

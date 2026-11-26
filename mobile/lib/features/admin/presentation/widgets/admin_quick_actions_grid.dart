@@ -15,7 +15,7 @@ class AdminQuickActionsGrid extends StatelessWidget {
     final actions = [
       _QuickActionItem(
         title: 'User Directory',
-        subtitle: 'Directory & Roles',
+        subtitle: 'Everyone, roles and sessions',
         icon: Icons.people_alt_outlined,
         color: const Color(0xFF7E22CE),
         route: RouteNames.adminUsers,
@@ -23,7 +23,7 @@ class AdminQuickActionsGrid extends StatelessWidget {
       ),
       _QuickActionItem(
         title: 'Signup Requests',
-        subtitle: 'Petitions Queue',
+        subtitle: 'New accounts to approve',
         icon: Icons.how_to_reg_outlined,
         color: const Color(0xFFDC2626),
         route: RouteNames.adminSignupRequests,
@@ -31,14 +31,14 @@ class AdminQuickActionsGrid extends StatelessWidget {
       ),
       _QuickActionItem(
         title: 'Semester Requests',
-        subtitle: 'Promotion Petitions',
+        subtitle: 'Students moving up a semester',
         icon: Icons.school_outlined,
         color: const Color(0xFF2563EB),
         route: RouteNames.adminSemesterRequests,
       ),
       _QuickActionItem(
         title: 'Course Catalog',
-        subtitle: 'Curriculum Units',
+        subtitle: 'Courses and targets',
         icon: Icons.menu_book_outlined,
         color: const Color(0xFF047857),
         route: RouteNames.adminCourses,
@@ -46,28 +46,42 @@ class AdminQuickActionsGrid extends StatelessWidget {
       ),
       _QuickActionItem(
         title: 'Teacher Courses',
-        subtitle: 'Faculty Allocations',
+        subtitle: 'Who teaches what',
         icon: Icons.assignment_ind_outlined,
         color: const Color(0xFFD97706),
         route: RouteNames.adminAssignCourses,
       ),
       _QuickActionItem(
+        title: 'Class Routine',
+        subtitle: 'Weekly routine per semester',
+        icon: Icons.calendar_view_week_rounded,
+        color: const Color(0xFF0891B2),
+        route: RouteNames.adminRoutine,
+      ),
+      _QuickActionItem(
+        title: 'Teacher Monitoring',
+        subtitle: 'Classes held, missed, not taken',
+        icon: Icons.insights_outlined,
+        color: const Color(0xFF4338CA),
+        route: RouteNames.adminTeacherMonitoring,
+      ),
+      _QuickActionItem(
         title: 'Attendance Logs',
-        subtitle: 'Sessions & Audit',
+        subtitle: 'All attendance sessions',
         icon: Icons.verified_user_outlined,
         color: const Color(0xFF0D9488),
         route: RouteNames.adminAttendance,
       ),
       _QuickActionItem(
         title: 'Course Feedback',
-        subtitle: 'Quality Assurance',
+        subtitle: 'What students said',
         icon: Icons.rate_review_outlined,
         color: const Color(0xFFEA580C),
         route: RouteNames.adminFeedback,
       ),
       _QuickActionItem(
         title: 'Notice & Alerts',
-        subtitle: 'Broadcast Hub',
+        subtitle: 'Send a notice',
         icon: Icons.campaign_rounded,
         color: const Color(0xFF6366F1),
         route: RouteNames.adminNotifications,
@@ -108,22 +122,15 @@ class AdminQuickActionsGrid extends StatelessWidget {
                   context.push(item.route);
                 }
               },
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(20),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 decoration: BoxDecoration(
                   color: isDark ? const Color(0xFF13263E) : Colors.white,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(20),
                   border: Border.all(
                     color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: isDark ? Colors.black26 : Colors.black.withValues(alpha: 0.02),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
                 ),
                 child: Row(
                   children: [

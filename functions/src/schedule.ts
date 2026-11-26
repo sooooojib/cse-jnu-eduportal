@@ -1,6 +1,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { buildWhatsAppShareUrls } from "./communication";
+import { isAdminRole, isTeacherRole } from "./roles";
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -104,8 +105,8 @@ export const createScheduleSlot = onCall(async (request) => {
   const userRole = (userData.role || request.auth.token.role || "STUDENT").toUpperCase();
 
   const isCR = userRole === "CR";
-  const isTeacher = userRole === "TEACHER";
-  const isAdmin = userRole === "ADMIN";
+  const isTeacher = isTeacherRole(userRole);
+  const isAdmin = isAdminRole(userRole);
 
   if (!isCR && !isTeacher && !isAdmin) {
     throw new HttpsError(
@@ -205,7 +206,7 @@ export const createScheduleSlot = onCall(async (request) => {
       throw new HttpsError("not-found", `Teacher with ID "${resolvedTeacherId}" not found.`);
     }
     const tData = teacherDoc.data()!;
-    if (tData.role !== "TEACHER" && tData.role !== "ADMIN") {
+    if (!isTeacherRole(tData.role) && !isAdminRole(tData.role)) {
       throw new HttpsError("invalid-argument", `User "${resolvedTeacherId}" is not a recognized faculty member.`);
     }
     resolvedTeacherName = tData.fullName || resolvedTeacherName;
@@ -318,8 +319,8 @@ export const updateScheduleSlot = onCall(async (request) => {
   const userRole = (userData.role || request.auth.token.role || "STUDENT").toUpperCase();
 
   const isCR = userRole === "CR";
-  const isTeacher = userRole === "TEACHER";
-  const isAdmin = userRole === "ADMIN";
+  const isTeacher = isTeacherRole(userRole);
+  const isAdmin = isAdminRole(userRole);
 
   if (!isCR && !isTeacher && !isAdmin) {
     throw new HttpsError("permission-denied", "Unauthorized to update schedule slots.");
@@ -432,8 +433,8 @@ export const deleteScheduleSlot = onCall(async (request) => {
   const userRole = (userData.role || request.auth.token.role || "STUDENT").toUpperCase();
 
   const isCR = userRole === "CR";
-  const isTeacher = userRole === "TEACHER";
-  const isAdmin = userRole === "ADMIN";
+  const isTeacher = isTeacherRole(userRole);
+  const isAdmin = isAdminRole(userRole);
 
   if (!isCR && !isTeacher && !isAdmin) {
     throw new HttpsError("permission-denied", "Unauthorized to delete schedule slots.");

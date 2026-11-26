@@ -2,6 +2,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { parseTimeToMinutes, checkIntervalOverlap } from "./schedule";
 import { getTodayDateUtc6 } from "./exam";
+import { isAdminRole, isTeacherRole } from "./roles";
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -124,7 +125,7 @@ export async function executeCreateCounselingSlot(
   data: any
 ) {
   // Authorization: Only TEACHER and ADMIN can create slots
-  if (caller.role !== "TEACHER" && caller.role !== "ADMIN") {
+  if (!isTeacherRole(caller.role) && !isAdminRole(caller.role)) {
     throw new HttpsError("permission-denied", "Only teachers or administrators can create counseling slots.");
   }
 
@@ -205,7 +206,7 @@ export async function executeDeleteCounselingSlot(
   }
 
   const slotData = slotDoc.data()!;
-  if (slotData.teacherId !== caller.uid && caller.role !== "ADMIN") {
+  if (slotData.teacherId !== caller.uid && !isAdminRole(caller.role)) {
     throw new HttpsError("permission-denied", "You can only delete your own counseling slots.");
   }
 
@@ -244,7 +245,7 @@ export async function executeRequestBooking(
   data: any
 ) {
   // Authorization: Student or CR (or Admin)
-  if (caller.role !== "STUDENT" && caller.role !== "CR" && caller.role !== "ADMIN") {
+  if (caller.role !== "STUDENT" && caller.role !== "CR" && !isAdminRole(caller.role)) {
     throw new HttpsError("permission-denied", "Only students or CRs can request counseling appointments.");
   }
 
@@ -353,7 +354,10 @@ export async function executeRequestBooking(
 export async function executeApproveBooking(
   firestore: admin.firestore.Firestore,
   caller: { uid: string; role: string },
-  bookingId: string
+  bookingId: string,
+  teacherMessage?: string,
+  startTime?: string,
+  endTime?: string
 ) {
   if (!bookingId || typeof bookingId !== "string") {
     throw new HttpsError("invalid-argument", "Missing or invalid bookingId.");
@@ -370,7 +374,7 @@ export async function executeApproveBooking(
     const bData = bookingDoc.data()!;
 
     // Authorization: Must be assigned teacher or ADMIN
-    if (bData.teacherId !== caller.uid && caller.role !== "ADMIN") {
+    if (bData.teacherId !== caller.uid && !isAdminRole(caller.role)) {
       throw new HttpsError("permission-denied", "Only the assigned teacher can approve this booking.");
     }
 
@@ -419,6 +423,8 @@ export async function executeApproveBooking(
       bookedStudentId: bData.studentId || null,
       bookedStudentName: bData.studentName || null,
       bookedBookingId: bookingId,
+      ...(startTime && typeof startTime === "string" ? { startTime } : {}),
+      ...(endTime && typeof endTime === "string" ? { endTime } : {}),
       updatedAt: now,
     });
 
@@ -428,6 +434,11 @@ export async function executeApproveBooking(
       reviewedAt: now,
       reviewedBy: caller.uid,
       updatedAt: now,
+      ...(teacherMessage && typeof teacherMessage === "string" && teacherMessage.trim().length > 0
+        ? { teacherMessage: teacherMessage.trim() }
+        : {}),
+      ...(startTime && typeof startTime === "string" ? { startTime } : {}),
+      ...(endTime && typeof endTime === "string" ? { endTime } : {}),
     });
 
     // Notify winning student
@@ -505,7 +516,7 @@ export async function executeRejectBooking(
   }
   const bData = bookingDoc.data()!;
 
-  if (bData.teacherId !== caller.uid && caller.role !== "ADMIN") {
+  if (bData.teacherId !== caller.uid && !isAdminRole(caller.role)) {
     throw new HttpsError("permission-denied", "Only the assigned teacher can reject this booking.");
   }
 
@@ -562,7 +573,7 @@ export async function executeCancelBooking(
     const bData = bookingDoc.data()!;
 
     // Only booking owner or Admin can cancel
-    if (bData.studentId !== caller.uid && caller.role !== "ADMIN") {
+    if (bData.studentId !== caller.uid && !isAdminRole(caller.role)) {
       throw new HttpsError("permission-denied", "You can only cancel your own counseling requests.");
     }
 
@@ -644,7 +655,14 @@ export const approveCounselingBooking = onCall(async (request) => {
     uid: request.auth.uid,
     role: request.auth.token.role || "STUDENT",
   };
-  return executeApproveBooking(db, caller, request.data?.bookingId);
+  return executeApproveBooking(
+    db,
+    caller,
+    request.data?.bookingId,
+    request.data?.teacherMessage,
+    request.data?.startTime,
+    request.data?.endTime
+  );
 });
 
 export const rejectCounselingBooking = onCall(async (request) => {

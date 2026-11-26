@@ -296,7 +296,7 @@ class MockCounselingRepository implements CounselingRepository {
   Future<List<CounselingBooking>> getTeacherRequests(String teacherId) async => const [];
 
   @override
-  Future<void> approveBooking(String bookingId) async {}
+  Future<void> approveBooking(String bookingId, {String? teacherMessage, String? startTime, String? endTime}) async {}
 
   @override
   Future<void> rejectBooking(String bookingId, {String? reason}) async {}

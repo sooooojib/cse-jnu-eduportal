@@ -12,6 +12,13 @@ class User extends Equatable {
   final int? year;
   final int? semester;
   final String? semesterStatus;
+
+  /// Academic session / batch, e.g. "2021-2022" (students & CRs only).
+  final String? session;
+
+  /// Faculty member granted access to the limited Admin View
+  /// (signup review committee). Chairman & Admin don't need this flag.
+  final bool isAdminDelegate;
   final List<String> assignedCourseIds;
   final List<String> fcmTokens;
   final bool isActive;
@@ -29,6 +36,8 @@ class User extends Equatable {
     this.year,
     this.semester,
     this.semesterStatus,
+    this.session,
+    this.isAdminDelegate = false,
     this.assignedCourseIds = const [],
     this.fcmTokens = const [],
     this.isActive = true,
@@ -47,6 +56,8 @@ class User extends Equatable {
     int? year,
     int? semester,
     String? semesterStatus,
+    String? session,
+    bool? isAdminDelegate,
     List<String>? assignedCourseIds,
     List<String>? fcmTokens,
     bool? isActive,
@@ -64,6 +75,8 @@ class User extends Equatable {
       year: year ?? this.year,
       semester: semester ?? this.semester,
       semesterStatus: semesterStatus ?? this.semesterStatus,
+      session: session ?? this.session,
+      isAdminDelegate: isAdminDelegate ?? this.isAdminDelegate,
       assignedCourseIds: assignedCourseIds ?? this.assignedCourseIds,
       fcmTokens: fcmTokens ?? this.fcmTokens,
       isActive: isActive ?? this.isActive,
@@ -84,10 +97,16 @@ class User extends Equatable {
         year,
         semester,
         semesterStatus,
+        session,
+        isAdminDelegate,
         assignedCourseIds,
         fcmTokens,
         isActive,
         createdAt,
         updatedAt,
       ];
+
+  /// Whether the dashboard should offer the Faculty / Admin view switcher.
+  bool get canSwitchToAdminView =>
+      role == UserRole.chairman || (role == UserRole.teacher && isAdminDelegate);
 }

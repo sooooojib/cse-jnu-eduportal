@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/role_constants.dart';
 import '../../../../shared/widgets/cards/role_badge_chip.dart';
 import '../../../auth/domain/entities/signup_request.dart';
+import 'signup_approval_dialog.dart';
+import '../utils/request_ordering.dart';
 
 class AdminPendingSignupsCard extends StatelessWidget {
   final List<SignupRequest> requests;
+  /// (request, year, semester). Year/semester are null for faculty.
   final Function(SignupRequest, int?, int?) onApprove;
   final Function(SignupRequest, String) onReject;
   final VoidCallback? onViewAll;
@@ -61,6 +64,8 @@ class AdminPendingSignupsCard extends StatelessWidget {
               _buildDetailRow('Email Address', req.email),
               if (req.studentId != null && req.studentId!.isNotEmpty)
                 _buildDetailRow('Student ID / Roll', req.studentId!),
+              if (req.role.isStudentSide)
+                _buildDetailRow('Academic Session', (req.session?.isNotEmpty ?? false) ? req.session! : 'Not provided'),
               if (req.phone != null && req.phone!.isNotEmpty)
                 _buildDetailRow('Contact Phone', req.phone!),
               _buildDetailRow('Status', req.status),
@@ -74,7 +79,7 @@ class AdminPendingSignupsCard extends StatelessWidget {
                         foregroundColor: const Color(0xFFDC2626),
                         side: const BorderSide(color: Color(0xFFFCA5A5)),
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        shape: const StadiumBorder(),
                       ),
                       icon: const Icon(Icons.close_rounded, size: 18),
                       label: const Text('Reject', style: TextStyle(fontWeight: FontWeight.w700)),
@@ -91,7 +96,7 @@ class AdminPendingSignupsCard extends StatelessWidget {
                         backgroundColor: const Color(0xFF047857),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        shape: const StadiumBorder(),
                       ),
                       icon: const Icon(Icons.check_rounded, size: 18),
                       label: const Text('Approve', style: TextStyle(fontWeight: FontWeight.w700)),
@@ -135,105 +140,10 @@ class AdminPendingSignupsCard extends StatelessWidget {
     );
   }
 
-  void _promptApproval(BuildContext context, SignupRequest req) {
-    int selectedYear = 1;
-    int selectedSemester = 1;
-
-    if (req.role == UserRole.teacher) {
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Text('Approve Faculty Signup?'),
-          content: Text('Approve and provision portal credentials for ${req.fullName} (${req.email})?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF047857),
-                foregroundColor: Colors.white,
-              ),
-              onPressed: () {
-                Navigator.pop(ctx);
-                onApprove(req, null, null);
-              },
-              child: const Text('Confirm Approval'),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
-
-    // For Student / CR: Prompt Year & Semester selection
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setState) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              title: const Text('Approve & Assign Level'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Approve ${req.fullName} (${req.studentId ?? req.email}).'),
-                  const SizedBox(height: 16),
-                  const Text('Select Academic Year:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                  const SizedBox(height: 6),
-                  DropdownButtonFormField<int>(
-                    value: selectedYear,
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    ),
-                    items: [1, 2, 3, 4]
-                        .map((y) => DropdownMenuItem(value: y, child: Text('Year $y')))
-                        .toList(),
-                    onChanged: (val) => setState(() => selectedYear = val ?? 1),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text('Select Academic Semester:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                  const SizedBox(height: 6),
-                  DropdownButtonFormField<int>(
-                    value: selectedSemester,
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    ),
-                    items: [1, 2]
-                        .map((s) => DropdownMenuItem(value: s, child: Text('Semester $s')))
-                        .toList(),
-                    onChanged: (val) => setState(() => selectedSemester = val ?? 1),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF047857),
-                    foregroundColor: Colors.white,
-                  ),
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    onApprove(req, selectedYear, selectedSemester);
-                  },
-                  child: const Text('Approve & Provision'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
+  Future<void> _promptApproval(BuildContext context, SignupRequest req) async {
+    final decision = await SignupApprovalDialog.show(context, req);
+    if (decision == null) return;
+    onApprove(req, decision.year, decision.semester);
   }
 
   void _promptRejection(BuildContext context, SignupRequest req) {
@@ -255,7 +165,6 @@ class AdminPendingSignupsCard extends StatelessWidget {
               maxLines: 3,
               decoration: InputDecoration(
                 hintText: 'Enter rejection reason...',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
           ],
@@ -284,21 +193,16 @@ class AdminPendingSignupsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Same order as the full screens (see RequestOrdering).
+    final requests = RequestOrdering.sortSignupsBySession(this.requests);
 
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : Colors.white,
-        borderRadius: BorderRadius.circular(24),
+        color: isDark ? const Color(0xFF13263E) : Colors.white,
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: isDark ? Colors.black26 : Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -448,6 +352,8 @@ class AdminPendingSignupsCard extends StatelessWidget {
                                     const Text('•', style: TextStyle(fontSize: 10, color: Colors.grey)),
                                   ],
                                   RoleBadgeChip(role: req.role, isCompact: true),
+                                  if (req.session != null && req.session!.isNotEmpty)
+                                    SessionBadge(session: req.session!),
                                 ],
                               ),
                             ],
@@ -495,6 +401,34 @@ class AdminPendingSignupsCard extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// Small pill showing a student's academic session, e.g. "Session: 2021-2022".
+class SessionBadge extends StatelessWidget {
+  final String session;
+
+  const SessionBadge({super.key, required this.session});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(9999),
+        border: Border.all(color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+      ),
+      child: Text(
+        'Session: $session',
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
+        ),
       ),
     );
   }

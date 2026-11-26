@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import '../../../../app/router/route_names.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../shared/widgets/theme/theme_mode_selector_card.dart';
@@ -92,7 +94,6 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                               value: targetYear,
                               decoration: InputDecoration(
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                               ),
                               items: [1, 2, 3, 4].map((y) => DropdownMenuItem(value: y, child: Text('Year $y'))).toList(),
                               onChanged: (val) {
@@ -113,7 +114,6 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                               value: targetSemester,
                               decoration: InputDecoration(
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                               ),
                               items: [1, 2].map((s) => DropdownMenuItem(value: s, child: Text('Sem $s'))).toList(),
                               onChanged: (val) {
@@ -209,7 +209,6 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                               value: targetYear,
                               decoration: InputDecoration(
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                               ),
                               items: [1, 2, 3, 4].map((y) => DropdownMenuItem(value: y, child: Text('Year $y'))).toList(),
                               onChanged: (val) {
@@ -230,7 +229,6 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                               value: targetSemester,
                               decoration: InputDecoration(
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                               ),
                               items: [1, 2].map((s) => DropdownMenuItem(value: s, child: Text('Sem $s'))).toList(),
                               onChanged: (val) {
@@ -517,7 +515,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.primaryLight,
                                 foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                shape: const StadiumBorder(),
                               ),
                               onPressed: () => _showUpgradeDialog(isInitial: true),
                             ),
@@ -557,7 +555,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                                   style: OutlinedButton.styleFrom(
                                     foregroundColor: Colors.orange,
                                     side: const BorderSide(color: Colors.orange),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                    shape: const StadiumBorder(),
                                   ),
                                   onPressed: () => _showChangeRequestDialog(semesterStatus!),
                                 ),
@@ -610,7 +608,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                                   label: const Text('Dismiss Rejection', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                                   style: OutlinedButton.styleFrom(
                                     foregroundColor: isDark ? Colors.white70 : Colors.black87,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                    shape: const StadiumBorder(),
                                   ),
                                   onPressed: () => _dismissRejection(semesterStatus?.requestId),
                                 ),
@@ -623,7 +621,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppColors.primaryLight,
                                     foregroundColor: Colors.white,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                    shape: const StadiumBorder(),
                                   ),
                                   onPressed: () => _showUpgradeDialog(
                                     currentYear: semesterStatus?.currentYear ?? user?.year,
@@ -646,7 +644,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: AppColors.primaryLight,
                                 side: const BorderSide(color: AppColors.primaryLight),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                shape: const StadiumBorder(),
                               ),
                               onPressed: () => _showUpgradeDialog(
                                 currentYear: semesterStatus?.currentYear ?? user?.year ?? 1,
@@ -758,12 +756,12 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                       label: const Text('Log Out', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(color: Colors.redAccent),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: const StadiumBorder(),
                       ),
                       onPressed: () async {
                         await authController.logout();
                         if (mounted) {
-                          Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+                          context.go(RouteNames.login);
                         }
                       },
                     ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'route_names.dart';
 import '../../core/constants/role_constants.dart';
+import '../../features/auth/domain/entities/user.dart';
 import '../../core/di/injection_container.dart';
 import '../../features/auth/domain/usecases/signup_request_usecase.dart';
 import '../../features/auth/presentation/controllers/auth_controller.dart';
@@ -16,8 +17,11 @@ import '../../features/dashboard/presentation/screens/cr_dashboard_shell.dart';
 import '../../features/dashboard/presentation/screens/admin_dashboard_shell.dart';
 import '../../features/profile/presentation/screens/student_profile_screen.dart';
 import '../../features/notifications/presentation/screens/notification_list_screen.dart';
+import '../../features/cr/presentation/screens/my_class_screen.dart';
 import '../../features/admin/presentation/screens/admin_management_screens.dart';
 import '../../features/admin/presentation/screens/admin_notification_hub_screen.dart';
+import '../../features/admin/presentation/screens/admin_routine_screen.dart';
+import '../../features/admin/presentation/screens/teacher_course_monitoring_screen.dart';
 import '../../features/teacher/presentation/screens/teacher_schedule_screen.dart';
 import '../../features/counseling/presentation/screens/teacher_counseling_screen.dart';
 import '../../features/feedback/presentation/screens/teacher_feedback_screen.dart';
@@ -59,26 +63,29 @@ class AppRouter {
         }
 
         // Role-based route authorization guards
-        if ((currentPath == RouteNames.adminDashboard || currentPath.startsWith('/admin')) &&
-            user.role != UserRole.admin) {
-          return _getDashboardRouteForRole(user.role);
+        final role = user.role;
+        if (currentPath == RouteNames.adminDashboard && role != UserRole.admin) {
+          return _getDashboardRouteForRole(role);
         }
-        if (currentPath == RouteNames.teacherDashboard &&
-            user.role != UserRole.teacher) {
-          return _getDashboardRouteForRole(user.role);
+        if (currentPath.startsWith('/admin') && !_canAccessAdminRoute(user, currentPath)) {
+          return _getDashboardRouteForRole(role);
         }
-        if (currentPath == RouteNames.teacherFeedback &&
-            user.role != UserRole.teacher) {
-          return _getDashboardRouteForRole(user.role);
+        if (currentPath == RouteNames.teacherDashboard && !role.hasTeacherAccess) {
+          return _getDashboardRouteForRole(role);
         }
-        if (currentPath == RouteNames.crDashboard &&
-            user.role != UserRole.cr) {
-          return _getDashboardRouteForRole(user.role);
+        if (currentPath == RouteNames.teacherFeedback && !role.hasTeacherAccess) {
+          return _getDashboardRouteForRole(role);
         }
-        if (user.role == UserRole.cr && currentPath == RouteNames.studentDashboard) {
+        if (currentPath == RouteNames.crDashboard && role != UserRole.cr) {
+          return _getDashboardRouteForRole(role);
+        }
+        if (currentPath == RouteNames.myClass && !role.isStudentSide) {
+          return _getDashboardRouteForRole(role);
+        }
+        if (role == UserRole.cr && currentPath == RouteNames.studentDashboard) {
           return RouteNames.crDashboard;
         }
-        if (user.role == UserRole.teacher &&
+        if (role.hasTeacherAccess &&
             (currentPath == RouteNames.studentDashboard ||
              currentPath == RouteNames.attendanceTerminal ||
              currentPath == RouteNames.schedule ||
@@ -86,10 +93,10 @@ class AppRouter {
              currentPath == RouteNames.studentProfile)) {
           return RouteNames.teacherDashboard;
         }
-        if (user.role == UserRole.teacher && currentPath == RouteNames.feedback) {
+        if (role.hasTeacherAccess && currentPath == RouteNames.feedback) {
           return RouteNames.teacherFeedback;
         }
-        if (user.role == UserRole.admin &&
+        if (role == UserRole.admin &&
             (currentPath == RouteNames.studentDashboard ||
              currentPath == RouteNames.attendanceTerminal ||
              currentPath == RouteNames.schedule ||
@@ -142,7 +149,7 @@ class AppRouter {
         GoRoute(
           path: RouteNames.schedule,
           builder: (context, state) {
-            if (auth.currentUser?.role == UserRole.teacher) {
+            if (auth.currentUser?.role.hasTeacherAccess == true) {
               return const TeacherScheduleScreen();
             }
             return const StudentMainScaffold(initialIndex: 2);
@@ -155,7 +162,7 @@ class AppRouter {
         GoRoute(
           path: RouteNames.counseling,
           builder: (context, state) {
-            if (auth.currentUser?.role == UserRole.teacher) {
+            if (auth.currentUser?.role.hasTeacherAccess == true) {
               return const TeacherCounselingScreen();
             }
             return const StudentMainScaffold(initialIndex: 3);
@@ -168,7 +175,7 @@ class AppRouter {
         GoRoute(
           path: RouteNames.feedback,
           builder: (context, state) {
-            if (auth.currentUser?.role == UserRole.teacher) {
+            if (auth.currentUser?.role.hasTeacherAccess == true) {
               return const TeacherFeedbackScreen();
             }
             return const StudentMainScaffold(initialIndex: 4);
@@ -185,6 +192,12 @@ class AppRouter {
         GoRoute(
           path: RouteNames.notifications,
           builder: (context, state) => const NotificationListScreen(),
+        ),
+        GoRoute(
+          path: RouteNames.myClass,
+          builder: (context, state) => MyClassScreen(
+            initialTab: state.uri.queryParameters['tab'] == 'requests' ? 1 : 0,
+          ),
         ),
 
         GoRoute(
@@ -252,6 +265,14 @@ class AppRouter {
           path: RouteNames.adminNotifications,
           builder: (context, state) => const AdminNotificationHubScreen(),
         ),
+        GoRoute(
+          path: RouteNames.adminTeacherMonitoring,
+          builder: (context, state) => const TeacherCourseMonitoringScreen(),
+        ),
+        GoRoute(
+          path: RouteNames.adminRoutine,
+          builder: (context, state) => const AdminRoutineScreen(),
+        ),
       ],
       errorBuilder: (context, state) => Scaffold(
         body: Center(
@@ -266,11 +287,22 @@ class AppRouter {
       case UserRole.admin:
         return RouteNames.adminDashboard;
       case UserRole.teacher:
+      case UserRole.chairman:
         return RouteNames.teacherDashboard;
       case UserRole.cr:
         return RouteNames.crDashboard;
       case UserRole.student:
         return RouteNames.studentDashboard;
     }
+  }
+
+  /// Admin & Chairman may open every `/admin/*` route. Faculty members who have
+  /// been granted admin-view delegation may only open the signup review queue.
+  static bool _canAccessAdminRoute(User user, String path) {
+    if (user.role.hasAdminAccess) return true;
+    if (user.role == UserRole.teacher && user.isAdminDelegate) {
+      return path == RouteNames.adminSignupRequests;
+    }
+    return false;
   }
 }

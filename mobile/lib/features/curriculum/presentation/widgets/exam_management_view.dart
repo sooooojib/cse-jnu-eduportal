@@ -7,6 +7,7 @@ import '../../domain/entities/curriculum_entities.dart';
 import '../controllers/schedule_controller.dart';
 import 'exam_details_dialog.dart';
 import 'exam_form_dialog.dart';
+import 'exam_tile.dart';
 
 class ExamManagementView extends StatefulWidget {
   final UserRole userRole;
@@ -86,9 +87,9 @@ class _ExamManagementViewState extends State<ExamManagementView>
   }
 
   bool get canSchedule {
-    return widget.userRole == UserRole.admin ||
+    return widget.userRole.hasAdminAccess ||
         widget.userRole == UserRole.cr ||
-        widget.userRole == UserRole.teacher;
+        widget.userRole.hasTeacherAccess;
   }
 
   Future<void> _openScheduleDialog() async {
@@ -124,23 +125,6 @@ class _ExamManagementViewState extends State<ExamManagementView>
     if (changed == true) {
       if (widget.onRefresh != null) widget.onRefresh!();
       _loadData();
-    }
-  }
-
-  Color _getTypeColor(String type) {
-    switch (type.toUpperCase()) {
-      case 'FINAL':
-        return Colors.deepPurple;
-      case 'MID_TERM':
-        return AppColors.primary;
-      case 'QUIZ':
-        return Colors.amber.shade800;
-      case 'LAB_EXAM':
-        return Colors.teal;
-      case 'CT':
-        return Colors.blueAccent;
-      default:
-        return AppColors.primary;
     }
   }
 
@@ -220,7 +204,7 @@ class _ExamManagementViewState extends State<ExamManagementView>
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: const StadiumBorder(),
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       ),
                     ),
@@ -383,7 +367,7 @@ class _ExamManagementViewState extends State<ExamManagementView>
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                shape: const StadiumBorder(),
               ),
             ),
           ],
@@ -429,7 +413,7 @@ class _ExamManagementViewState extends State<ExamManagementView>
                 icon: const Icon(Icons.add_rounded, size: 16),
                 label: const Text('Schedule an Exam'),
                 style: OutlinedButton.styleFrom(
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: const StadiumBorder(),
                 ),
               ),
             ],
@@ -444,140 +428,10 @@ class _ExamManagementViewState extends State<ExamManagementView>
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         itemCount: exams.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        separatorBuilder: (_, __) => const SizedBox(height: 10),
         itemBuilder: (context, index) {
           final exam = exams[index];
-          final typeColor = _getTypeColor(exam.type);
-
-          return Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => _openDetails(exam),
-              borderRadius: BorderRadius.circular(16),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isDark ? AppColors.surfaceContainerDark : Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: isDark ? AppColors.outlineDark.withOpacity(0.2) : AppColors.outlineLight.withOpacity(0.2),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Course code + Type badge + Cohort
-                    Row(
-                      children: [
-                        Text(
-                          exam.courseCode,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                            color: typeColor,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: typeColor.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            _getTypeLabel(exam.type),
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: typeColor,
-                            ),
-                          ),
-                        ),
-                        const Spacer(),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: isDark ? Colors.white10 : Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            'Y${exam.year} • S${exam.semester}',
-                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-
-                    // Title
-                    Text(
-                      exam.title,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      exam.courseTitle,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? AppColors.onSurfaceVariantDark : AppColors.onSurfaceVariantLight,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Date & Time, Room, Invigilator Row
-                    Row(
-                      children: [
-                        Icon(Icons.calendar_today_rounded, size: 14, color: AppColors.primary.withOpacity(0.8)),
-                        const SizedBox(width: 4),
-                        Text(
-                          exam.examDate,
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(width: 12),
-                        Icon(Icons.access_time_rounded, size: 14, color: AppColors.primary.withOpacity(0.8)),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${exam.startTime} - ${exam.endTime}',
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        const Icon(Icons.room_rounded, size: 14, color: Colors.deepOrange),
-                        const SizedBox(width: 4),
-                        Text(
-                          exam.room,
-                          style: const TextStyle(fontSize: 12, color: Colors.grey),
-                        ),
-                        if (exam.invigilatorName != null && exam.invigilatorName!.isNotEmpty) ...[
-                          const SizedBox(width: 12),
-                          const Icon(Icons.person_outline_rounded, size: 14, color: Colors.teal),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              exam.invigilatorName!,
-                              style: const TextStyle(fontSize: 12, color: Colors.grey),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
+          return ExamTile(exam: exam, onTap: () => _openDetails(exam));
         },
       ),
     );

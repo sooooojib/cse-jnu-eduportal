@@ -51,34 +51,235 @@ class _TeacherCounselingScreenState extends State<TeacherCounselingScreen> with 
   }
 
   Future<void> _handleApprove(CounselingBooking booking) async {
+    TimeOfDay parseTime(String t) {
+      try {
+        final parts = t.split(':');
+        return TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+      } catch (_) {
+        return const TimeOfDay(hour: 10, minute: 0);
+      }
+    }
+
+    String formatTime(TimeOfDay t) {
+      final h = t.hour.toString().padLeft(2, '0');
+      final m = t.minute.toString().padLeft(2, '0');
+      return '$h:$m';
+    }
+
+    TimeOfDay selectedStartTime = parseTime(booking.startTime);
+    TimeOfDay selectedEndTime = parseTime(booking.endTime);
+    final messageController = TextEditingController();
+
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Approve Appointment'),
-        content: Text(
-          'Confirm booking for ${booking.studentName ?? "Student"} on ${booking.slotDate} (${booking.startTime} - ${booking.endTime})?\n\n'
-          'This will atomically lock this office slot and mark any competing requests as rejected.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryLight,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Confirm & Lock Slot'),
-          ),
-        ],
-      ),
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final startFormatted = formatTime(selectedStartTime);
+            final endFormatted = formatTime(selectedEndTime);
+            final isTimeModified = startFormatted != booking.startTime || endFormatted != booking.endTime;
+
+            return AlertDialog(
+              insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Row(
+                children: const [
+                  Icon(Icons.check_circle_outline_rounded, color: Colors.green, size: 22),
+                  SizedBox(width: 8),
+                  Text('Approve Appointment'),
+                ],
+              ),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Confirm booking for ${booking.studentName ?? "Student"} on ${booking.slotDate}?\n'
+                        'This will atomically lock this office slot and mark any competing requests as rejected.',
+                        style: const TextStyle(fontSize: 13, height: 1.4),
+                      ),
+                      const SizedBox(height: 16),
+                      // Session Time Selector
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Session Time (Tap to adjust)',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                          ),
+                          if (isTimeModified)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text(
+                                'Modified',
+                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.orange),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: InkWell(
+                              onTap: () async {
+                                final picked = await showTimePicker(
+                                  context: context,
+                                  initialTime: selectedStartTime,
+                                );
+                                if (picked != null) {
+                                  setDialogState(() {
+                                    selectedStartTime = picked;
+                                  });
+                                }
+                              },
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: isDark ? const Color(0xFF0F1E33) : const Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: isTimeModified
+                                        ? Colors.orange.withOpacity(0.4)
+                                        : (isDark ? Colors.white12 : const Color(0xFFE2E8F0)),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.access_time_rounded, size: 16, color: AppColors.primaryLight),
+                                    const SizedBox(width: 8),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text('Start Time', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                                        Text(
+                                          startFormatted,
+                                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: InkWell(
+                              onTap: () async {
+                                final picked = await showTimePicker(
+                                  context: context,
+                                  initialTime: selectedEndTime,
+                                );
+                                if (picked != null) {
+                                  setDialogState(() {
+                                    selectedEndTime = picked;
+                                  });
+                                }
+                              },
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: isDark ? const Color(0xFF0F1E33) : const Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: isTimeModified
+                                        ? Colors.orange.withOpacity(0.4)
+                                        : (isDark ? Colors.white12 : const Color(0xFFE2E8F0)),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.access_time_rounded, size: 16, color: AppColors.primaryLight),
+                                    const SizedBox(width: 8),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text('End Time', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                                        Text(
+                                          endFormatted,
+                                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Message to Student (Optional)',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: messageController,
+                        minLines: 3,
+                        maxLines: 5,
+                        decoration: InputDecoration(
+                          hintText: 'e.g. Please meet at Room 501. Bring your thesis draft and presentation slides...',
+                          hintStyle: const TextStyle(fontSize: 12),
+                          contentPadding: const EdgeInsets.all(12),
+                          filled: true,
+                          fillColor: isDark ? const Color(0xFF0F1E33) : const Color(0xFFF8FAFC),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(
+                              color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryLight,
+                    foregroundColor: Colors.white,
+                    shape: const StadiumBorder(),
+                  ),
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Confirm & Lock Slot'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
 
     if (confirmed == true && mounted) {
       try {
-        await _controller.approveRequest(booking.id, teacherId: _teacherUid);
+        final teacherMessage = messageController.text.trim();
+        final startStr = formatTime(selectedStartTime);
+        final endStr = formatTime(selectedEndTime);
+        await _controller.approveRequest(
+          booking.id,
+          message: teacherMessage.isNotEmpty ? teacherMessage : null,
+          startTime: startStr,
+          endTime: endStr,
+          teacherId: _teacherUid,
+        );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -518,7 +719,7 @@ class _TeacherCounselingScreenState extends State<TeacherCounselingScreen> with 
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.redAccent,
                       side: const BorderSide(color: Colors.redAccent),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      shape: const StadiumBorder(),
                     ),
                     onPressed: _controller.isActionLoading ? null : () => _handleReject(req),
                     child: const Text('Decline'),
@@ -530,7 +731,7 @@ class _TeacherCounselingScreenState extends State<TeacherCounselingScreen> with 
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primaryLight,
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      shape: const StadiumBorder(),
                     ),
                     onPressed: _controller.isActionLoading ? null : () => _handleApprove(req),
                     child: const Text('Approve', style: TextStyle(fontWeight: FontWeight.bold)),

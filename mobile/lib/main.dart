@@ -1,11 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'app/app.dart';
 import 'app/theme/theme_controller.dart';
+import 'core/config/app_check_service.dart';
 import 'core/config/firebase_options.dart';
+import 'core/monitoring/crashlytics_service.dart';
 import 'core/di/injection_container.dart';
 import 'core/logging/app_logger.dart';
 
@@ -30,22 +31,22 @@ void main() async {
       AppLogger.w('Firestore offline settings note: $e');
     }
 
-    // Activate Firebase App Check
-    try {
-      if (!kIsWeb) {
-        await FirebaseAppCheck.instance.activate(
-          androidProvider: kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
-          appleProvider: kDebugMode ? AppleProvider.debug : AppleProvider.deviceCheck,
-        );
-        AppLogger.i('Firebase App Check activated.');
-      }
-    } catch (e) {
-      AppLogger.w('Firebase App Check activation note: $e');
-    }
+    // Activate Firebase App Check with modern Play Integrity / App Attest providers
+    final appCheckService = AppCheckServiceImpl();
+    await appCheckService.activate();
 
     AppLogger.i('Bootstrapping CSE JnU EduPortal dependency container...');
     await initDependencies();
     AppLogger.i('Core dependencies initialized successfully.');
+
+    // Initialize Firebase Crashlytics monitoring
+    try {
+      final crashlyticsService = sl<CrashlyticsService>();
+      await crashlyticsService.initialize();
+      AppLogger.i('Crashlytics service initialized successfully.');
+    } catch (e) {
+      AppLogger.w('Crashlytics service initialization note: $e');
+    }
   } catch (e, stack) {
     AppLogger.e('Firebase / Bootstrap initialization note: $e', e, stack);
   }
@@ -54,11 +55,22 @@ void main() async {
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.presentError(details);
     AppLogger.e('Uncaught Flutter Error', details.exception, details.stack);
+    if (sl.isRegistered<CrashlyticsService>()) {
+      sl<CrashlyticsService>().recordFlutterError(details, fatal: true);
+    }
   };
 
   // Handle uncaught asynchronous platform errors
   PlatformDispatcher.instance.onError = (error, stack) {
     AppLogger.e('Uncaught Asynchronous Error', error, stack);
+    if (sl.isRegistered<CrashlyticsService>()) {
+      sl<CrashlyticsService>().recordError(
+        error,
+        stack,
+        fatal: true,
+        reason: 'Uncaught platform asynchronous error',
+      );
+    }
     return true;
   };
 

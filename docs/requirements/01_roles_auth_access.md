@@ -7,10 +7,13 @@ This document specifies the requirements for **User Roles**, **Authentication**,
 ## 1. User Roles
 
 ### Role Definitions
-1. **`STUDENT` (Student)**: Enrolled undergraduate student belonging to a specific academic Year (1–4) and Semester (1–2).
+1. **`STUDENT` (Student)**: Enrolled undergraduate student belonging to a specific academic Year (1–4), Semester (1–2), and Session / batch (e.g. `2021-2022`, chosen at signup).
 2. **`CR` (Class Representative)**: Enrolled undergraduate student possessing standard student capabilities plus delegated administrative privileges to schedule tomorrow's class routine, broadcast schedules to WhatsApp, and export class attendance sheets.
 3. **`TEACHER` (Professor / Faculty)**: Departmental instructor assigned to courses, managing live attendance verification sessions, holding counseling office hours, reviewing course feedback, and viewing teaching timetables.
-4. **`ADMIN` (Department Administrator)**: Administrative authority managing signup requests, approving semester promotions, managing the user directory, and assigning courses to teachers.
+4. **`CHAIRMAN` (Chairman of the Department)**: A faculty member with every `TEACHER` capability plus departmental administration (signup and semester approvals, course management and assignment, notices) and exclusive teacher class-delivery monitoring. Uses a Faculty View / Department Admin switch on the dashboard. Cannot manage `ADMIN` accounts, change roles, or see anonymous feedback identities.
+5. **`ADMIN` (System Administrator)**: Administrative authority managing signup requests, approving semester promotions, managing the user directory, assigning courses to teachers, and changing user roles.
+
+A `TEACHER` may additionally be granted **signup committee** access (`isAdminDelegate`), which allows reviewing Student / CR signup requests only. See [role_matrices.md](../features/role_matrices.md).
 
 ---
 
@@ -45,7 +48,7 @@ Public registration gateway where prospective students, CRs, and teachers submit
   - Submitting with an already active `APPROVED` email: System rejects with `409 Conflict` ("Account already exists. Please log in.").
 * **Dependencies on Other Features**: Depends on Admin Approval Pipeline and Email Dispatch Service.
 * **Ambiguities**:
-  - **AMBIGUOUS — REQUIRES DECISION**: How are initial Year and Semester selected for student signups? (Recommended: Default to Year 1 Sem 1, or allow student to select in signup form, or set by Admin during approval).
+  - **DECIDED**: The student selects their academic Session at signup (fixed; editable later from the User Directory). The approver (Admin, Chairman, or signup-committee faculty) selects the current semester (Year 1 · Semester 1 … Year 4 · Semester 2) during approval. Nothing is auto-guessed.
 
 ---
 
@@ -55,8 +58,8 @@ Public registration gateway where prospective students, CRs, and teachers submit
 Administrator review queue for approving or rejecting incoming registration requests.
 
 ### Feature Specification
-* **Who can use it**: `ADMIN` only.
-* **What the user can do**: View pending signup requests, approve a request with automated password generation & email dispatch, or reject a request with an optional reason note.
+* **Who can use it**: `ADMIN` and `CHAIRMAN` (all requests); faculty with signup committee access (Student / CR requests only).
+* **What the user can do**: View pending signup requests (with the applicant's academic Session), approve a request with automated password generation & email dispatch, or reject a request with an optional reason note.
 * **Required Inputs**:
   - `requestId`: Target `SignupRequest` UUID.
   - `action`: `APPROVE` or `REJECT`.
@@ -119,7 +122,8 @@ Authoritative backend policy engine enforcing endpoint and action permissions.
 * **Who can use it**: Backend middleware / Security interceptors.
 * **What the system does**: Decodes JWT bearer token, checks active status, verifies assigned role against route requirements, and grants or rejects access.
 * **Authorization Matrix Summary**:
-  - `ADMIN`: Full access to user management, course assignments, signup approvals, and semester request approvals.
+  - `ADMIN`: Full access to user management, role changes, course assignments, signup approvals, and semester request approvals.
+  - `CHAIRMAN`: All `TEACHER` access plus `ADMIN` departmental access, except managing `ADMIN` accounts, changing roles, and de-anonymised feedback audit; exclusive teacher class-delivery monitoring.
   - `TEACHER`: Access to assigned courses, live attendance sessions, counseling slot creation and approval, received feedback, and personal teaching timetable.
   - `CR`: Student permissions + permission to schedule routine slots for tomorrow, broadcast routines to WhatsApp, and export class attendance.
   - `STUDENT`: Access to personal course attendance, attendance code submission, routine viewing, counseling bookings, feedback submission, and semester upgrade petitions.

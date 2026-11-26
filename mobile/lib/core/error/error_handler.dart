@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
+import '../logging/app_logger.dart';
 import 'exceptions.dart';
 import 'failures.dart';
 
@@ -38,12 +39,26 @@ class ErrorHandler {
       return CacheFailure(message: error.message);
     }
 
+    if (error.runtimeType.toString() == 'SocketException' ||
+        error.toString().contains('SocketException')) {
+      return const NetworkFailure(
+        message: 'No internet connection detected. Please check your network.',
+      );
+    }
+
+    if (error.runtimeType.toString() == 'TimeoutException' ||
+        error.toString().contains('TimeoutException')) {
+      return const NetworkFailure(
+        message: 'Request timed out. Please check your connection and try again.',
+      );
+    }
+
     // Firebase Auth errors
     if (error is fb.FirebaseAuthException) {
       return _handleFirebaseAuthError(error);
     }
 
-    // Firestore errors
+    // Firestore & Cloud Functions errors
     if (error is FirebaseException) {
       return _handleFirestoreError(error);
     }
@@ -51,6 +66,23 @@ class ErrorHandler {
     final str = error.toString();
     if (str.contains('Dart exception thrown from converted Future') || str.contains('boxed error')) {
       return const ServerFailure(message: 'Operation failed. Please check your connection and try again.');
+    }
+
+    // Safely log unhandled exception to AppLogger and Crashlytics
+    AppLogger.e('Unhandled exception converted by ErrorHandler', error);
+
+    // Sanitize internal technical exceptions so raw stack or runtime types are never shown to users
+    if (str.startsWith('Exception: ') ||
+        str.startsWith('FormatException') ||
+        str.startsWith('TypeError') ||
+        str.startsWith('RangeError') ||
+        str.startsWith('NoSuchMethodError') ||
+        str.startsWith('StateError') ||
+        str.startsWith('LateInitializationError') ||
+        str.startsWith('UnimplementedError')) {
+      return const ServerFailure(
+        message: 'An unexpected error occurred. Please try again or contact support if the issue persists.',
+      );
     }
 
     return ServerFailure(message: str);

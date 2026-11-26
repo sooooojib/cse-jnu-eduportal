@@ -1,14 +1,18 @@
+import '../widgets/class_change_sheet.dart';
+import '../widgets/class_changes_card.dart';
+import '../widgets/class_actions_sheet.dart';
+import '../widgets/class_slot_tile.dart';
+import '../../../../core/utils/class_time.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../app/theme/app_colors.dart';
-import '../../../../app/theme/role_colors.dart';
 import '../../../../core/constants/role_constants.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../../../../shared/widgets/dialogs/app_confirmation_dialog.dart';
+import '../../../../shared/widgets/states/app_error_state_view.dart';
 import '../../domain/entities/curriculum_entities.dart';
 import '../controllers/schedule_controller.dart';
-import '../widgets/schedule_slot_form_dialog.dart';
 import '../widgets/exam_management_view.dart';
 import '../../../../core/communication/whatsapp_share_dialog.dart';
 import '../../../../core/communication/whatsapp_share_service.dart';
@@ -22,6 +26,8 @@ class StudentScheduleScreen extends StatefulWidget {
 
 class _StudentScheduleScreenState extends State<StudentScheduleScreen>
     with SingleTickerProviderStateMixin {
+  final _changesKey = GlobalKey<ClassChangesCardState>();
+
   late final ScheduleController _scheduleController;
   late final ExamsController _examsController;
   late final AuthController _authController;
@@ -93,26 +99,14 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen>
     }
   }
 
-  Future<void> _openScheduleDialog({ScheduleSlot? existingSlot}) async {
+  /// CR: one-day change (extra / cancel / move) for any day this week.
+  Future<void> _openChangeSheet() async {
     final user = _authController.currentUser;
-    final userRole = user?.role ?? UserRole.student;
-
-    final result = await ScheduleSlotFormDialog.show(
-      context: context,
-      existingSlot: existingSlot,
-      userRole: userRole,
-      defaultYear: user?.year,
-      defaultSemester: user?.semester,
-    );
-
-    if (result == true && mounted) {
+    if (user == null) return;
+    final saved = await ClassChangeSheet.show(context, user: user);
+    if (saved == true) {
+      _changesKey.currentState?.reload();
       _loadData();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(existingSlot != null ? 'Class updated successfully.' : 'Class scheduled successfully.'),
-          backgroundColor: AppColors.primary,
-        ),
-      );
     }
   }
 
@@ -212,100 +206,27 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // CR Announcement Card (screens/12_CRs_Schedule_-_EduPortal.html)
-                if (isCr) ...[
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF1E293B) : const Color(0xFFFFF7ED),
-                      border: Border.all(color: const Color(0xFFFED7AA)),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Expanded(
-                              child: Row(
-                                children: [
-                                  Icon(Icons.stars_rounded, color: Color(0xFFC2410C), size: 20),
-                                  SizedBox(width: 6),
-                                  Flexible(
-                                    child: Text(
-                                      'CR Schedule Terminal',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: Color(0xFFC2410C),
-                                        fontSize: 14,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFED7AA),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: const Text(
-                                'Tomorrow Only',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFFC2410C),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'As Class Representative, you can schedule extra/make-up classes strictly for tomorrow. Collisions across rooms and faculty are prevented atomically.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF7C2D12),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 10,
-                          runSpacing: 8,
-                          children: [
-                            ElevatedButton.icon(
-                              onPressed: () => _openScheduleDialog(),
-                              icon: const Icon(Icons.add_circle_outline_rounded, size: 16),
-                              label: const Text('Schedule for Tomorrow'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFC2410C),
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                              ),
-                            ),
-                            OutlinedButton.icon(
-                              onPressed: _handleWhatsAppBroadcast,
-                              icon: const Icon(Icons.forum_outlined, size: 16, color: Color(0xFF25D366)),
-                              label: const Text('Broadcast on WhatsApp', style: TextStyle(color: Color(0xFF25D366))),
-                              style: OutlinedButton.styleFrom(
-                                side: const BorderSide(color: Color(0xFF25D366)),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                // One-day changes this week (students read-only; CR can change)
+                if (_authController.currentUser != null) ...[
+                  ClassChangesCard(
+                    key: _changesKey,
+                    user: _authController.currentUser!,
+                    onChanged: _loadData,
                   ),
                   const SizedBox(height: 16),
+                ],
+                // CR: one quiet link (changing a class is the "Change" button above).
+                if (isCr) ...[
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      key: const ValueKey('share_routine_whatsapp'),
+                      onPressed: _handleWhatsAppBroadcast,
+                      icon: const Icon(Icons.forum_outlined, size: 18),
+                      label: const Text('Share routine on WhatsApp'),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                 ],
 
                 // Day Filter Chips
@@ -347,21 +268,9 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen>
                     child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
                   )
                 else if (state is ScheduleError)
-                  Center(
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 40),
-                        const Icon(Icons.error_outline, size: 40, color: Colors.redAccent),
-                        const SizedBox(height: 8),
-                        Text(state.message, textAlign: TextAlign.center),
-                        const SizedBox(height: 12),
-                        ElevatedButton(
-                          onPressed: _loadData,
-                          style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
+                  AppErrorStateView(
+                    message: state.message,
+                    onRetry: _loadData,
                   )
                 else if (state is ScheduleLoaded && state.slots.isEmpty)
                   Container(
@@ -381,14 +290,10 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen>
                         ),
                         if (isCr) ...[
                           const SizedBox(height: 14),
-                          ElevatedButton.icon(
-                            onPressed: () => _openScheduleDialog(),
-                            icon: const Icon(Icons.add),
-                            label: const Text('Schedule for Tomorrow'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFC2410C),
-                              foregroundColor: Colors.white,
-                            ),
+                          OutlinedButton.icon(
+                            onPressed: _openChangeSheet,
+                            icon: const Icon(Icons.edit_calendar_rounded, size: 18),
+                            label: const Text('Change a Class'),
                           ),
                         ],
                       ],
@@ -404,189 +309,50 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen>
     );
   }
 
+  /// The next date (today included) that falls on [dayOfWeek].
+  static DateTime nextDateFor(String dayOfWeek, DateTime now) {
+    final today = ClassTime.dateOnly(now);
+    for (var i = 0; i < 7; i++) {
+      final d = today.add(Duration(days: i));
+      if (ClassTime.dayOfWeek(d) == dayOfWeek.toUpperCase()) return d;
+    }
+    return today;
+  }
+
   Widget _buildListView(List<ScheduleSlot> slots, bool isDark, bool isCr) {
+    final user = _authController.currentUser;
+    final allDays = _selectedDay == null || _selectedDay == 'ALL';
     return ListView.separated(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       itemCount: slots.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         final slot = slots[index];
-        return Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.surfaceContainerDark : AppColors.surfaceContainerLight,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: slot.isExtraClass
-                  ? Colors.orange.withOpacity(0.5)
-                  : (isDark ? AppColors.outlineDark.withOpacity(0.2) : AppColors.outlineLight.withOpacity(0.15)),
-            ),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Time block
-              Container(
-                width: 76,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      slot.startTime,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
-                        fontSize: 12,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      slot.endTime,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: isDark ? AppColors.outlineDark : AppColors.outlineLight,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        slot.dayOfWeek.substring(0, 3),
-                        style: const TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 14),
-
-              // Details
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            slot.courseCode,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                        ),
-                        if (slot.isExtraClass) ...[
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFFF7ED),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: const Color(0xFFFED7AA)),
-                            ),
-                            child: const Text(
-                              'Extra',
-                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFC2410C)),
-                            ),
-                          ),
-                        ],
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            slot.courseTitle,
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const Icon(Icons.person_outline, size: 15, color: Colors.grey),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            slot.teacherName,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isDark ? AppColors.outlineDark : AppColors.outlineLight,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        const Icon(Icons.room_outlined, size: 15, color: Colors.grey),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            slot.room,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: isDark ? AppColors.onSurfaceDark : AppColors.onSurfaceLight,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-              // Actions for CR
-              if (isCr)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.edit_outlined, size: 18),
-                      tooltip: 'Edit Slot',
-                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                      padding: const EdgeInsets.all(4),
-                      onPressed: () => _openScheduleDialog(existingSlot: slot),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
-                      tooltip: 'Delete Slot',
-                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                      padding: const EdgeInsets.all(4),
-                      onPressed: () => _handleDeleteSlot(slot),
-                    ),
-                  ],
-                ),
-            ],
-          ),
-        );
+        // A CR may only remove old one-off classes they created themselves;
+        // the weekly routine is managed by the Admin / Chairman / teachers.
+        final legacyOwn = isCr && (slot.date?.isNotEmpty ?? false) && slot.createdBy == user?.id;
+        final Widget? action = legacyOwn
+            ? IconButton(
+                icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
+                tooltip: 'Delete Slot',
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                padding: const EdgeInsets.all(4),
+                onPressed: () => _handleDeleteSlot(slot),
+              )
+            : (isCr && user != null)
+                ? ClassModifyButton(
+                    user: user,
+                    slot: slot,
+                    date: nextDateFor(slot.dayOfWeek, DateTime.now()),
+                    onChanged: () {
+                      _loadData();
+                      _changesKey.currentState?.reload();
+                    },
+                  )
+                : null;
+        return ClassSlotTile(slot: slot, showDay: allDays, action: action);
       },
     );
   }

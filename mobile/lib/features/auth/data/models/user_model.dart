@@ -20,6 +20,8 @@ class UserModel extends User {
     super.year,
     super.semester,
     super.semesterStatus,
+    super.session,
+    super.isAdminDelegate = false,
     super.assignedCourseIds = const [],
     super.fcmTokens = const [],
     super.isActive = true,
@@ -39,6 +41,8 @@ class UserModel extends User {
       year: json['year'] as int?,
       semester: json['semester'] as int?,
       semesterStatus: json['semesterStatus'] as String?,
+      session: json['session'] as String?,
+      isAdminDelegate: json['isAdminDelegate'] as bool? ?? false,
       assignedCourseIds: (json['assignedCourseIds'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
@@ -80,6 +84,8 @@ class UserModel extends User {
       if (year != null) 'year': year,
       if (semester != null) 'semester': semester,
       if (semesterStatus != null) 'semesterStatus': semesterStatus,
+      if (session != null) 'session': session,
+      'isAdminDelegate': isAdminDelegate,
       'assignedCourseIds': assignedCourseIds,
       'fcmTokens': fcmTokens,
       'isActive': isActive,
@@ -99,6 +105,8 @@ class UserModel extends User {
       if (year != null) 'year': year,
       if (semester != null) 'semester': semester,
       if (semesterStatus != null) 'semesterStatus': semesterStatus,
+      if (session != null) 'session': session,
+      'isAdminDelegate': isAdminDelegate,
       'assignedCourseIds': assignedCourseIds,
       'fcmTokens': fcmTokens,
       'isActive': isActive,

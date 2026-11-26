@@ -30,14 +30,14 @@ class TeacherQuickActions extends StatelessWidget {
     final actions = [
       _QuickActionItem(
         title: 'Attendance',
-        subtitle: 'Terminal & Code',
+        subtitle: 'Take attendance',
         icon: Icons.qr_code_scanner_rounded,
         color: const Color(0xFF0284C7),
         onTap: onAttendance,
       ),
       _QuickActionItem(
         title: 'Schedule',
-        subtitle: 'Routine & Classes',
+        subtitle: 'Weekly routine',
         icon: Icons.calendar_month_rounded,
         color: const Color(0xFF16A34A),
         onTap: onSchedule,
@@ -58,21 +58,21 @@ class TeacherQuickActions extends StatelessWidget {
       ),
       _QuickActionItem(
         title: 'Courses',
-        subtitle: 'Assigned Units',
+        subtitle: 'Courses you teach',
         icon: Icons.menu_book_rounded,
         color: AppColors.primaryLight,
         onTap: onCourses,
       ),
       _QuickActionItem(
         title: 'Alerts',
-        subtitle: 'Department News',
+        subtitle: 'Notices',
         icon: Icons.notifications_active_rounded,
         color: const Color(0xFFD97706),
         onTap: onNotifications,
       ),
       _QuickActionItem(
         title: 'Profile',
-        subtitle: 'Faculty Account',
+        subtitle: 'Your account',
         icon: Icons.person_rounded,
         color: const Color(0xFF475569),
         onTap: onProfile,
@@ -111,26 +111,17 @@ class TeacherQuickActions extends StatelessWidget {
 
             return InkWell(
               onTap: item.onTap,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(20),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 decoration: BoxDecoration(
                   color: isDark ? const Color(0xFF13263E) : Colors.white,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(20),
                   border: Border.all(
                     color: isDark
                         ? Colors.white.withValues(alpha: 0.08)
                         : const Color(0xFFE2E8F0),
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: isDark
-                          ? Colors.black26
-                          : Colors.black.withValues(alpha: 0.02),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
                 ),
                 child: Row(
                   children: [

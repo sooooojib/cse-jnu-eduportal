@@ -85,7 +85,7 @@ class CurriculumRemoteDataSourceImpl implements CurriculumRemoteDataSource {
       final role = (profile["role"] as String?)?.toUpperCase();
       final uid = _auth.currentUser?.uid;
 
-      if (role == "TEACHER" && uid != null) {
+      if ((role == "TEACHER" || role == "CHAIRMAN") && uid != null) {
         query = query.where("teacherId", isEqualTo: uid);
       } else if (pYear != null && pSemester != null) {
         query = query.where("targetYear", isEqualTo: pYear).where("targetSemester", isEqualTo: pSemester);
@@ -409,7 +409,7 @@ class CurriculumRemoteDataSourceImpl implements CurriculumRemoteDataSource {
       for (final doc in snap.docs) {
         final data = doc.data();
         final role = (data['role'] as String?)?.toUpperCase();
-        if (role == 'TEACHER') {
+        if (role == 'TEACHER' || role == 'CHAIRMAN') {
           final name = data['name'] as String? ?? data['fullName'] as String? ?? doc.id;
           teachers.add({'id': doc.id, 'name': name});
         }
@@ -723,25 +723,8 @@ class CurriculumRepositoryImpl implements CurriculumRepository {
   @override
   Future<Exam> createExam(Exam exam) async {
     try {
-      final model = ExamModel(
-        id: exam.id,
-        courseId: exam.courseId,
-        courseCode: exam.courseCode,
-        courseTitle: exam.courseTitle,
-        title: exam.title,
-        examDate: exam.examDate,
-        startTime: exam.startTime,
-        endTime: exam.endTime,
-        room: exam.room,
-        year: exam.year,
-        semester: exam.semester,
-        type: exam.type,
-        instructions: exam.instructions,
-        invigilatorName: exam.invigilatorName,
-        invigilatorId: exam.invigilatorId,
-        createdBy: exam.createdBy,
-        creatorRole: exam.creatorRole,
-      );
+      // Keep every field (status, postponed-from, …).
+      final model = ExamModel.fromEntity(exam);
       return await remoteDataSource.createExam(model);
     } catch (e) {
       throw ErrorHandler.handleException(e);
@@ -751,25 +734,8 @@ class CurriculumRepositoryImpl implements CurriculumRepository {
   @override
   Future<Exam> updateExam(Exam exam) async {
     try {
-      final model = ExamModel(
-        id: exam.id,
-        courseId: exam.courseId,
-        courseCode: exam.courseCode,
-        courseTitle: exam.courseTitle,
-        title: exam.title,
-        examDate: exam.examDate,
-        startTime: exam.startTime,
-        endTime: exam.endTime,
-        room: exam.room,
-        year: exam.year,
-        semester: exam.semester,
-        type: exam.type,
-        instructions: exam.instructions,
-        invigilatorName: exam.invigilatorName,
-        invigilatorId: exam.invigilatorId,
-        createdBy: exam.createdBy,
-        creatorRole: exam.creatorRole,
-      );
+      // Keep every field (status, postponed-from, …).
+      final model = ExamModel.fromEntity(exam);
       return await remoteDataSource.updateExam(model);
     } catch (e) {
       throw ErrorHandler.handleException(e);

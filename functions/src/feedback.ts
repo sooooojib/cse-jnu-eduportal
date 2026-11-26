@@ -1,5 +1,6 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
+import { isAdminRole, isSystemAdminRole, isTeacherRole } from "./roles";
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -107,7 +108,7 @@ export async function executeSubmitFeedback(
   data: any
 ) {
   // Authorization: Student or CR (or Admin)
-  if (caller.role !== "STUDENT" && caller.role !== "CR" && caller.role !== "ADMIN") {
+  if (caller.role !== "STUDENT" && caller.role !== "CR" && !isAdminRole(caller.role)) {
     throw new HttpsError("permission-denied", "Only students or CRs can submit course and faculty feedback.");
   }
 
@@ -225,7 +226,7 @@ export async function executeEditFeedback(
   }
 
   const idData = identityDoc.data()!;
-  if (idData.studentId !== caller.uid && caller.role !== "ADMIN") {
+  if (idData.studentId !== caller.uid && !isSystemAdminRole(caller.role)) {
     throw new HttpsError("permission-denied", "You can only edit feedback you submitted.");
   }
 
@@ -294,7 +295,7 @@ export async function executeReplyToFeedback(
   }
 
   const fData = feedbackDoc.data()!;
-  if (fData.teacherId !== caller.uid && caller.role !== "ADMIN") {
+  if (fData.teacherId !== caller.uid && !isAdminRole(caller.role)) {
     throw new HttpsError("permission-denied", "Only the assigned teacher can reply to this feedback.");
   }
 
@@ -380,7 +381,7 @@ export async function executeEditFeedbackReply(
   }
 
   const fData = feedbackDoc.data()!;
-  if (fData.teacherId !== caller.uid && caller.role !== "ADMIN") {
+  if (fData.teacherId !== caller.uid && !isAdminRole(caller.role)) {
     throw new HttpsError("permission-denied", "Unauthorized to edit this reply.");
   }
 
@@ -420,7 +421,7 @@ export async function executeGetTeacherFeedback(
   caller: { uid: string; role: string },
   filter: "ALL" | "REPLIED" | "NOT_REPLIED" = "ALL"
 ) {
-  if (caller.role !== "TEACHER" && caller.role !== "ADMIN") {
+  if (!isTeacherRole(caller.role) && !isAdminRole(caller.role)) {
     throw new HttpsError("permission-denied", "Only teachers or administrators can view received feedback.");
   }
 
@@ -457,7 +458,7 @@ export async function executeGetStudentFeedback(
   firestore: admin.firestore.Firestore,
   caller: { uid: string; role: string }
 ) {
-  if (caller.role !== "STUDENT" && caller.role !== "CR" && caller.role !== "ADMIN") {
+  if (caller.role !== "STUDENT" && caller.role !== "CR" && !isAdminRole(caller.role)) {
     throw new HttpsError("permission-denied", "Unauthorized.");
   }
 
@@ -491,12 +492,23 @@ export async function executeGetAdminFeedback(
   firestore: admin.firestore.Firestore,
   caller: { uid: string; role: string }
 ) {
-  if (caller.role !== "ADMIN") {
+  if (!isAdminRole(caller.role)) {
     throw new HttpsError("permission-denied", "Only administrators can audit all institutional feedback.");
   }
 
   const snap = await firestore.collection("feedback").get();
   const feedbackList = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+  // The Chairman may moderate feedback but never sees who wrote anonymous
+  // reviews: they also teach these students. Only the system ADMIN gets identities.
+  if (!isSystemAdminRole(caller.role)) {
+    return feedbackList.map((f: any) => {
+      if (f.isAnonymous === true) {
+        return { ...f, studentId: "ANONYMOUS", studentName: "Anonymous Student", studentEmail: null };
+      }
+      return f;
+    });
+  }
 
   // Join identities for administrative safety audit
   const idSnap = await firestore.collection("feedbackIdentities").get();

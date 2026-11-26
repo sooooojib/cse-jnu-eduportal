@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/network/cache_metadata.dart';
+import '../../../../shared/widgets/states/cached_data_badge.dart';
 import '../controllers/attendance_controller.dart';
 
 class StudentAttendanceScreen extends StatefulWidget {
@@ -20,11 +22,111 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
   final TextEditingController _codeController = TextEditingController();
   String? _selectedCourseId;
 
+  /// The class the student picked from "Open now".
+  String? _selectedSessionId;
+
   @override
   void initState() {
     super.initState();
     _controller = widget.controller ?? sl<AttendanceController>();
     _controller.fetchSummary();
+    _controller.loadOpenSessions();
+  }
+
+  Future<void> _refresh() async {
+    await Future.wait([_controller.fetchSummary(), _controller.loadOpenSessions()]);
+  }
+
+  /// The class the code is checked against: the one tapped, or the only one open.
+  String? get _targetSessionId {
+    final open = _controller.openSessions;
+    if (_selectedSessionId != null && open.any((s) => s.id == _selectedSessionId)) return _selectedSessionId;
+    return open.length == 1 ? open.first.id : null;
+  }
+
+  static String _shortDate(String key) {
+    final d = DateTime.tryParse(key);
+    if (d == null) return key;
+    const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${m[d.month - 1]} ${d.day}';
+  }
+
+  Widget _openNow(bool isDark) {
+    final open = _controller.openSessions;
+    final muted = isDark ? Colors.white60 : const Color(0xFF64748B);
+    final target = _targetSessionId;
+    return Column(
+      key: const ValueKey('open_now'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                open.length > 1 ? 'Open now · tap your class' : 'Open now',
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Refresh',
+              onPressed: _controller.loadOpenSessions,
+              icon: const Icon(Icons.refresh_rounded, size: 20),
+            ),
+          ],
+        ),
+        if (_controller.isLoadingOpenSessions && open.isEmpty)
+          const LinearProgressIndicator(minHeight: 3)
+        else if (open.isEmpty)
+          Text('No class is taking attendance right now.', style: TextStyle(fontSize: 13, color: muted))
+        else
+          for (final s in open)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: InkWell(
+                key: ValueKey('open_session_${s.id}'),
+                borderRadius: BorderRadius.circular(16),
+                onTap: () => setState(() => _selectedSessionId = s.id),
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF3F5F8),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: s.id == target ? const Color(0xFF059669) : Colors.transparent,
+                      width: 2,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        s.id == target ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                        size: 20,
+                        color: s.id == target ? const Color(0xFF059669) : muted,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(s.courseTitle.isNotEmpty ? s.courseTitle : s.courseCode,
+                                style: const TextStyle(fontWeight: FontWeight.w700)),
+                            if (s.teacherName.isNotEmpty)
+                              Text(s.teacherName, style: TextStyle(fontSize: 12.5, color: muted)),
+                          ],
+                        ),
+                      ),
+                      if (s.expiresAt != null)
+                        Text(
+                          'closes ${TimeOfDay.fromDateTime(s.expiresAt!).format(context)}',
+                          style: TextStyle(fontSize: 12, color: muted, fontWeight: FontWeight.w600),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+      ],
+    );
   }
 
   @override
@@ -45,14 +147,23 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
       return;
     }
 
+    if (_controller.openSessions.length > 1 && _targetSessionId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('More than one class is open. Tap your class first.'),
+        backgroundColor: Colors.orange,
+      ));
+      return;
+    }
+
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await _controller.submitVerificationCode(code, courseId: _selectedCourseId);
+      await _controller.submitVerificationCode(code, courseId: _selectedCourseId, sessionId: _targetSessionId);
       _codeController.clear();
       if (mounted) {
+        final msg = _controller.lastVerification?.message;
         messenger.showSnackBar(
-          const SnackBar(
-            content: Text('Attendance marked successfully!'),
+          SnackBar(
+            content: Text(msg == null || msg.isEmpty || msg.contains('success') ? 'Attendance marked successfully!' : '✓ $msg'),
             backgroundColor: Colors.green,
           ),
         );
@@ -115,7 +226,7 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
 
         return RefreshIndicator(
           color: AppColors.primaryLight,
-          onRefresh: () => _controller.fetchSummary(),
+          onRefresh: _refresh,
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
@@ -124,117 +235,81 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
               children: [
                 // Header
                 Text(
-                  'Live Attendance Terminal',
+                  'Attendance',
                   style: TextStyle(
                     fontSize: 22,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w800,
                     color: isDark ? AppColors.onSurfaceDark : AppColors.onSurfaceLight,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Submit the 6-character verification code provided by faculty during lecture.',
+                  'Type the code on your teacher\'s screen to mark yourself present.',
                   style: TextStyle(
                     fontSize: 13,
                     color: isDark ? AppColors.outlineDark : AppColors.outlineLight,
                   ),
                 ),
+                if (summary?.isFromCache == true) ...[
+                  const SizedBox(height: 12),
+                  CachedDataBadge(
+                    metadata: CacheMetadata.cached(
+                      message: 'Showing cached attendance records (Offline)',
+                    ),
+                    onRefresh: () => _controller.fetchSummary(),
+                  ),
+                ],
                 const SizedBox(height: 20),
 
-                // Terminal Code Submission Card
+                // Classes of my semester taking attendance right now.
+                if (_controller.service != null) ...[
+                  _openNow(isDark),
+                  const SizedBox(height: 14),
+                ],
+
+                // Code entry: a plain card, same as the rest of the app.
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(24),
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF0F172A),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: const Color(0xFF10B981).withOpacity(0.3), width: 1.5),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF10B981).withOpacity(0.12),
-                        blurRadius: 24,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
+                    color: isDark ? const Color(0xFF13263E) : Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: isDark ? Colors.white10 : const Color(0xFFE2E8F0)),
                   ),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF34D399),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
+                          Icon(Icons.pin_outlined, size: 20, color: isDark ? const Color(0xFF6EE7B7) : AppColors.primary),
                           const SizedBox(width: 8),
-                          const Text(
-                            'SESSION CODE VERIFICATION',
-                            style: TextStyle(
-                              color: Color(0xFF34D399),
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.5,
-                            ),
-                          ),
+                          const Text('Enter code', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
                         ],
                       ),
-                      const SizedBox(height: 16),
-                      // 6-digit input
+                      const SizedBox(height: 10),
                       TextField(
                         controller: _codeController,
                         maxLength: 6,
                         textAlign: TextAlign.center,
                         textCapitalization: TextCapitalization.characters,
-                        style: const TextStyle(
-                          fontFamily: 'monospace',
-                          color: Color(0xFF34D399),
-                          fontSize: 34,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 12,
+                        style: TextStyle(
+                          fontFamily: 'JetBrainsMono',
+                          fontSize: 28,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 8,
+                          color: isDark ? Colors.white : const Color(0xFF0F172A),
                         ),
-                        decoration: InputDecoration(
-                          counterText: '',
-                          hintText: '••••••',
-                          hintStyle: TextStyle(
-                            color: const Color(0xFF34D399).withOpacity(0.2),
-                            letterSpacing: 12,
-                          ),
-                          border: InputBorder.none,
-                        ),
+                        decoration: const InputDecoration(counterText: '', hintText: '6 characters'),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
                       SizedBox(
                         width: double.infinity,
-                        height: 50,
+                        height: 48,
                         child: ElevatedButton(
                           onPressed: _controller.isSubmittingCode ? null : _submitCode,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF059669),
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            elevation: 0,
-                          ),
                           child: _controller.isSubmittingCode
-                              ? const SizedBox(
-                                  width: 22,
-                                  height: 22,
-                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
-                                )
-                              : Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: const [
-                                    Icon(Icons.fingerprint, size: 20),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      'Verify & Record Presence',
-                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                                    ),
-                                  ],
-                                ),
+                              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Text('Verify & Record Presence'),
                         ),
                       ),
                     ],
@@ -297,11 +372,8 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
                       return Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: isDark ? AppColors.surfaceContainerDark : AppColors.surfaceContainerLight,
+                          color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF3F5F8),
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: isDark ? AppColors.outlineDark.withOpacity(0.2) : AppColors.outlineLight.withOpacity(0.15),
-                          ),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -315,8 +387,8 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                         decoration: BoxDecoration(
-                                          color: AppColors.primaryLight.withOpacity(0.12),
-                                          borderRadius: BorderRadius.circular(6),
+                                          color: AppColors.primaryLight.withValues(alpha: 0.12),
+                                          borderRadius: BorderRadius.circular(999),
                                         ),
                                         child: Text(
                                           item.courseCode,
@@ -330,7 +402,7 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
                                       const SizedBox(width: 8),
                                       Expanded(
                                         child: Text(
-                                          item.courseTitle,
+                                          item.courseTitle.isNotEmpty ? item.courseTitle : item.courseCode,
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
@@ -388,6 +460,34 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
                                 ),
                               ],
                             ),
+                            // How far from the 75% line, in plain words.
+                            if (item.totalClasses > 0) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                isEligible
+                                    ? ((item.canMiss ?? 0) == 0
+                                        ? 'Don\'t miss the next class to stay above 75%.'
+                                        : 'You can miss ${item.canMiss} more class${item.canMiss == 1 ? '' : 'es'} and stay above 75%.')
+                                    : 'Attend the next ${item.needToAttend} class${item.needToAttend == 1 ? '' : 'es'} in a row to reach 75%.',
+                                key: ValueKey('attendance_advice_${item.courseId}'),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: isEligible ? (isDark ? Colors.white70 : const Color(0xFF475569)) : Colors.redAccent,
+                                ),
+                              ),
+                            ],
+                            if (item.absentDates.isNotEmpty || item.lateCount > 0) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                [
+                                  if (item.absentDates.isNotEmpty)
+                                    'Missed: ${item.absentDates.take(4).map(_shortDate).join(', ')}${item.absentDates.length > 4 ? ' +${item.absentDates.length - 4} more' : ''}',
+                                  if (item.lateCount > 0) 'Late ${item.lateCount}×',
+                                ].join(' · '),
+                                style: TextStyle(fontSize: 12, color: isDark ? AppColors.outlineDark : AppColors.outlineLight),
+                              ),
+                            ],
                           ],
                         ),
                       );

@@ -3,6 +3,7 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/role_colors.dart';
 import '../../../../core/constants/role_constants.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/utils/academic_session.dart';
 import '../../../../core/utils/context_extensions.dart';
 import '../../../../shared/widgets/cards/app_card.dart';
 import '../../../../shared/widgets/cards/role_badge_chip.dart';
@@ -20,6 +21,11 @@ import '../../../profile/domain/entities/semester_status.dart';
 import '../../domain/entities/admin_stats.dart';
 import '../../domain/entities/department_notice.dart';
 import '../../domain/repositories/admin_repository.dart';
+import '../../../auth/presentation/controllers/auth_controller.dart';
+import '../widgets/admin_pending_signups_card.dart' show SessionBadge;
+import '../widgets/signup_approval_dialog.dart';
+import '../utils/request_ordering.dart';
+import '../widgets/admin_filter_dropdown.dart';
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 1. ADMIN USER DIRECTORY SCREEN
@@ -51,6 +57,10 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
   final TextEditingController _searchController = TextEditingController();
 
   final _roleTabs = ['All Roles', 'Faculty', 'Students', 'CRs', 'Admins'];
+
+  /// Semester filter ("3.1" = Year 3 Semester 1) for the Students / CRs tabs.
+  String? _levelFilter;
+  bool get _showsLevelFilter => _selectedRoleIndex == 2 || _selectedRoleIndex == 3;
 
   @override
   void initState() {
@@ -96,7 +106,7 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
       _filteredUsers = _allUsers.where((u) {
         // Role match
         bool roleMatches = true;
-        if (_selectedRoleIndex == 1) roleMatches = u.role == UserRole.teacher;
+        if (_selectedRoleIndex == 1) roleMatches = u.role.hasTeacherAccess;
         if (_selectedRoleIndex == 2) roleMatches = u.role == UserRole.student;
         if (_selectedRoleIndex == 3) roleMatches = u.role == UserRole.cr;
         if (_selectedRoleIndex == 4) roleMatches = u.role == UserRole.admin;
@@ -109,9 +119,148 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
               (u.studentId != null && u.studentId!.toLowerCase().contains(query));
         }
 
-        return roleMatches && queryMatches;
+        final levelMatches = !_showsLevelFilter || RequestOrdering.userMatchesLevel(u, _levelFilter);
+
+        return roleMatches && queryMatches && levelMatches;
       }).toList();
     });
+  }
+
+  User? get _viewer => sl.isRegistered<AuthController>() ? sl<AuthController>().currentUser : null;
+
+  Future<void> _runUserAction(Future<void> Function() action, String success) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await action();
+      messenger.showSnackBar(SnackBar(content: Text(success), backgroundColor: const Color(0xFF047857)));
+      _loadUsers();
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: const Color(0xFFDC2626)));
+    }
+  }
+
+  Future<void> _toggleDelegate(User user) async {
+    final enable = !user.isAdminDelegate;
+    final confirmed = await AppConfirmationDialog.show(
+      context: context,
+      title: enable ? 'Grant Signup Committee Access?' : 'Revoke Signup Committee Access?',
+      message: enable
+          ? '${user.fullName} will get an Admin View on their dashboard to review and approve Student / CR signup requests.'
+          : '${user.fullName} will no longer be able to review signup requests.',
+      confirmText: enable ? 'Grant' : 'Revoke',
+      isDestructive: !enable,
+      icon: Icons.how_to_reg_outlined,
+    );
+    if (confirmed != true) return;
+    await _runUserAction(
+      () => _repository.setAdminDelegate(userId: user.id, enabled: enable),
+      enable ? 'Signup committee access granted' : 'Signup committee access revoked',
+    );
+  }
+
+  Future<void> _changeRole(User user) async {
+    const options = [UserRole.teacher, UserRole.chairman, UserRole.admin];
+    final picked = await showDialog<UserRole>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: Text('Change role for ${user.fullName}'),
+        children: [
+          for (final r in options)
+            SimpleDialogOption(
+              onPressed: r == user.role ? null : () => Navigator.pop(ctx, r),
+              child: Row(
+                children: [
+                  Icon(r == user.role ? Icons.radio_button_checked : Icons.radio_button_unchecked, size: 18),
+                  const SizedBox(width: 10),
+                  Text(r.label),
+                ],
+              ),
+            ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(24, 8, 24, 0),
+            child: Text(
+              'The user must sign out and sign in again for the new role to take effect.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (picked == null) return;
+    await _runUserAction(
+      () => _repository.updateUserRole(userId: user.id, role: picked),
+      '${user.fullName} is now ${picked.label}',
+    );
+  }
+
+  Future<void> _editSession(User user) async {
+    final sessions = AcademicSession.availableSessions(count: 10);
+    String? selected = AcademicSession.isValid(user.session) ? user.session : null;
+    if (selected != null && !sessions.contains(selected)) sessions.insert(0, selected);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Academic session: ${user.fullName}'),
+        content: DropdownButtonFormField<String>(
+          initialValue: selected,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Session'),
+          items: sessions.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+          onChanged: (v) => selected = v,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, selected ?? ''), child: const Text('Save')),
+        ],
+      ),
+    );
+    if (result == null) return;
+    await _runUserAction(
+      () => _repository.updateUserSession(userId: user.id, session: result.isEmpty ? null : result),
+      'Session updated',
+    );
+  }
+
+  Widget _buildUserMenu(User user) {
+    final viewer = _viewer;
+    final viewerIsSystemAdmin = viewer == null || viewer.role == UserRole.admin;
+    final canDelete = viewerIsSystemAdmin || user.role != UserRole.admin;
+    final canChangeRole = viewerIsSystemAdmin && (user.role.hasTeacherAccess || user.role == UserRole.admin) && user.id != viewer?.id;
+
+    return PopupMenuButton<String>(
+      tooltip: 'User actions',
+      icon: const Icon(Icons.more_vert_rounded, size: 20),
+      onSelected: (value) {
+        switch (value) {
+          case 'delegate':
+            _toggleDelegate(user);
+            break;
+          case 'role':
+            _changeRole(user);
+            break;
+          case 'session':
+            _editSession(user);
+            break;
+          case 'delete':
+            _confirmDeleteUser(user);
+            break;
+        }
+      },
+      itemBuilder: (_) => [
+        if (user.role == UserRole.teacher)
+          PopupMenuItem(
+            value: 'delegate',
+            child: Text(user.isAdminDelegate ? 'Revoke signup committee access' : 'Grant signup committee access'),
+          ),
+        if (canChangeRole) const PopupMenuItem(value: 'role', child: Text('Change role')),
+        if (user.role.isStudentSide) const PopupMenuItem(value: 'session', child: Text('Set academic session')),
+        if (canDelete)
+          const PopupMenuItem(
+            value: 'delete',
+            child: Text('Delete user', style: TextStyle(color: Color(0xFFDC2626))),
+          ),
+      ],
+    );
   }
 
   Future<void> _confirmDeleteUser(User user) async {
@@ -216,13 +365,13 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
                       value: selectedRole,
                       isExpanded: true,
                       decoration: InputDecoration(
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       ),
                       items: const [
                         DropdownMenuItem(value: UserRole.student, child: Text('Student')),
                         DropdownMenuItem(value: UserRole.teacher, child: Text('Professor / Faculty')),
                         DropdownMenuItem(value: UserRole.cr, child: Text('Class Representative (CR)')),
+                        DropdownMenuItem(value: UserRole.chairman, child: Text('Chairman of the Department')),
                         DropdownMenuItem(value: UserRole.admin, child: Text('Administrator')),
                       ],
                       onChanged: (val) => setModalState(() => selectedRole = val ?? UserRole.student),
@@ -233,7 +382,6 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
                       controller: nameCtrl,
                       decoration: InputDecoration(
                         labelText: 'Full Name *',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -243,7 +391,6 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
                       keyboardType: TextInputType.emailAddress,
                       decoration: InputDecoration(
                         labelText: 'Institutional Email *',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -253,7 +400,6 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
                       obscureText: true,
                       decoration: InputDecoration(
                         labelText: 'Password (min 6 chars) *',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -263,7 +409,6 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
                         controller: idCtrl,
                         decoration: InputDecoration(
                           labelText: 'Student Roll / ID * (e.g. 2023CSE012)',
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -275,7 +420,6 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
                               isExpanded: true,
                               decoration: InputDecoration(
                                 labelText: 'Year',
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                               ),
                               items: [1, 2, 3, 4]
                                   .map((y) => DropdownMenuItem(value: y, child: Text('Year $y')))
@@ -290,7 +434,6 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
                               isExpanded: true,
                               decoration: InputDecoration(
                                 labelText: 'Semester',
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                               ),
                               items: [1, 2]
                                   .map((s) => DropdownMenuItem(value: s, child: Text('Sem $s')))
@@ -303,13 +446,12 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
                       const SizedBox(height: 12),
                     ],
 
-                    if (selectedRole == UserRole.teacher) ...[
+                    if (selectedRole.hasTeacherAccess) ...[
                       TextField(
                         controller: phoneCtrl,
                         keyboardType: TextInputType.phone,
                         decoration: InputDecoration(
                           labelText: 'Contact Phone Number',
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -323,7 +465,7 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF7E22CE),
                           foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          shape: const StadiumBorder(),
                         ),
                         onPressed: isSubmitting
                             ? null
@@ -464,7 +606,10 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
                           label: Text(_roleTabs[index]),
                           selected: isSelected,
                           onSelected: (_) {
-                            setState(() => _selectedRoleIndex = index);
+                            setState(() {
+                              _selectedRoleIndex = index;
+                              if (!_showsLevelFilter) _levelFilter = null;
+                            });
                             _applyFilters();
                           },
                           selectedColor: const Color(0xFF7E22CE),
@@ -477,6 +622,23 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
                     }),
                   ),
                 ),
+                if (_showsLevelFilter) ...[
+                  const SizedBox(height: 10),
+                  AdminFilterDropdown<String>(
+                    key: const ValueKey('directory_level_filter'),
+                    label: 'Semester',
+                    icon: Icons.school_outlined,
+                    value: _levelFilter,
+                    options: [
+                      const FilterOption(null, 'All semesters'),
+                      ...RequestOrdering.levelFilters.map((l) => FilterOption(l, l)),
+                    ],
+                    onChanged: (v) {
+                      setState(() => _levelFilter = v);
+                      _applyFilters();
+                    },
+                  ),
+                ],
               ],
             ),
           ),
@@ -563,11 +725,7 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
                                               ],
                                             ),
                                           ),
-                                          IconButton(
-                                            icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFDC2626), size: 20),
-                                            tooltip: 'Delete User',
-                                            onPressed: () => _confirmDeleteUser(user),
-                                          ),
+                                          _buildUserMenu(user),
                                         ],
                                       ),
                                       const SizedBox(height: 10),
@@ -585,7 +743,8 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
                                                 borderRadius: BorderRadius.circular(6),
                                               ),
                                               child: Text(
-                                                'ID: ${user.studentId} • Y${user.year ?? 1}S${user.semester ?? 1}',
+                                                'ID: ${user.studentId} • Y${user.year ?? 1}S${user.semester ?? 1}'
+                                                '${user.role.isStudentSide ? ' • ${user.session ?? 'Session not set'}' : ''}',
                                                 style: TextStyle(
                                                   fontSize: 11,
                                                   fontWeight: FontWeight.w600,
@@ -593,7 +752,23 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
                                                 ),
                                               ),
                                             ),
-                                          if (user.role == UserRole.teacher && user.assignedCourseIds.isNotEmpty)
+                                          if (user.isAdminDelegate && user.role == UserRole.teacher)
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                              decoration: BoxDecoration(
+                                                color: isDark ? const Color(0xFF581C87).withValues(alpha: 0.3) : const Color(0xFFFAF5FF),
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: Text(
+                                                'Signup Committee',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: isDark ? const Color(0xFFD8B4FE) : const Color(0xFF7E22CE),
+                                                ),
+                                              ),
+                                            ),
+                                          if (user.role.hasTeacherAccess && user.assignedCourseIds.isNotEmpty)
                                             Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                               decoration: BoxDecoration(
@@ -645,6 +820,88 @@ class AdminSignupRequestsScreen extends StatefulWidget {
 class _AdminSignupRequestsScreenState extends State<AdminSignupRequestsScreen> {
   late final AdminRepository _repository;
   List<SignupRequest> _requests = [];
+
+  /// Session / type filter: null = all, a session ("2021-2022"),
+  /// [RequestOrdering.noSessionGroup] or [RequestOrdering.teacherGroup].
+  String? _groupFilter;
+  final _searchCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  bool _matchesSearch(SignupRequest r) {
+    final q = _searchCtrl.text.trim().toLowerCase();
+    if (q.isEmpty) return true;
+    return r.fullName.toLowerCase().contains(q) ||
+        r.email.toLowerCase().contains(q) ||
+        (r.studentId?.toLowerCase().contains(q) ?? false);
+  }
+
+  /// Requests after search + dropdown filter, ordered oldest session first.
+  // Cached so the list is filtered/sorted once per change, not once per row.
+  List<SignupRequest>? _visibleRequestsCache;
+  List<Object?>? _visibleRequestsCacheKey;
+  List<SignupRequest> get _visibleRequests {
+    final key = <Object?>[_requests, _groupFilter, _searchCtrl.text];
+    final prev = _visibleRequestsCacheKey;
+    if (_visibleRequestsCache != null && prev != null && _sameKey(prev, key)) return _visibleRequestsCache!;
+    _visibleRequestsCacheKey = key;
+    return _visibleRequestsCache = _computeVisibleRequests();
+  }
+
+  List<SignupRequest> _computeVisibleRequests() => RequestOrdering.sortSignupsBySession(
+        _requests.where((r) => RequestOrdering.signupInGroup(r, _groupFilter) && _matchesSearch(r)),
+      );
+
+  Widget _buildListFilters() {
+    final groups = RequestOrdering.signupGroupsIn(_requests);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+      child: Column(
+        children: [
+          TextField(
+            controller: _searchCtrl,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              isDense: true,
+              hintText: 'Search by name, roll, or email...',
+              prefixIcon: const Icon(Icons.search_rounded, size: 20),
+            ),
+          ),
+          const SizedBox(height: 10),
+          AdminFilterDropdown<String>(
+            key: const ValueKey('signup_session_filter'),
+            label: 'Session',
+            icon: Icons.school_outlined,
+            value: _groupFilter,
+            options: [
+              const FilterOption(null, 'All requests'),
+              ...groups.map((g) => FilterOption(g, RequestOrdering.signupGroupLabel(g))),
+            ],
+            onChanged: (v) => setState(() => _groupFilter = v),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _groupHeader(String group, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8, left: 4),
+      child: Text(
+        RequestOrdering.signupGroupLabel(group),
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w800,
+          color: isDark ? const Color(0xFF6EE7B7) : const Color(0xFF047857),
+        ),
+      ),
+    );
+  }
+
   bool _isLoading = true;
   String? _errorMessage;
   int _selectedFilter = 0;
@@ -664,7 +921,12 @@ class _AdminSignupRequestsScreenState extends State<AdminSignupRequestsScreen> {
     });
 
     try {
-      final list = await _repository.getAllSignupRequests(statusFilter: _filters[_selectedFilter]);
+      var list = await _repository.getAllSignupRequests(statusFilter: _filters[_selectedFilter]);
+      // Delegated faculty (signup committee) may only review Student / CR requests.
+      final viewer = sl.isRegistered<AuthController>() ? sl<AuthController>().currentUser : null;
+      if (viewer != null && !viewer.role.hasAdminAccess) {
+        list = list.where((r) => r.role.isStudentSide).toList();
+      }
       if (!mounted) return;
       setState(() {
         _requests = list;
@@ -680,63 +942,22 @@ class _AdminSignupRequestsScreenState extends State<AdminSignupRequestsScreen> {
   }
 
   Future<void> _approve(SignupRequest req) async {
-    int year = 1;
-    int sem = 1;
-
-    if (req.role == UserRole.student || req.role == UserRole.cr) {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) {
-          return StatefulBuilder(
-            builder: (ctx, setSt) {
-              return AlertDialog(
-                title: Text('Approve ${req.fullName}'),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('Assign initial academic level:'),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<int>(
-                      value: year,
-                      isExpanded: true,
-                      decoration: const InputDecoration(labelText: 'Year'),
-                      items: [1, 2, 3, 4].map((y) => DropdownMenuItem(value: y, child: Text('Year $y'))).toList(),
-                      onChanged: (v) => setSt(() => year = v ?? 1),
-                    ),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<int>(
-                      value: sem,
-                      isExpanded: true,
-                      decoration: const InputDecoration(labelText: 'Semester'),
-                      items: [1, 2].map((s) => DropdownMenuItem(value: s, child: Text('Sem $s'))).toList(),
-                      onChanged: (v) => setSt(() => sem = v ?? 1),
-                    ),
-                  ],
-                ),
-                actions: [
-                  TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-                  ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Approve')),
-                ],
-              );
-            },
-          );
-        },
-      );
-      if (confirmed != true) return;
-    }
+    final decision = await SignupApprovalDialog.show(context, req);
+    if (decision == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
 
     try {
       await _repository.approveSignup(
         requestId: req.id,
-        assignedYear: req.role == UserRole.student || req.role == UserRole.cr ? year : null,
-        assignedSemester: req.role == UserRole.student || req.role == UserRole.cr ? sem : null,
+        assignedYear: decision.year,
+        assignedSemester: decision.semester,
       );
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(content: Text('Approved ${req.fullName}'), backgroundColor: const Color(0xFF047857)),
       );
       _loadRequests();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(content: Text('Error: $e'), backgroundColor: const Color(0xFFDC2626)),
       );
     }
@@ -822,23 +1043,34 @@ class _AdminSignupRequestsScreenState extends State<AdminSignupRequestsScreen> {
               ),
             ),
           ),
+          if (!_isLoading && _errorMessage == null && _requests.isNotEmpty) _buildListFilters(),
           Expanded(
             child: _isLoading
                 ? const Center(child: AppLoadingView(message: 'Loading petitions...'))
                 : _errorMessage != null
                     ? Center(child: AppErrorStateView(message: _errorMessage!, onRetry: _loadRequests))
-                    : _requests.isEmpty
+                    : _visibleRequests.isEmpty
                         ? const Center(child: AppEmptyStateView(title: 'No Petitions Found', message: 'No registration petitions match this filter.'))
                         : RefreshIndicator(
                             color: const Color(0xFF7E22CE),
                             onRefresh: _loadRequests,
                             child: ListView.separated(
                               padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
-                              itemCount: _requests.length,
+                              itemCount: _visibleRequests.length,
                               separatorBuilder: (_, __) => const SizedBox(height: 10),
                               itemBuilder: (context, i) {
-                                final req = _requests[i];
-                                return AppCard(
+                                final visible = _visibleRequests;
+                                final req = visible[i];
+                                final group = RequestOrdering.signupGroupOf(req);
+                                final startsGroup = i == 0 || RequestOrdering.signupGroupOf(visible[i - 1]) != group;
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (startsGroup) ...[
+                                      if (i > 0) const SizedBox(height: 6),
+                                      _groupHeader(group, isDark),
+                                    ],
+                                    AppCard(
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
@@ -869,11 +1101,15 @@ class _AdminSignupRequestsScreenState extends State<AdminSignupRequestsScreen> {
                                           RoleBadgeChip(role: req.role, isCompact: true),
                                         ],
                                       ),
-                                      if (req.studentId != null || req.phone != null) ...[
+                                      if (req.studentId != null || req.phone != null || req.role.isStudentSide) ...[
                                         const SizedBox(height: 6),
                                         Wrap(
                                           spacing: 8,
+                                          runSpacing: 4,
+                                          crossAxisAlignment: WrapCrossAlignment.center,
                                           children: [
+                                            if (req.role.isStudentSide)
+                                              SessionBadge(session: (req.session?.isNotEmpty ?? false) ? req.session! : 'Not set'),
                                             if (req.studentId != null)
                                               Text('Student ID: ${req.studentId}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
                                             if (req.phone != null)
@@ -906,6 +1142,8 @@ class _AdminSignupRequestsScreenState extends State<AdminSignupRequestsScreen> {
                                       ),
                                     ],
                                   ),
+                                ),
+                                  ],
                                 );
                               },
                             ),
@@ -933,6 +1171,73 @@ class AdminSemesterRequestsScreen extends StatefulWidget {
 class _AdminSemesterRequestsScreenState extends State<AdminSemesterRequestsScreen> {
   late final AdminRepository _repository;
   List<SemesterUpgradeRequest> _requests = [];
+
+  /// Requested-semester filter ("3.1"), null = all.
+  String? _levelFilter;
+  final _searchCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  // Cached so the list is filtered/sorted once per change, not once per row.
+  List<SemesterUpgradeRequest>? _visibleRequestsCache;
+  List<Object?>? _visibleRequestsCacheKey;
+  List<SemesterUpgradeRequest> get _visibleRequests {
+    final key = <Object?>[_requests, _levelFilter, _searchCtrl.text];
+    final prev = _visibleRequestsCacheKey;
+    if (_visibleRequestsCache != null && prev != null && _sameKey(prev, key)) return _visibleRequestsCache!;
+    _visibleRequestsCacheKey = key;
+    return _visibleRequestsCache = _computeVisibleRequests();
+  }
+
+  List<SemesterUpgradeRequest> _computeVisibleRequests() {
+    final q = _searchCtrl.text.trim().toLowerCase();
+    return _requests.where((r) {
+      final levelOk = _levelFilter == null ||
+          RequestOrdering.levelLabel(r.requestedYear, r.requestedSemester) == _levelFilter;
+      final searchOk = q.isEmpty ||
+          r.studentName.toLowerCase().contains(q) ||
+          r.studentRoll.toLowerCase().contains(q);
+      return levelOk && searchOk;
+    }).toList();
+  }
+
+  static bool _isBackwards(SemesterUpgradeRequest r) =>
+      r.requestedYear * 10 + r.requestedSemester < r.currentYear * 10 + r.currentSemester;
+
+  Widget _buildListFilters() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+      child: Column(
+        children: [
+          TextField(
+            controller: _searchCtrl,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              isDense: true,
+              hintText: 'Search by name or roll...',
+              prefixIcon: const Icon(Icons.search_rounded, size: 20),
+            ),
+          ),
+          const SizedBox(height: 10),
+          AdminFilterDropdown<String>(
+            key: const ValueKey('semester_request_level_filter'),
+            label: 'Requested semester',
+            icon: Icons.school_outlined,
+            value: _levelFilter,
+            options: [
+              const FilterOption(null, 'All semesters'),
+              ...RequestOrdering.levelFilters.map((l) => FilterOption(l, l)),
+            ],
+            onChanged: (v) => setState(() => _levelFilter = v),
+          ),
+        ],
+      ),
+    );
+  }
   bool _isLoading = true;
   String? _errorMessage;
   int _selectedFilter = 0;
@@ -955,7 +1260,8 @@ class _AdminSemesterRequestsScreenState extends State<AdminSemesterRequestsScree
       final list = await _repository.getAllSemesterRequests(statusFilter: _filters[_selectedFilter]);
       if (!mounted) return;
       setState(() {
-        _requests = list;
+        // Ordered by the semester being requested (1.1, 1.2, ... 4.2).
+        _requests = RequestOrdering.sortSemesterRequestsByTarget(list);
         _isLoading = false;
       });
     } catch (e) {
@@ -1200,20 +1506,40 @@ class _AdminSemesterRequestsScreenState extends State<AdminSemesterRequestsScree
               ),
             ),
           ),
+          if (!_isLoading && _errorMessage == null && _requests.isNotEmpty) _buildListFilters(),
           Expanded(
             child: _isLoading
                 ? const Center(child: AppLoadingView(message: 'Loading semester petitions...'))
                 : _errorMessage != null
                     ? Center(child: AppErrorStateView(message: _errorMessage!, onRetry: _loadRequests))
-                    : _requests.isEmpty
+                    : _visibleRequests.isEmpty
                         ? const Center(child: AppEmptyStateView(title: 'No Semester Petitions Found', message: 'No student requests match this filter.'))
                         : ListView.separated(
                             padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
-                            itemCount: _requests.length,
+                            itemCount: _visibleRequests.length,
                             separatorBuilder: (_, __) => const SizedBox(height: 10),
                             itemBuilder: (context, i) {
-                              final req = _requests[i];
-                              return AppCard(
+                              final visible = _visibleRequests;
+                              final req = visible[i];
+                              final level = RequestOrdering.levelLabel(req.requestedYear, req.requestedSemester);
+                              final startsGroup = i == 0 ||
+                                  RequestOrdering.levelLabel(visible[i - 1].requestedYear, visible[i - 1].requestedSemester) != level;
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (startsGroup)
+                                    Padding(
+                                      padding: EdgeInsets.only(bottom: 8, left: 4, top: i > 0 ? 6 : 0),
+                                      child: Text(
+                                        'Requesting $level (Year ${req.requestedYear} · Semester ${req.requestedSemester})',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w800,
+                                          color: isDark ? const Color(0xFFC4B5FD) : const Color(0xFF7E22CE),
+                                        ),
+                                      ),
+                                    ),
+                                  AppCard(
                                 onTap: () => _showRequestDetails(req),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1249,6 +1575,27 @@ class _AdminSemesterRequestsScreenState extends State<AdminSemesterRequestsScree
                                     ),
                                     const SizedBox(height: 4),
                                     Text('Roll: ${req.studentRoll} • Date: ${req.createdAt}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                    if (_isBackwards(req)) ...[
+                                      const SizedBox(height: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFFEF3C7),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: const Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.warning_amber_rounded, size: 14, color: Color(0xFF92400E)),
+                                            SizedBox(width: 4),
+                                            Text(
+                                              'Lower than current semester',
+                                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF92400E)),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
                                     const SizedBox(height: 8),
                                     Row(
                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1274,6 +1621,8 @@ class _AdminSemesterRequestsScreenState extends State<AdminSemesterRequestsScree
                                     ),
                                   ],
                                 ),
+                                ),
+                                ],
                               );
                             },
                           ),
@@ -1307,6 +1656,69 @@ class _AdminCourseManagementScreenState extends State<AdminCourseManagementScree
   List<Course> _courses = [];
   bool _isLoading = true;
   String? _errorMessage;
+
+  /// Semester filter ("3.1") and type filter ("THEORY" / "LAB"); null = all.
+  String? _levelFilter;
+  String? _typeFilter;
+
+  // Cached so the list is filtered/sorted once per change, not once per row.
+  List<Course>? _visibleCoursesCache;
+  List<Object?>? _visibleCoursesCacheKey;
+  List<Course> get _visibleCourses {
+    final key = <Object?>[_courses, _levelFilter, _typeFilter];
+    final prev = _visibleCoursesCacheKey;
+    if (_visibleCoursesCache != null && prev != null && _sameKey(prev, key)) return _visibleCoursesCache!;
+    _visibleCoursesCacheKey = key;
+    return _visibleCoursesCache = _computeVisibleCourses();
+  }
+
+  List<Course> _computeVisibleCourses() {
+    final list = _courses.where((c) {
+      final levelOk = _levelFilter == null || RequestOrdering.levelLabel(c.year, c.semester) == _levelFilter;
+      final typeOk = _typeFilter == null || c.courseType.toUpperCase() == _typeFilter;
+      return levelOk && typeOk;
+    }).toList()
+      ..sort((a, b) {
+        final byLevel = (a.year * 10 + a.semester).compareTo(b.year * 10 + b.semester);
+        return byLevel != 0 ? byLevel : a.code.compareTo(b.code);
+      });
+    return list;
+  }
+
+  Widget _buildCourseFilters() {
+    return Row(
+      children: [
+        Expanded(
+          child: AdminFilterDropdown<String>(
+            key: const ValueKey('course_level_filter'),
+            label: 'Semester',
+            icon: Icons.school_outlined,
+            value: _levelFilter,
+            options: [
+              const FilterOption(null, 'All semesters'),
+              ...RequestOrdering.levelFilters.map((l) => FilterOption(l, l)),
+            ],
+            onChanged: (v) => setState(() => _levelFilter = v),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: AdminFilterDropdown<String>(
+            key: const ValueKey('course_type_filter'),
+            label: 'Type',
+            icon: Icons.category_outlined,
+            value: _typeFilter,
+            options: const [
+              FilterOption(null, 'All types'),
+              FilterOption('THEORY', 'Theory'),
+              FilterOption('LAB', 'Lab'),
+            ],
+            onChanged: (v) => setState(() => _typeFilter = v),
+          ),
+        ),
+      ],
+    );
+  }
 
   @override
   void initState() {
@@ -1342,6 +1754,7 @@ class _AdminCourseManagementScreenState extends State<AdminCourseManagementScree
     final titleCtrl = TextEditingController(text: existing?.title ?? '');
     final descCtrl = TextEditingController(text: existing?.description ?? '');
     final creditCtrl = TextEditingController(text: existing?.credit.toString() ?? '3.0');
+    final targetCtrl = TextEditingController(text: existing?.targetClassCount?.toString() ?? '');
     int year = existing?.year ?? 1;
     int sem = existing?.semester ?? 1;
     String type = existing?.courseType ?? 'THEORY';
@@ -1420,6 +1833,16 @@ class _AdminCourseManagementScreenState extends State<AdminCourseManagementScree
                     ),
                     const SizedBox(height: 10),
                     TextField(
+                      controller: targetCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Target Classes per Semester (Optional)',
+                        helperText: 'Used for teacher progress monitoring. Leave empty if not decided yet.',
+                        helperMaxLines: 2,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
                       controller: descCtrl,
                       maxLines: 2,
                       decoration: const InputDecoration(labelText: 'Description (Optional)'),
@@ -1454,6 +1877,7 @@ class _AdminCourseManagementScreenState extends State<AdminCourseManagementScree
                               semester: sem,
                               courseType: type,
                               description: descCtrl.text.trim().isNotEmpty ? descCtrl.text.trim() : null,
+                              targetClassCount: int.tryParse(targetCtrl.text.trim()),
                             );
 
                             if (existing == null) {
@@ -1541,10 +1965,23 @@ class _AdminCourseManagementScreenState extends State<AdminCourseManagementScree
                       onRefresh: _loadCourses,
                       child: ListView.separated(
                         padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
-                        itemCount: _courses.length,
+                        itemCount: _visibleCourses.length + 1,
                         separatorBuilder: (_, __) => const SizedBox(height: 10),
-                        itemBuilder: (context, i) {
-                          final c = _courses[i];
+                        itemBuilder: (context, index) {
+                          final visible = _visibleCourses;
+                          if (index == 0) {
+                            return Column(
+                              children: [
+                                _buildCourseFilters(),
+                                if (visible.isEmpty)
+                                  const Padding(
+                                    padding: EdgeInsets.only(top: 32),
+                                    child: Text('No courses match these filters.', style: TextStyle(color: Colors.grey)),
+                                  ),
+                              ],
+                            );
+                          }
+                          final c = visible[index - 1];
                           return AppCard(
                             child: Row(
                               children: [
@@ -1637,6 +2074,9 @@ class _AdminTeacherAssignmentScreenState extends State<AdminTeacherAssignmentScr
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
+  /// Teacher dropdown filter (teacher id), null = all.
+  String? _teacherFilter;
+
   @override
   void initState() {
     super.initState();
@@ -1680,11 +2120,14 @@ class _AdminTeacherAssignmentScreenState extends State<AdminTeacherAssignmentScr
   }
 
   List<User> get _filteredTeachers {
+    final byTeacher = _teacherFilter == null
+        ? _teachers
+        : _teachers.where((t) => t.id == _teacherFilter).toList();
     if (_searchQuery.trim().isEmpty) {
-      return _teachers;
+      return byTeacher;
     }
     final q = _searchQuery.toLowerCase().trim();
-    return _teachers.where((t) {
+    return byTeacher.where((t) {
       final nameMatches = t.fullName.toLowerCase().contains(q);
       final emailMatches = t.email.toLowerCase().contains(q);
       final teacherAssignments = _assignments.where((a) => a.teacherId == t.id);
@@ -1727,7 +2170,6 @@ class _AdminTeacherAssignmentScreenState extends State<AdminTeacherAssignmentScr
                       value: selectedTeacherId,
                       isExpanded: true,
                       decoration: InputDecoration(
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                       ),
                       items: _teachers
@@ -1749,7 +2191,6 @@ class _AdminTeacherAssignmentScreenState extends State<AdminTeacherAssignmentScr
                       value: selectedCourseId,
                       isExpanded: true,
                       decoration: InputDecoration(
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                       ),
                       items: _courses
@@ -1778,7 +2219,7 @@ class _AdminTeacherAssignmentScreenState extends State<AdminTeacherAssignmentScr
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFD97706),
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: const StadiumBorder(),
                   ),
                   onPressed: () async {
                     try {
@@ -1915,6 +2356,18 @@ class _AdminTeacherAssignmentScreenState extends State<AdminTeacherAssignmentScr
                                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                                 ),
                                 onChanged: (v) => setState(() => _searchQuery = v),
+                              ),
+                              const SizedBox(height: 10),
+                              AdminFilterDropdown<String>(
+                                key: const ValueKey('assignment_teacher_filter'),
+                                label: 'Teacher',
+                                icon: Icons.person_outline_rounded,
+                                value: _teacherFilter,
+                                options: [
+                                  const FilterOption(null, 'All teachers'),
+                                  ..._teachers.map((t) => FilterOption(t.id, t.fullName)),
+                                ],
+                                onChanged: (v) => setState(() => _teacherFilter = v),
                               ),
                               const SizedBox(height: 10),
                               SingleChildScrollView(
@@ -2056,9 +2509,7 @@ class _AdminTeacherAssignmentScreenState extends State<AdminTeacherAssignmentScr
                                                   side: BorderSide(color: isDark ? const Color(0xFFFBBF24).withValues(alpha: 0.5) : const Color(0xFFFBBF24)),
                                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                                   minimumSize: const Size(0, 34),
-                                                  shape: RoundedRectangleBorder(
-                                                    borderRadius: BorderRadius.circular(10),
-                                                  ),
+                                                  shape: const StadiumBorder(),
                                                 ),
                                                 icon: const Icon(Icons.add_rounded, size: 16),
                                                 label: const Text(
@@ -2110,9 +2561,7 @@ class _AdminTeacherAssignmentScreenState extends State<AdminTeacherAssignmentScr
                                                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                                       minimumSize: const Size(0, 32),
                                                       elevation: 0,
-                                                      shape: RoundedRectangleBorder(
-                                                        borderRadius: BorderRadius.circular(8),
-                                                      ),
+                                                      shape: const StadiumBorder(),
                                                     ),
                                                     icon: const Icon(Icons.add_rounded, size: 14),
                                                     label: const Text(
@@ -2254,6 +2703,68 @@ class AdminAttendanceOverviewScreen extends StatefulWidget {
 class _AdminAttendanceOverviewScreenState extends State<AdminAttendanceOverviewScreen> {
   late final AdminRepository _repository;
   List<AttendanceSession> _sessions = [];
+
+  /// Dropdown filters: teacher id and status ("ACTIVE" / "COMPLETED"); null = all.
+  String? _teacherFilter;
+  String? _statusFilter;
+
+  // Cached so the list is filtered/sorted once per change, not once per row.
+  List<AttendanceSession>? _visibleSessionsCache;
+  List<Object?>? _visibleSessionsCacheKey;
+  List<AttendanceSession> get _visibleSessions {
+    final key = <Object?>[_sessions, _teacherFilter, _statusFilter];
+    final prev = _visibleSessionsCacheKey;
+    if (_visibleSessionsCache != null && prev != null && _sameKey(prev, key)) return _visibleSessionsCache!;
+    _visibleSessionsCacheKey = key;
+    return _visibleSessionsCache = _computeVisibleSessions();
+  }
+
+  List<AttendanceSession> _computeVisibleSessions() => _sessions.where((x) {
+        final teacherOk = _teacherFilter == null || x.teacherId == _teacherFilter;
+        final statusOk = _statusFilter == null ||
+            (_statusFilter == 'ACTIVE' ? x.status == 'ACTIVE' : x.status != 'ACTIVE');
+        return teacherOk && statusOk;
+      }).toList();
+
+  Widget _buildSessionFilters() {
+    final teachers = <String, String>{};
+    for (final x in _sessions) {
+      teachers.putIfAbsent(x.teacherId, () => x.teacherName.isNotEmpty ? x.teacherName : x.teacherId);
+    }
+    final sortedTeachers = teachers.entries.toList()..sort((a, b) => a.value.compareTo(b.value));
+    return Row(
+      children: [
+        Expanded(
+          child: AdminFilterDropdown<String>(
+            key: const ValueKey('attendance_teacher_filter'),
+            label: 'Teacher',
+            icon: Icons.person_outline_rounded,
+            value: _teacherFilter,
+            options: [
+              const FilterOption(null, 'All teachers'),
+              ...sortedTeachers.map((e) => FilterOption(e.key, e.value)),
+            ],
+            onChanged: (v) => setState(() => _teacherFilter = v),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: AdminFilterDropdown<String>(
+            key: const ValueKey('attendance_status_filter'),
+            label: 'Status',
+            icon: Icons.toggle_on_outlined,
+            value: _statusFilter,
+            options: const [
+              FilterOption(null, 'All'),
+              FilterOption('ACTIVE', 'Active'),
+              FilterOption('COMPLETED', 'Completed'),
+            ],
+            onChanged: (v) => setState(() => _statusFilter = v),
+          ),
+        ),
+      ],
+    );
+  }
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -2305,10 +2816,23 @@ class _AdminAttendanceOverviewScreenState extends State<AdminAttendanceOverviewS
                   ? const Center(child: AppEmptyStateView(title: 'No Sessions Recorded', message: 'Attendance sessions launched by teachers will appear here.'))
                   : ListView.separated(
                       padding: const EdgeInsets.all(16),
-                      itemCount: _sessions.length,
+                      itemCount: _visibleSessions.length + 1,
                       separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (context, i) {
-                        final s = _sessions[i];
+                      itemBuilder: (context, index) {
+                        final visible = _visibleSessions;
+                        if (index == 0) {
+                          return Column(
+                            children: [
+                              _buildSessionFilters(),
+                              if (visible.isEmpty)
+                                const Padding(
+                                  padding: EdgeInsets.only(top: 32),
+                                  child: Text('No sessions match these filters.', style: TextStyle(color: Colors.grey)),
+                                ),
+                            ],
+                          );
+                        }
+                        final s = visible[index - 1];
                         final isActive = s.status == 'ACTIVE';
 
                         return AppCard(
@@ -2396,6 +2920,68 @@ class AdminFeedbackModerationScreen extends StatefulWidget {
 class _AdminFeedbackModerationScreenState extends State<AdminFeedbackModerationScreen> {
   late final AdminRepository _repository;
   List<FeedbackItem> _feedback = [];
+
+  /// Dropdown filters: teacher id and star rating; null = all.
+  String? _teacherFilter;
+  int? _ratingFilter;
+
+  // Cached so the list is filtered/sorted once per change, not once per row.
+  List<FeedbackItem>? _visibleFeedbackCache;
+  List<Object?>? _visibleFeedbackCacheKey;
+  List<FeedbackItem> get _visibleFeedback {
+    final key = <Object?>[_feedback, _teacherFilter, _ratingFilter];
+    final prev = _visibleFeedbackCacheKey;
+    if (_visibleFeedbackCache != null && prev != null && _sameKey(prev, key)) return _visibleFeedbackCache!;
+    _visibleFeedbackCacheKey = key;
+    return _visibleFeedbackCache = _computeVisibleFeedback();
+  }
+
+  List<FeedbackItem> _computeVisibleFeedback() => _feedback
+      .where((f) =>
+          (_teacherFilter == null || f.teacherId == _teacherFilter) &&
+          (_ratingFilter == null || f.rating == _ratingFilter))
+      .toList();
+
+  Widget _buildFeedbackFilters() {
+    final teachers = <String, String>{};
+    for (final f in _feedback) {
+      teachers.putIfAbsent(f.teacherId, () => f.teacherName.isNotEmpty ? f.teacherName : f.teacherId);
+    }
+    final sortedTeachers = teachers.entries.toList()..sort((a, b) => a.value.compareTo(b.value));
+    return Row(
+      children: [
+        Expanded(
+          flex: 3,
+          child: AdminFilterDropdown<String>(
+            key: const ValueKey('feedback_teacher_filter'),
+            label: 'Teacher',
+            icon: Icons.person_outline_rounded,
+            value: _teacherFilter,
+            options: [
+              const FilterOption(null, 'All teachers'),
+              ...sortedTeachers.map((e) => FilterOption(e.key, e.value)),
+            ],
+            onChanged: (v) => setState(() => _teacherFilter = v),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          flex: 2,
+          child: AdminFilterDropdown<int>(
+            key: const ValueKey('feedback_rating_filter'),
+            label: 'Rating',
+            icon: Icons.star_outline_rounded,
+            value: _ratingFilter,
+            options: [
+              const FilterOption(null, 'All'),
+              for (var r = 5; r >= 1; r--) FilterOption(r, '$r★'),
+            ],
+            onChanged: (v) => setState(() => _ratingFilter = v),
+          ),
+        ),
+      ],
+    );
+  }
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -2447,10 +3033,23 @@ class _AdminFeedbackModerationScreenState extends State<AdminFeedbackModerationS
                   ? const Center(child: AppEmptyStateView(title: 'No Feedback Submitted', message: 'Student evaluations will appear here.'))
                   : ListView.separated(
                       padding: const EdgeInsets.all(16),
-                      itemCount: _feedback.length,
+                      itemCount: _visibleFeedback.length + 1,
                       separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (context, i) {
-                        final item = _feedback[i];
+                      itemBuilder: (context, index) {
+                        final visible = _visibleFeedback;
+                        if (index == 0) {
+                          return Column(
+                            children: [
+                              _buildFeedbackFilters(),
+                              if (visible.isEmpty)
+                                const Padding(
+                                  padding: EdgeInsets.only(top: 32),
+                                  child: Text('No feedback matches these filters.', style: TextStyle(color: Colors.grey)),
+                                ),
+                            ],
+                          );
+                        }
+                        final item = visible[index - 1];
 
                         return AppCard(
                           child: Column(
@@ -2615,6 +3214,12 @@ class _FallbackAdminRepo implements AdminRepository {
   @override
   Future<void> toggleUserActiveStatus({required String userId, required bool isActive}) async {}
   @override
+  Future<void> setAdminDelegate({required String userId, required bool enabled}) async {}
+  @override
+  Future<void> updateUserRole({required String userId, required UserRole role}) async {}
+  @override
+  Future<void> updateUserSession({required String userId, required String? session}) async {}
+  @override
   Future<List<Course>> getAllCourses() async => [];
   @override
   Future<void> createCourse(Course course) async {}
@@ -2663,4 +3268,19 @@ class _FallbackAdminRepo implements AdminRepository {
   }) async {}
   @override
   Future<void> deleteNotice(String noticeId) async {}
+}
+
+/// Compares cache keys: lists by identity, everything else by equality.
+bool _sameKey(List<Object?> a, List<Object?> b) {
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    final x = a[i];
+    final y = b[i];
+    if (x is List || y is List) {
+      if (!identical(x, y)) return false;
+    } else if (x != y) {
+      return false;
+    }
+  }
+  return true;
 }

@@ -192,7 +192,13 @@ export interface OnboardingEmailParams {
 
 export function generateOnboardingEmailHtml(params: OnboardingEmailParams): { html: string; text: string } {
   const loginUrl = params.loginUrl || "https://cse-jnu-eduportal.web.app/login";
-  const roleDisplay = params.role === "TEACHER" ? "Faculty Member" : params.role === "CR" ? "Class Representative (CR)" : "Student";
+  const roleDisplayMap: Record<string, string> = {
+    TEACHER: "Faculty Member",
+    CHAIRMAN: "Chairman of the Department",
+    ADMIN: "Administrator",
+    CR: "Class Representative (CR)",
+  };
+  const roleDisplay = roleDisplayMap[(params.role || "").toUpperCase()] || "Student";
 
   const text = `
 Dear ${params.fullName},

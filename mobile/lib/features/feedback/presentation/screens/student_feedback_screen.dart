@@ -283,7 +283,6 @@ class _StudentFeedbackScreenState extends State<StudentFeedbackScreen> with Sing
                       decoration: InputDecoration(
                         filled: true,
                         fillColor: isDark ? AppColors.surfaceContainerDark : AppColors.surfaceContainerLight,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                         hintText: 'Enter updated review comments...',
                       ),
                     ),
@@ -346,7 +345,7 @@ class _StudentFeedbackScreenState extends State<StudentFeedbackScreen> with Sing
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primaryLight,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    shape: const StadiumBorder(),
                   ),
                   onPressed: () async {
                     final comments = editCommentController.text.trim();
@@ -670,7 +669,7 @@ class _StudentFeedbackScreenState extends State<StudentFeedbackScreen> with Sing
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primaryLight,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                shape: const StadiumBorder(),
               ),
               onPressed: _controller.isSubmitting ? null : _submitFeedback,
               child: _controller.isSubmitting

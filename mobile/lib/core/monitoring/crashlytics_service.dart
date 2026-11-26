@@ -167,6 +167,7 @@ class CrashlyticsServiceImpl implements CrashlyticsService {
     int? year,
     int? semester,
   }) async {
+    if (kIsWeb) return; // Crashlytics doesn't run on the web
     try {
       // 1. Set opaque user UID (no names, emails, or personal identifiers)
       await _crashlytics.setUserIdentifier(uid);
@@ -184,6 +185,7 @@ class CrashlyticsServiceImpl implements CrashlyticsService {
 
   @override
   Future<void> clearUserContext() async {
+    if (kIsWeb) return; // Crashlytics doesn't run on the web
     try {
       await _crashlytics.setUserIdentifier('');
       await _crashlytics.setCustomKey('user_role', 'ANONYMOUS');

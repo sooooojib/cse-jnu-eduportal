@@ -3,6 +3,7 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../core/di/injection_container.dart';
 import '../controllers/counseling_controller.dart';
 import '../../domain/entities/counseling_entities.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 class StudentCounselingScreen extends StatefulWidget {
   const StudentCounselingScreen({super.key});
@@ -183,7 +184,7 @@ class _StudentCounselingScreenState extends State<StudentCounselingScreen> with 
                             if (mounted) {
                               messenger.showSnackBar(
                                 SnackBar(
-                                  content: Text(e.toString().replaceAll('Exception: ', '').replaceAll('ServerException: ', '')),
+                                  content: Text(friendlyError(e)),
                                   backgroundColor: Colors.redAccent,
                                 ),
                               );
@@ -692,7 +693,7 @@ class _StudentCounselingScreenState extends State<StudentCounselingScreen> with 
                         } catch (e) {
                           if (mounted) {
                             messenger.showSnackBar(
-                              SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
+                              SnackBar(content: Text(friendlyError(e))),
                             );
                           }
                         }

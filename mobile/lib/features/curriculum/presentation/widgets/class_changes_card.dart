@@ -8,6 +8,8 @@ import '../../../auth/domain/entities/user.dart';
 import '../../data/repositories/class_change_repository.dart';
 import '../../domain/entities/class_change.dart';
 import 'class_change_sheet.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
+import 'package:cse_jnu_eduportal/core/utils/refresh_on_reopen.dart';
 
 /// "Class changes": one-day extra / cancelled / moved / not-taken classes for
 /// the next 7 days, then the past 7 days.
@@ -29,12 +31,16 @@ class ClassChangesCard extends StatefulWidget {
   State<ClassChangesCard> createState() => ClassChangesCardState();
 }
 
-class ClassChangesCardState extends State<ClassChangesCard> {
+class ClassChangesCardState extends State<ClassChangesCard> with RefreshOnReopen {
   ClassChangeRepository? _repo;
   List<ClassChange> _changes = const [];
   bool _loading = true;
 
   bool get _canPlan => widget.user.role == UserRole.cr || widget.user.role.hasTeacherAccess;
+
+  // S2-13: reload when the app / tab is reopened.
+  @override
+  void onReopened() => reload();
 
   @override
   void initState() {
@@ -49,7 +55,7 @@ class ClassChangesCardState extends State<ClassChangesCard> {
       if (mounted) setState(() => _loading = false);
       return;
     }
-    final now = widget.now ?? DateTime.now();
+    final now = widget.now ?? ClassTime.now();
     final dates = [...ClassTime.pastDates(now).reversed, ...ClassTime.upcomingDates(now)];
     try {
       final u = widget.user;
@@ -101,14 +107,14 @@ class ClassChangesCardState extends State<ClassChangesCard> {
       await reload();
       widget.onChanged?.call();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Could not undo: $e'), backgroundColor: const Color(0xFFDC2626)));
+      messenger.showSnackBar(SnackBar(content: Text('Could not undo: ${friendlyError(e)}'), backgroundColor: const Color(0xFFDC2626)));
     }
   }
 
   String _day(String key) {
     final d = DateTime.tryParse(key);
     if (d == null) return key;
-    final today = ClassTime.dateOnly(widget.now ?? DateTime.now());
+    final today = ClassTime.dateOnly(widget.now ?? ClassTime.now());
     final diff = d.difference(today).inDays;
     if (diff == 0) return 'Today';
     if (diff == 1) return 'Tomorrow';
@@ -172,7 +178,7 @@ class ClassChangesCardState extends State<ClassChangesCard> {
     );
   }
 
-  String get _todayKey => ClassTime.dateKey(widget.now ?? DateTime.now());
+  String get _todayKey => ClassTime.dateKey(widget.now ?? ClassTime.now());
 
   /// Today onward, soonest first.
   List<ClassChange> get _upcomingChanges => _changes.where((c) => c.date.compareTo(_todayKey) >= 0).toList();

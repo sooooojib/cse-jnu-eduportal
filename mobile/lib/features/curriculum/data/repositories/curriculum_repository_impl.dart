@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../../core/utils/class_time.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
 import '../../../../core/config/env_config.dart';
@@ -27,6 +28,8 @@ abstract class CurriculumRemoteDataSource {
   Future<void> deleteExam(String examId);
   Future<List<CourseAssignmentModel>> getCourseAssignments({String? courseId, String? teacherId});
   Future<List<EnrollmentModel>> getEnrollments({int? year, int? semester, String? studentId});
+  Future<void> addRetakeEnrollment(Course course);
+  Future<void> removeRetakeEnrollment(String courseId);
 }
 
 class CurriculumRemoteDataSourceImpl implements CurriculumRemoteDataSource {
@@ -54,15 +57,40 @@ class CurriculumRemoteDataSourceImpl implements CurriculumRemoteDataSource {
     final profile = await _getUserProfile();
     final year = profile["year"] as int?;
     final semester = profile["semester"] as int?;
+    final uid = _auth.currentUser?.uid;
 
-    Query query = _firestore.collection("courses");
-    if (year != null) query = query.where("year", isEqualTo: year);
-    if (semester != null) query = query.where("semester", isEqualTo: semester);
+    final Map<String, CourseModel> byId = {};
+    if (year != null && semester != null) {
+      final snapshot = await _firestore
+          .collection("courses")
+          .where("year", isEqualTo: year)
+          .where("semester", isEqualTo: semester)
+          .get();
+      for (final doc in snapshot.docs) {
+        final c = CourseModel.fromJson({"id": doc.id, ...doc.data()});
+        byId[c.id] = c;
+      }
+    }
 
-    final snapshot = await query.get();
-    return snapshot.docs.map((doc) {
-      return CourseModel.fromJson({"id": doc.id, ...doc.data() as Map<String, dynamic>});
-    }).toList();
+    if (uid != null) {
+      try {
+        final enrollSnap = await _firestore
+            .collection("enrollments")
+            .where("studentId", isEqualTo: uid)
+            .get();
+        for (final doc in enrollSnap.docs) {
+          final courseId = (doc.data()["courseId"] as String? ?? "").trim();
+          if (courseId.isEmpty || byId.containsKey(courseId)) continue;
+          final cDoc = await _firestore.collection("courses").doc(courseId).get();
+          if (cDoc.exists && cDoc.data() != null) {
+            final c = CourseModel.fromJson({"id": cDoc.id, ...cDoc.data()!});
+            byId[c.id] = c;
+          }
+        }
+      } catch (_) {}
+    }
+
+    return byId.values.toList()..sort((a, b) => a.code.compareTo(b.code));
   }
 
   @override
@@ -102,26 +130,6 @@ class CurriculumRemoteDataSourceImpl implements CurriculumRemoteDataSource {
       final m = ScheduleSlotModel.fromJson({"id": doc.id, ...doc.data() as Map<String, dynamic>});
       map[m.id] = m;
     }
-
-    // Also check scheduleSlots collection to merge any slots added directly there
-    try {
-      Query slotsQuery = _firestore.collection("scheduleSlots");
-      if (year != null && semester != null) {
-        slotsQuery = slotsQuery.where("targetYear", isEqualTo: year).where("targetSemester", isEqualTo: semester);
-      } else if (teacherId != null && teacherId.isNotEmpty) {
-        slotsQuery = slotsQuery.where("teacherId", isEqualTo: teacherId);
-      }
-      if (day != null && day.toUpperCase() != "ALL") {
-        slotsQuery = slotsQuery.where("dayOfWeek", isEqualTo: day.toUpperCase());
-      }
-      final slotsSnap = await slotsQuery.get();
-      for (final doc in slotsSnap.docs) {
-        final m = ScheduleSlotModel.fromJson({"id": doc.id, ...doc.data() as Map<String, dynamic>});
-        if (!map.containsKey(m.id)) {
-          map[m.id] = m;
-        }
-      }
-    } catch (_) {}
 
     final list = map.values.toList();
     // Sort chronologically by startTime
@@ -163,7 +171,6 @@ class CurriculumRemoteDataSourceImpl implements CurriculumRemoteDataSource {
       }
     }
 
-    // Direct atomic write to both 'schedules' and 'scheduleSlots'
     final docRef = _firestore.collection('schedules').doc();
     final currentUserId = _auth.currentUser?.uid;
     final data = {
@@ -176,10 +183,7 @@ class CurriculumRemoteDataSourceImpl implements CurriculumRemoteDataSource {
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     };
-    final batch = _firestore.batch();
-    batch.set(docRef, data);
-    batch.set(_firestore.collection('scheduleSlots').doc(docRef.id), data);
-    await batch.commit();
+    await docRef.set(data);
     return ScheduleSlotModel.fromJson({...slot.toJson(), 'id': docRef.id});
   }
 
@@ -224,10 +228,7 @@ class CurriculumRemoteDataSourceImpl implements CurriculumRemoteDataSource {
       if (currentUserId != null) 'updatedBy': currentUserId,
       'updatedAt': FieldValue.serverTimestamp(),
     };
-    final batch = _firestore.batch();
-    batch.set(_firestore.collection('schedules').doc(slot.id), data, SetOptions(merge: true));
-    batch.set(_firestore.collection('scheduleSlots').doc(slot.id), data, SetOptions(merge: true));
-    await batch.commit();
+    await _firestore.collection('schedules').doc(slot.id).set(data, SetOptions(merge: true));
     return slot;
   }
 
@@ -243,10 +244,7 @@ class CurriculumRemoteDataSourceImpl implements CurriculumRemoteDataSource {
       }
     }
 
-    final batch = _firestore.batch();
-    batch.delete(_firestore.collection('schedules').doc(slotId));
-    batch.delete(_firestore.collection('scheduleSlots').doc(slotId));
-    await batch.commit();
+    await _firestore.collection('schedules').doc(slotId).delete();
   }
 
   @override
@@ -404,7 +402,11 @@ class CurriculumRemoteDataSourceImpl implements CurriculumRemoteDataSource {
   @override
   Future<List<Map<String, String>>> getAllTeachers() async {
     try {
-      final snap = await _firestore.collection("users").get();
+      // Teachers only (students may not list every user, and it saves reads).
+      final snap = await _firestore
+          .collection("users")
+          .where("role", whereIn: ['TEACHER', 'CHAIRMAN'])
+          .get();
       final teachers = <Map<String, String>>[];
       for (final doc in snap.docs) {
         final data = doc.data();
@@ -432,9 +434,36 @@ class CurriculumRemoteDataSourceImpl implements CurriculumRemoteDataSource {
     if (courseId != null) query = query.where("courseId", isEqualTo: courseId);
 
     final snapshot = await query.get();
-    return snapshot.docs.map((doc) {
-      return ExamModel.fromJson({"id": doc.id, ...doc.data() as Map<String, dynamic>});
-    }).toList();
+    final byId = <String, ExamModel>{
+      for (final doc in snapshot.docs) doc.id: ExamModel.fromJson({"id": doc.id, ...doc.data() as Map<String, dynamic>}),
+    };
+
+    // S2-06: a student's own current-semester view also lists the exams of
+    // the courses they retake (as the dashboard already does).
+    final role = (profile["role"] as String? ?? '').toUpperCase();
+    final isOwnCurrent = effectiveYear == profile["year"] && effectiveSemester == profile["semester"];
+    final uid = _auth.currentUser?.uid;
+    if (courseId == null && isOwnCurrent && (role == 'STUDENT' || role == 'CR') && uid != null) {
+      try {
+        final enroll = await _firestore
+            .collection("enrollments")
+            .where("studentId", isEqualTo: uid)
+            .get();
+        final retakeIds = enroll.docs
+            .where((d) => d.data()["type"] == "RETAKE")
+            .map((d) => d.data()["courseId"] as String? ?? '')
+            .where((c) => c.isNotEmpty)
+            .toList();
+        for (var i = 0; i < retakeIds.length; i += 10) {
+          final chunk = retakeIds.skip(i).take(10).toList();
+          final snap = await _firestore.collection("exams").where("courseId", whereIn: chunk).get();
+          for (final doc in snap.docs) {
+            byId[doc.id] = ExamModel.fromJson({"id": doc.id, ...doc.data()});
+          }
+        }
+      } catch (_) {}
+    }
+    return byId.values.toList();
   }
 
   @override
@@ -562,6 +591,34 @@ class CurriculumRemoteDataSourceImpl implements CurriculumRemoteDataSource {
     return snapshot.docs.map((doc) {
       return EnrollmentModel.fromJson({"id": doc.id, ...doc.data() as Map<String, dynamic>});
     }).toList();
+  }
+
+  @override
+  Future<void> addRetakeEnrollment(Course course) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) throw const ServerException(message: 'Not authenticated.');
+    final docId = '${course.id}_$uid';
+    await _firestore.collection('enrollments').doc(docId).set({
+      'id': docId,
+      'courseId': course.id,
+      'courseCode': course.code,
+      'courseTitle': course.title,
+      'studentId': uid,
+      'year': course.year,
+      'semester': course.semester,
+      'enrolledCourseIds': [course.id],
+      'type': 'RETAKE',
+      // Classes count for this student from this day on (not from term start).
+      'enrolledOn': ClassTime.dateKey(DateTime.now()),
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  @override
+  Future<void> removeRetakeEnrollment(String courseId) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) throw const ServerException(message: 'Not authenticated.');
+    await _firestore.collection('enrollments').doc('${courseId}_$uid').delete();
   }
 }
 
@@ -766,6 +823,24 @@ class CurriculumRepositoryImpl implements CurriculumRepository {
     try {
       final list = await remoteDataSource.getEnrollments(year: year, semester: semester, studentId: studentId);
       return List<Enrollment>.from(list);
+    } catch (e) {
+      throw ErrorHandler.handleException(e);
+    }
+  }
+
+  @override
+  Future<void> addRetakeEnrollment(Course course) async {
+    try {
+      await remoteDataSource.addRetakeEnrollment(course);
+    } catch (e) {
+      throw ErrorHandler.handleException(e);
+    }
+  }
+
+  @override
+  Future<void> removeRetakeEnrollment(String courseId) async {
+    try {
+      await remoteDataSource.removeRetakeEnrollment(courseId);
     } catch (e) {
       throw ErrorHandler.handleException(e);
     }

@@ -125,11 +125,17 @@ class MockCurriculumRepository implements CurriculumRepository {
 
   @override
   Future<List<Enrollment>> getEnrollments({int? year, int? semester, String? studentId}) async => const [];
+
+  @override
+  Future<void> addRetakeEnrollment(Course course) async {}
+
+  @override
+  Future<void> removeRetakeEnrollment(String courseId) async {}
 }
 
 class MockAttendanceRepository implements AttendanceRepository {
   @override
-  Future<AttendanceSummary> getMySummary() async {
+  Future<AttendanceSummary> getMySummary({int? year, int? semester}) async {
     return const AttendanceSummary(
       overallPercentage: 88.5,
       totalAttended: 23,

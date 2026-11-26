@@ -14,6 +14,8 @@ import '../../../../shared/widgets/states/app_loading_view.dart';
 import '../../domain/entities/department_notice.dart';
 import '../../domain/repositories/admin_repository.dart';
 import '../widgets/admin_filter_dropdown.dart';
+import 'package:cse_jnu_eduportal/core/config/app_features.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 class AdminNotificationHubScreen extends StatefulWidget {
   final AdminRepository? repository;
@@ -58,7 +60,7 @@ class _AdminNotificationHubScreenState extends State<AdminNotificationHubScreen>
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage = e.toString();
+        _errorMessage = friendlyError(e);
       });
     }
   }
@@ -95,7 +97,7 @@ class _AdminNotificationHubScreenState extends State<AdminNotificationHubScreen>
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e'), backgroundColor: const Color(0xFFDC2626)),
+            SnackBar(content: Text(friendlyError(e)), backgroundColor: const Color(0xFFDC2626)),
           );
         }
       }
@@ -275,6 +277,7 @@ class _AdminNotificationHubScreenState extends State<AdminNotificationHubScreen>
                       ),
                       const SizedBox(height: 16),
 
+                      if (AppFeatures.fileUploads) ...[
                       // 1. Photo Gallery
                       _buildPickerTile(
                         icon: Icons.photo_library_rounded,
@@ -341,6 +344,7 @@ class _AdminNotificationHubScreenState extends State<AdminNotificationHubScreen>
                       ),
                       const SizedBox(height: 10),
 
+                      ],
                       // 4. PDF / Document URL
                       _buildPickerTile(
                         icon: Icons.link_rounded,
@@ -724,11 +728,11 @@ class _AdminNotificationHubScreenState extends State<AdminNotificationHubScreen>
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         const Text(
-                                          'Tap to Upload File',
+                                          AppFeatures.fileUploads ? 'Tap to Upload File' : 'Tap to Attach a Link',
                                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                                         ),
                                         Text(
-                                          'PDF, Photo, or any document',
+                                          AppFeatures.fileUploads ? 'PDF, Photo, or any document' : 'Paste a Google Drive / PDF link',
                                           style: TextStyle(
                                             fontSize: 12,
                                             color: isDark ? Colors.white54 : const Color(0xFF64748B),
@@ -899,7 +903,7 @@ class _AdminNotificationHubScreenState extends State<AdminNotificationHubScreen>
                                         if (mounted) {
                                           ScaffoldMessenger.of(context).showSnackBar(
                                             SnackBar(
-                                              content: Text('Error broadcasting notice: $e'),
+                                              content: Text('Error broadcasting notice: ${friendlyError(e)}'),
                                               backgroundColor: const Color(0xFFDC2626),
                                             ),
                                           );

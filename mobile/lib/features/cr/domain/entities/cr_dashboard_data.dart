@@ -48,10 +48,17 @@ class CrDashboardData extends Equatable {
   final bool isTomorrow;
   final bool isFromCache;
 
+  // 7. Live Attendance Sessions & Holiday State
+  final List<AttendanceSession> openAttendanceSessions;
+  final String? todayHolidayTitle;
+  final String? tomorrowHolidayTitle;
+
   List<ScheduleSlot> get timeAwareClasses =>
       isTomorrow ? tomorrowClasses : todayClasses;
   String get activeDateLabel =>
       isTomorrow ? tomorrowDateLabel : targetDateLabel;
+  String? get activeHolidayTitle =>
+      isTomorrow ? tomorrowHolidayTitle : todayHolidayTitle;
 
   const CrDashboardData({
     required this.crId,
@@ -83,6 +90,9 @@ class CrDashboardData extends Equatable {
     required this.tomorrowDateLabel,
     this.isTomorrow = false,
     this.isFromCache = false,
+    this.openAttendanceSessions = const [],
+    this.todayHolidayTitle,
+    this.tomorrowHolidayTitle,
   });
 
   @override
@@ -116,5 +126,8 @@ class CrDashboardData extends Equatable {
         tomorrowDateLabel,
         isTomorrow,
         isFromCache,
+        openAttendanceSessions,
+        todayHolidayTitle,
+        tomorrowHolidayTitle,
       ];
 }

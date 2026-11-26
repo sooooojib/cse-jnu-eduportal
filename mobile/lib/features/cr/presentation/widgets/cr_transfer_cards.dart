@@ -8,6 +8,7 @@ import '../../../../shared/widgets/dialogs/app_confirmation_dialog.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../../data/repositories/cr_transfer_repository.dart';
 import '../../domain/entities/cr_transfer.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 CrTransferRepository? _defaultRepo() =>
     sl.isRegistered<CrTransferRepository>() ? sl<CrTransferRepository>() : null;
@@ -237,7 +238,7 @@ class _CrTransferInvitationCardState extends State<CrTransferInvitationCard> {
       }
       widget.onResponded?.call();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: const Color(0xFFDC2626)));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyError(e)), backgroundColor: const Color(0xFFDC2626)));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

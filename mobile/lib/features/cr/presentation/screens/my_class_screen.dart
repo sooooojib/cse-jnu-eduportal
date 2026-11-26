@@ -12,6 +12,7 @@ import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../../data/repositories/cr_transfer_repository.dart';
 import '../../domain/entities/cr_transfer.dart';
 import '../widgets/cr_transfer_cards.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 /// "My Class" for Students and CRs: everyone in the same semester and session
 /// with their role, plus a "CR Requests" tab.
@@ -124,7 +125,7 @@ class _MyClassScreenState extends State<MyClassScreen> with SingleTickerProvider
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = e.toString();
+        _error = friendlyError(e);
       });
     }
   }
@@ -157,7 +158,7 @@ class _MyClassScreenState extends State<MyClassScreen> with SingleTickerProvider
       await action();
       messenger.showSnackBar(SnackBar(content: Text(success), backgroundColor: const Color(0xFF047857)));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: const Color(0xFFDC2626)));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyError(e)), backgroundColor: const Color(0xFFDC2626)));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

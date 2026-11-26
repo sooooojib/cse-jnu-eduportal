@@ -15,6 +15,8 @@ import '../../../auth/presentation/controllers/auth_controller.dart';
 import 'package:flutter/foundation.dart';
 import '../../../../core/constants/role_constants.dart';
 import '../../../../core/utils/avatar_image_resolver.dart';
+import 'package:cse_jnu_eduportal/core/config/app_features.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 class TeacherProfileDialog extends StatefulWidget {
   final User teacher;
@@ -83,6 +85,13 @@ class _TeacherProfileDialogState extends State<TeacherProfileDialog> {
   }
 
   Future<void> _showPhotoPickerSheet(BuildContext context, bool isDark) async {
+    final hasPhoto = _currentTeacher.avatarUrl != null && _currentTeacher.avatarUrl!.isNotEmpty;
+    if (!AppFeatures.fileUploads && !hasPhoto) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(AppFeatures.uploadsOffMessage)),
+      );
+      return;
+    }
     await showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -114,6 +123,7 @@ class _TeacherProfileDialogState extends State<TeacherProfileDialog> {
             ),
             const SizedBox(height: 16),
 
+            if (AppFeatures.fileUploads) ...[
             // 1. Photo Gallery
             _buildSourceOptionTile(
               icon: Icons.photo_library_rounded,
@@ -155,6 +165,7 @@ class _TeacherProfileDialogState extends State<TeacherProfileDialog> {
               },
             ),
 
+            ],
             if (_currentTeacher.avatarUrl != null && _currentTeacher.avatarUrl!.isNotEmpty) ...[
               const SizedBox(height: 10),
               _buildSourceOptionTile(
@@ -256,7 +267,7 @@ class _TeacherProfileDialogState extends State<TeacherProfileDialog> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Could not access image: $e'),
+            content: Text('Could not access image: ${friendlyError(e)}'),
             backgroundColor: const Color(0xFFDC2626),
             behavior: SnackBarBehavior.floating,
           ),
@@ -281,7 +292,7 @@ class _TeacherProfileDialogState extends State<TeacherProfileDialog> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Could not access file system: $e'),
+            content: Text('Could not access file system: ${friendlyError(e)}'),
             backgroundColor: const Color(0xFFDC2626),
             behavior: SnackBarBehavior.floating,
           ),
@@ -388,7 +399,7 @@ class _TeacherProfileDialogState extends State<TeacherProfileDialog> {
         setState(() => _isUploadingPhoto = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to save avatar: $e'),
+            content: Text('Failed to save avatar: ${friendlyError(e)}'),
             backgroundColor: const Color(0xFFDC2626),
             behavior: SnackBarBehavior.floating,
           ),
@@ -435,7 +446,7 @@ class _TeacherProfileDialogState extends State<TeacherProfileDialog> {
         setState(() => _isUploadingPhoto = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to remove photo: $e'),
+            content: Text('Failed to remove photo: ${friendlyError(e)}'),
             backgroundColor: const Color(0xFFDC2626),
             behavior: SnackBarBehavior.floating,
           ),
@@ -502,7 +513,7 @@ class _TeacherProfileDialogState extends State<TeacherProfileDialog> {
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to update profile: $e'),
+            content: Text('Failed to update profile: ${friendlyError(e)}'),
             backgroundColor: const Color(0xFFDC2626),
             behavior: SnackBarBehavior.floating,
           ),
@@ -819,8 +830,8 @@ class _TeacherProfileDialogState extends State<TeacherProfileDialog> {
         ),
         const SizedBox(height: 14),
 
-        // Button to pick photo from phone / file system
-        SizedBox(
+        // Button to pick photo from phone / file system (hidden while uploads are off)
+        if (AppFeatures.fileUploads) SizedBox(
           width: double.infinity,
           child: OutlinedButton.icon(
             onPressed: () => _showPhotoPickerSheet(context, isDark),

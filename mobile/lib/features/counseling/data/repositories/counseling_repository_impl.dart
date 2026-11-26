@@ -354,8 +354,11 @@ class CounselingRemoteDataSourceImpl implements CounselingRemoteDataSource {
         });
 
         // Mark competing requests as REJECTED
+        // Filter by the slot's teacher so the rules can verify the query
+        // (only a booking's teacher / admins may read it).
         final competingQuery = await _firestore
             .collection('counselingBookings')
+            .where('teacherId', isEqualTo: bData['teacherId'])
             .where('slotId', isEqualTo: slotId)
             .where('status', isEqualTo: 'PENDING')
             .get();

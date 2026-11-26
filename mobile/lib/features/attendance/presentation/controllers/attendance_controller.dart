@@ -4,6 +4,8 @@ import '../../data/services/class_attendance_service.dart';
 import '../../domain/entities/attendance_entities.dart';
 import '../../domain/repositories/attendance_repository.dart';
 import '../../../../core/error/failures.dart';
+import '../../../../core/utils/class_time.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 abstract class AttendanceState {}
 class AttendanceInitial extends AttendanceState {}
@@ -57,6 +59,7 @@ class AttendanceController extends ChangeNotifier {
   String _currentCode = '';
   DateTime? _codeIssuedAt;
   bool _lastSaveOk = true;
+  int? _lastSyncedPresentCount;
 
   AttendanceController({
     required this.getAttendanceSummaryUseCase,
@@ -96,16 +99,23 @@ class AttendanceController extends ChangeNotifier {
 
   // ─── Student ─────────────────────────────────────────────────────────────
 
-  Future<void> fetchSummary() async {
+  /// The past semester being viewed (null = current semester).
+  (int, int)? viewingSemester;
+
+  Future<void> fetchSummary({(int, int)? semester, bool keepView = true}) async {
+    if (!keepView || semester != null) viewingSemester = semester;
     _state = AttendanceLoading();
     notifyListeners();
 
     try {
-      final summary = await getAttendanceSummaryUseCase.execute();
+      final v = viewingSemester;
+      final summary = v == null
+          ? await getAttendanceSummaryUseCase.execute()
+          : await getAttendanceSummaryUseCase.execute(year: v.$1, semester: v.$2);
       _state = AttendanceLoaded(summary);
       notifyListeners();
     } catch (e) {
-      final message = e is Failure ? e.message : e.toString();
+      final message = friendlyError(e);
       _state = AttendanceError(message);
       notifyListeners();
     }
@@ -156,11 +166,34 @@ class AttendanceController extends ChangeNotifier {
 
   // ─── Teacher: session ───────────────────────────────────────────────────
 
+  Future<AttendanceSession?> findOpenSession(String courseId) async {
+    if (getActiveAttendanceSessionUseCase == null) return null;
+    try {
+      final session = await getActiveAttendanceSessionUseCase!.execute(courseId: courseId);
+      if (session == null || !session.isActive) return null;
+      // No end time (legacy / demo data) counts as expired.
+      final expired = session.expiresAt == null || !session.expiresAt!.isAfter(ClassTime.instant());
+      return expired ? null : session;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> resumeSession(AttendanceSession session) async {
+    _teacherErrorMessage = null;
+    _activeSession = session;
+    await loadSessionRoster(session.id);
+    _goLive(session, issueCodeNow: true);
+    notifyListeners();
+  }
+
   Future<void> loadActiveSession(String courseId) async {
     if (getActiveAttendanceSessionUseCase == null) return;
     try {
       _teacherErrorMessage = null;
-      final session = await getActiveAttendanceSessionUseCase!.execute(courseId: courseId);
+      final raw = await getActiveAttendanceSessionUseCase!.execute(courseId: courseId);
+      final expired = raw != null && (raw.expiresAt == null || !raw.expiresAt!.isAfter(ClassTime.instant()));
+      final session = (raw != null && raw.isActive && !expired) ? raw : null;
       _activeSession = session;
       if (session != null) {
         await loadSessionRoster(session.id);
@@ -172,7 +205,7 @@ class AttendanceController extends ChangeNotifier {
       }
       notifyListeners();
     } catch (e) {
-      _teacherErrorMessage = e is Failure ? e.message : e.toString();
+      _teacherErrorMessage = friendlyError(e);
       notifyListeners();
     }
   }
@@ -205,6 +238,7 @@ class AttendanceController extends ChangeNotifier {
       _activeSession = session;
       _currentCode = session.code;
       _codeIssuedAt = DateTime.now();
+      _lastSyncedPresentCount = session.totalPresentCount;
       _isStartingSession = false;
       await loadSessionRoster(session.id);
       _goLive(session);
@@ -212,7 +246,7 @@ class AttendanceController extends ChangeNotifier {
       return session;
     } catch (e) {
       _isStartingSession = false;
-      _teacherErrorMessage = e is Failure ? e.message : e.toString();
+      _teacherErrorMessage = friendlyError(e);
       notifyListeners();
       rethrow;
     }
@@ -270,7 +304,16 @@ class AttendanceController extends ChangeNotifier {
         changed = true;
       }
     }
-    if (changed) notifyListeners();
+    if (changed) {
+      final s = _activeSession;
+      final svc = service;
+      final count = presentCount;
+      if (s != null && s.isActive && svc != null && _lastSyncedPresentCount != count) {
+        _lastSyncedPresentCount = count;
+        svc.updateSessionPresentCount(s.id, count);
+      }
+      notifyListeners();
+    }
   }
 
   /// Stops rotating the code (e.g. when the screen closes).
@@ -284,7 +327,7 @@ class AttendanceController extends ChangeNotifier {
       _activeSession = s.copyWith(expiresAt: next);
       notifyListeners();
     } catch (e) {
-      _teacherErrorMessage = e is Failure ? e.message : e.toString();
+      _teacherErrorMessage = friendlyError(e);
       notifyListeners();
     }
   }
@@ -308,7 +351,7 @@ class AttendanceController extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       _isDeactivatingSession = false;
-      _teacherErrorMessage = e is Failure ? e.message : e.toString();
+      _teacherErrorMessage = friendlyError(e);
       notifyListeners();
       rethrow;
     }
@@ -335,7 +378,7 @@ class AttendanceController extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       _isDeactivatingSession = false;
-      _teacherErrorMessage = e is Failure ? e.message : e.toString();
+      _teacherErrorMessage = friendlyError(e);
       notifyListeners();
       rethrow;
     }
@@ -359,7 +402,7 @@ class AttendanceController extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       _isLoadingRoster = false;
-      _teacherErrorMessage = e is Failure ? e.message : e.toString();
+      _teacherErrorMessage = friendlyError(e);
       notifyListeners();
     }
   }
@@ -443,7 +486,7 @@ class AttendanceController extends ChangeNotifier {
     } catch (e) {
       _isSavingRoster = false;
       _lastSaveOk = false;
-      _teacherErrorMessage = e is Failure ? e.message : e.toString();
+      _teacherErrorMessage = friendlyError(e);
       notifyListeners();
       rethrow;
     }
@@ -452,6 +495,50 @@ class AttendanceController extends ChangeNotifier {
   // ─── Teacher: history & reports ─────────────────────────────────────────
 
   Future<List<AttendanceSession>> recentSessions() async => service?.recentSessions() ?? const [];
+
+  /// S2-09: a session that was never closed (teacher's app closed) is
+  /// "stale" once its time ran out over 15 minutes ago (room to Extend), or
+  /// it is from an earlier day. The one on screen now is never stale.
+  bool isStale(AttendanceSession s, {DateTime? now}) {
+    if (!s.isActive || s.id == _activeSession?.id) return false;
+    // [now] is a real moment; "today" is its date in Bangladesh (S2-10).
+    final t = now ?? ClassTime.instant();
+    final today = ClassTime.dateKey(ClassTime.dhaka(t));
+    if (s.sessionDate.isNotEmpty && s.sessionDate.compareTo(today) < 0) return true;
+    final exp = s.expiresAt;
+    return exp != null && exp.isBefore(t.subtract(const Duration(minutes: 15)));
+  }
+
+  /// Closes one session the way "Close & save" does: everyone on the class
+  /// list without a mark is recorded absent, the count is recounted.
+  Future<void> closeSession(AttendanceSession s) async {
+    if (service == null) return deactivateSession(s.id);
+    final roster = getSessionRosterUseCase == null
+        ? const <AttendanceRosterItem>[]
+        : (await getSessionRosterUseCase!.execute(sessionId: s.id)).roster;
+    await service!.finishSession(sessionId: s.id, roster: roster);
+  }
+
+  /// Runs when the teacher opens Attendance: closes all their stale
+  /// sessions. Returns how many were closed. Failures are skipped (tried
+  /// again next time).
+  Future<int> closeStaleSessions({DateTime? now}) async {
+    if (service == null) return 0;
+    var closed = 0;
+    List<AttendanceSession> list;
+    try {
+      list = await service!.recentSessions(days: 30);
+    } catch (_) {
+      return 0;
+    }
+    for (final s in list.where((s) => isStale(s, now: now))) {
+      try {
+        await closeSession(s);
+        closed++;
+      } catch (_) {}
+    }
+    return closed;
+  }
 
   Future<CourseAttendanceReport?> courseReport(String courseId) async => service?.courseReport(courseId);
 

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+export 'teacher_requests_view.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app/router/route_names.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../shared/widgets/states/app_error_state_view.dart';
 import '../../../../shared/widgets/states/app_loading_view.dart';
 import '../../../admin/domain/entities/teacher_monitoring.dart';
-import '../../../admin/domain/repositories/admin_repository.dart';
 import '../../../admin/domain/repositories/teacher_monitoring_repository.dart';
 import '../../../admin/presentation/controllers/admin_dashboard_controller.dart';
 import '../../../admin/presentation/controllers/admin_dashboard_state.dart';
@@ -13,7 +13,7 @@ import '../../../admin/presentation/screens/teacher_course_monitoring_screen.dar
 import '../../../admin/presentation/widgets/admin_overview_grid.dart';
 import '../../../admin/presentation/widgets/admin_pending_signups_card.dart';
 import '../../../admin/presentation/widgets/admin_quick_actions_grid.dart';
-import '../../../auth/domain/entities/signup_request.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 /// "Department Admin" content for the Chairman, rendered inside the faculty
 /// dashboard when the Admin View is selected.
@@ -141,7 +141,7 @@ class _TeacherMonitoringSummaryCardState extends State<TeacherMonitoringSummaryC
       final report = await repo.loadReport(periodStart: MonitoringPeriodPreference.read());
       if (mounted) setState(() => _report = report);
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = friendlyError(e));
     }
   }
 
@@ -235,111 +235,6 @@ class _TeacherMonitoringSummaryCardState extends State<TeacherMonitoringSummaryC
           ],
         ],
       ),
-    );
-  }
-}
-
-/// Limited Admin View for faculty members on the signup review committee:
-/// they can review Student / CR registrations only.
-class DelegateAdminView extends StatefulWidget {
-  final AdminRepository? repository;
-
-  const DelegateAdminView({super.key, this.repository});
-
-  @override
-  State<DelegateAdminView> createState() => _DelegateAdminViewState();
-}
-
-class _DelegateAdminViewState extends State<DelegateAdminView> {
-  late final AdminRepository _repository;
-  List<SignupRequest>? _requests;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _repository = widget.repository ?? sl<AdminRepository>();
-    _load();
-  }
-
-  Future<void> _load() async {
-    try {
-      final list = await _repository.getPendingSignupRequests();
-      if (!mounted) return;
-      setState(() {
-        _requests = list.where((r) => r.role.isStudentSide).toList();
-        _error = null;
-      });
-    } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
-    }
-  }
-
-  Future<void> _run(Future<void> Function() action, String success) async {
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await action();
-      messenger.showSnackBar(SnackBar(content: Text(success), backgroundColor: const Color(0xFF047857)));
-      _load();
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: const Color(0xFFDC2626)));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF2E1065) : const Color(0xFFFAF5FF),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: const Text(
-            'Signup committee access: you can review and approve Student and CR registration requests. '
-            'Faculty registrations and other department settings are handled by the Chairman.',
-            style: TextStyle(fontSize: 12.5, height: 1.4),
-          ),
-        ),
-        const SizedBox(height: 16),
-        if (_error != null)
-          AppErrorStateView(title: 'Unable to Load Requests', message: _error!, onRetry: _load)
-        else if (_requests == null)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 40),
-            child: AppLoadingView(message: 'Loading signup requests...'),
-          )
-        else
-          AdminPendingSignupsCard(
-            requests: _requests!,
-            onApprove: (req, year, semester) => _run(
-              () => _repository.approveSignup(
-                requestId: req.id,
-                assignedYear: year,
-                assignedSemester: semester,
-              ),
-              'Approved ${req.fullName}',
-            ),
-            onReject: (req, reason) => _run(
-              () => _repository.rejectSignup(requestId: req.id, reason: reason),
-              'Rejected ${req.fullName}',
-            ),
-            onViewAll: () => context.push(RouteNames.adminSignupRequests),
-          ),
-        const SizedBox(height: 12),
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton.icon(
-            onPressed: () => context.push(RouteNames.adminSignupRequests),
-            icon: const Icon(Icons.list_alt_rounded, size: 18),
-            label: const Text('All signup requests'),
-          ),
-        ),
-      ],
     );
   }
 }

@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app/router/route_names.dart';
+import '../../../../core/constants/role_constants.dart';
+import '../../../../core/di/injection_container.dart';
 import '../../../../core/utils/context_extensions.dart';
+import '../../../auth/presentation/controllers/auth_controller.dart';
+import 'department_holidays_sheet.dart';
+import 'promote_batch_sheet.dart';
 
 class AdminQuickActionsGrid extends StatelessWidget {
   final void Function(int tabIndex)? onNavigateTab;
@@ -11,6 +16,11 @@ class AdminQuickActionsGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = context.isDarkMode;
+    final currentRole = sl.isRegistered<AuthController>()
+        ? sl<AuthController>().currentUser?.role
+        : null;
+    final canMarkHoliday =
+        currentRole == null || currentRole == UserRole.admin || currentRole == UserRole.chairman;
 
     final actions = [
       _QuickActionItem(
@@ -58,6 +68,24 @@ class AdminQuickActionsGrid extends StatelessWidget {
         color: const Color(0xFF0891B2),
         route: RouteNames.adminRoutine,
       ),
+      if (canMarkHoliday)
+        _QuickActionItem(
+          title: 'Mark Holiday',
+          subtitle: 'Set a date as holiday',
+          icon: Icons.event_busy_rounded,
+          color: const Color(0xFFD97706),
+          route: '',
+          onTap: () => DepartmentHolidaysSheet.show(context),
+        ),
+      if (canMarkHoliday)
+        _QuickActionItem(
+          title: 'Promote Batch',
+          subtitle: 'Move a semester up',
+          icon: Icons.upgrade_rounded,
+          color: const Color(0xFF7C3AED),
+          route: '',
+          onTap: () => PromoteBatchSheet.show(context),
+        ),
       _QuickActionItem(
         title: 'Teacher Monitoring',
         subtitle: 'Classes held, missed, not taken',
@@ -67,7 +95,7 @@ class AdminQuickActionsGrid extends StatelessWidget {
       ),
       _QuickActionItem(
         title: 'Attendance Logs',
-        subtitle: 'All attendance sessions',
+        subtitle: 'Sessions of the last 60 days',
         icon: Icons.verified_user_outlined,
         color: const Color(0xFF0D9488),
         route: RouteNames.adminAttendance,
@@ -116,7 +144,9 @@ class AdminQuickActionsGrid extends StatelessWidget {
 
             return InkWell(
               onTap: () {
-                if (item.targetTabIndex != null && onNavigateTab != null) {
+                if (item.onTap != null) {
+                  item.onTap!();
+                } else if (item.targetTabIndex != null && onNavigateTab != null) {
                   onNavigateTab!(item.targetTabIndex!);
                 } else {
                   context.push(item.route);
@@ -189,6 +219,7 @@ class _QuickActionItem {
   final Color color;
   final String route;
   final int? targetTabIndex;
+  final VoidCallback? onTap;
 
   const _QuickActionItem({
     required this.title,
@@ -197,5 +228,6 @@ class _QuickActionItem {
     required this.color,
     required this.route,
     this.targetTabIndex,
+    this.onTap,
   });
 }

@@ -5,6 +5,7 @@ import '../../../curriculum/domain/entities/curriculum_entities.dart';
 import '../../domain/entities/cr_dashboard_data.dart';
 import '../../domain/repositories/cr_repository.dart';
 import '../datasources/cr_remote_datasource.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 class CrRepositoryImpl implements CrRepository {
   final CrRemoteDataSource remoteDataSource;
@@ -24,7 +25,7 @@ class CrRepositoryImpl implements CrRepository {
     } on ServerException catch (e) {
       throw ServerFailure(message: e.message);
     } catch (e) {
-      throw ServerFailure(message: 'Failed to load CR dashboard data: $e');
+      throw ServerFailure(message: friendlyError(e));
     }
   }
 
@@ -41,7 +42,7 @@ class CrRepositoryImpl implements CrRepository {
     } on ServerException catch (e) {
       throw ServerFailure(message: e.message);
     } catch (e) {
-      throw ServerFailure(message: 'Failed to schedule class slot: $e');
+      throw ServerFailure(message: friendlyError(e));
     }
   }
 }

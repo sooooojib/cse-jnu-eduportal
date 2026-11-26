@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { initializeTestEnvironment, assertSucceeds, assertFails } = require('@firebase/rules-unit-testing');
-const { doc, setDoc, addDoc, deleteDoc, updateDoc, collection } = require('firebase/firestore');
+const { doc, setDoc, addDoc, deleteDoc, updateDoc, collection, writeBatch } = require('firebase/firestore');
 
 const RULES = fs.readFileSync(path.resolve(process.argv[2]), 'utf8');
 
@@ -103,6 +103,27 @@ async function test(name, fn) {
     await assertSucceeds(deleteDoc(doc(as('chairman'), 'exams/mid')));
   });
 
+  await test('An exam must use its course\'s own semester (S1-12)', async () => {
+    await reset();
+    await assertFails(add('teacher', exam('teacher', { year: 2 })));
+    await assertFails(add('chairman', exam('chairman', { semester: 2 })));
+    await assertFails(add('teacher', exam('teacher', { courseId: 'NO-SUCH' })));
+    await assertFails(updateDoc(doc(as('teacher'), 'exams/mid'), { year: 4 }));
+    await assertSucceeds(add('chairman', exam('chairman')));
+  });
+
+  await test('Moving a course to another semester moves its upcoming exam in the same batch (S2-08)', async () => {
+    await reset();
+    const db = as('chairman');
+    const b = writeBatch(db);
+    b.update(doc(db, 'courses/CSE-3101'), { year: 3, semester: 2 });
+    b.update(doc(db, 'exams/mid'), { year: 3, semester: 2 });
+    await assertSucceeds(b.commit());
+    // ...but an exam alone still can't leave its course's semester.
+    await reset();
+    await assertFails(updateDoc(doc(as('chairman'), 'exams/mid'), { semester: 2 }));
+  });
+
   await test('Bad data is rejected (date format, type, status)', async () => {
     await reset();
     await assertFails(add('teacher', exam('teacher', { examDate: '10/12/2026' })));
@@ -112,6 +133,7 @@ async function test(name, fn) {
 
   const note = (from, to) => ({
     userId: to, senderId: from, title: 'New Mid-Term', body: 'x', notificationType: 'EXAM_UPDATE', isRead: false,
+    referenceType: 'EXAM', referenceId: 'mid',
   });
 
   await test('CR can notify students of their own semester only', async () => {
@@ -120,9 +142,11 @@ async function test(name, fn) {
     await assertFails(addDoc(collection(as('cr'), 'notifications'), note('cr', 'otherStudent')));
   });
 
-  await test('Teacher can notify; students cannot; sender must be honest', async () => {
+  await test('Teacher notifies the exam\'s semester (not others); students cannot; sender must be honest', async () => {
     await reset();
-    await assertSucceeds(addDoc(collection(as('teacher'), 'notifications'), note('teacher', 'otherStudent')));
+    await assertSucceeds(addDoc(collection(as('teacher'), 'notifications'), note('teacher', 'student')));
+    await assertFails(addDoc(collection(as('teacher'), 'notifications'), note('teacher', 'otherStudent')));
+    await assertFails(addDoc(collection(as('otherTeacher'), 'notifications'), note('otherTeacher', 'student')));
     await assertFails(addDoc(collection(as('student'), 'notifications'), note('student', 'otherStudent')));
     await assertFails(addDoc(collection(as('cr'), 'notifications'), note('teacher', 'student')));
   });

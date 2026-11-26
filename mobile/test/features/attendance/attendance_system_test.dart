@@ -487,8 +487,38 @@ void main() {
 
       expect(find.text('Take Attendance'), findsOneWidget);
       expect(find.text('Start Attendance Session'), findsOneWidget);
-      expect(find.text('15 min'), findsNWidgets(2)); // code open for + late after
+      expect(find.text('15 min'), findsOneWidget);
       expect(find.byKey(const ValueKey('attendance_course')), findsOneWidget); // course picker inside the card
+    });
+
+    testWidgets('Opening Attendance tab or changing dropdown course stays on Start card until Start is tapped', (tester) async {
+      final controller = createController();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TeacherAttendanceTerminalScreen(
+              assignedCourseIds: const ['CSE-3101', 'CSE-3102'],
+              controller: controller,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Should remain on Start Attendance screen (not auto-enter rotating code screen)
+      expect(find.text('Start Attendance Session'), findsOneWidget);
+      expect(find.byKey(const ValueKey('attendance_live_card')), findsNothing);
+      expect(find.text('Resume'), findsOneWidget);
+
+      // Switching course in dropdown keeps user on Start card
+      await tester.tap(find.byKey(const ValueKey('attendance_course')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('CSE-3102').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Start Attendance Session'), findsOneWidget);
+      expect(find.byKey(const ValueKey('attendance_live_card')), findsNothing);
     });
   });
 }

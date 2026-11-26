@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../../domain/entities/curriculum_entities.dart';
 import '../../domain/repositories/curriculum_repository.dart';
-import '../../../../core/error/failures.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 abstract class ScheduleState {}
 
@@ -135,7 +135,7 @@ class ScheduleController extends ChangeNotifier {
       );
       notifyListeners();
     } catch (e) {
-      final message = e is Failure ? e.message : e.toString();
+      final message = friendlyError(e);
       _state = ScheduleError(message);
       notifyListeners();
     }
@@ -166,7 +166,7 @@ class ScheduleController extends ChangeNotifier {
       return true;
     } catch (e) {
       _isSubmitting = false;
-      _actionError = e is Failure ? e.message : e.toString();
+      _actionError = friendlyError(e);
       notifyListeners();
       return false;
     }
@@ -197,7 +197,7 @@ class ScheduleController extends ChangeNotifier {
       return true;
     } catch (e) {
       _isSubmitting = false;
-      _actionError = e is Failure ? e.message : e.toString();
+      _actionError = friendlyError(e);
       notifyListeners();
       return false;
     }
@@ -228,7 +228,7 @@ class ScheduleController extends ChangeNotifier {
       return true;
     } catch (e) {
       _isSubmitting = false;
-      _actionError = e is Failure ? e.message : e.toString();
+      _actionError = friendlyError(e);
       notifyListeners();
       return false;
     }
@@ -247,7 +247,7 @@ class ScheduleController extends ChangeNotifier {
         date: date,
       );
     } catch (e) {
-      _actionError = e is Failure ? e.message : e.toString();
+      _actionError = friendlyError(e);
       notifyListeners();
       return null;
     }
@@ -258,7 +258,7 @@ class ScheduleController extends ChangeNotifier {
     try {
       return await getWhatsAppBroadcastUseCase!.execute(year: year, semester: semester);
     } catch (e) {
-      _actionError = e is Failure ? e.message : e.toString();
+      _actionError = friendlyError(e);
       notifyListeners();
       return null;
     }
@@ -474,11 +474,14 @@ class ExamsController extends ChangeNotifier {
       );
       notifyListeners();
     } catch (e) {
-      final message = e is Failure ? e.message : e.toString();
+      final message = friendlyError(e);
       _state = ExamsError(message);
       notifyListeners();
     }
   }
+
+  /// The exam saved by the last successful [createExam] (with its new id).
+  Exam? lastCreatedExam;
 
   Future<bool> createExam(Exam exam) async {
     if (createExamUseCase == null) {
@@ -494,13 +497,14 @@ class ExamsController extends ChangeNotifier {
 
     try {
       final created = await createExamUseCase!.execute(exam);
+      lastCreatedExam = created;
       _isSubmitting = false;
       _actionSuccess = 'Exam scheduled: ${created.courseCode} on ${created.examDate}';
       await fetchExams(year: _currentYear, semester: _currentSemester, courseId: _currentCourseId);
       return true;
     } catch (e) {
       _isSubmitting = false;
-      _actionError = e is Failure ? e.message : e.toString();
+      _actionError = friendlyError(e);
       notifyListeners();
       return false;
     }
@@ -526,7 +530,7 @@ class ExamsController extends ChangeNotifier {
       return true;
     } catch (e) {
       _isSubmitting = false;
-      _actionError = e is Failure ? e.message : e.toString();
+      _actionError = friendlyError(e);
       notifyListeners();
       return false;
     }
@@ -552,7 +556,7 @@ class ExamsController extends ChangeNotifier {
       return true;
     } catch (e) {
       _isSubmitting = false;
-      _actionError = e is Failure ? e.message : e.toString();
+      _actionError = friendlyError(e);
       notifyListeners();
       return false;
     }

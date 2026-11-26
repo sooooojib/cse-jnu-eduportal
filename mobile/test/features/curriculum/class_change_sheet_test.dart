@@ -6,6 +6,8 @@ import 'package:cse_jnu_eduportal/features/curriculum/domain/entities/class_chan
 import 'package:cse_jnu_eduportal/features/curriculum/domain/entities/curriculum_entities.dart';
 import 'package:cse_jnu_eduportal/features/curriculum/presentation/widgets/class_change_sheet.dart';
 import 'package:cse_jnu_eduportal/features/curriculum/presentation/widgets/time_range_field.dart';
+import 'package:cse_jnu_eduportal/core/di/injection_container.dart';
+import 'package:cse_jnu_eduportal/features/curriculum/data/repositories/holiday_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -158,4 +160,57 @@ void main() {
     expect(find.text('Not taken'), findsNothing);
     expect(find.byKey(const ValueKey('date_earlier')), findsNothing);
   });
+
+  testWidgets('on a holiday the form explains it and does not allow cancelling', (tester) async {
+    if (sl.isRegistered<HolidayRepository>()) sl.unregister<HolidayRepository>();
+    sl.registerLazySingleton<HolidayRepository>(() => _FakeHolidays({ClassTime.dateKey(tomorrow): 'Victory Day'}));
+    addTearDown(() {
+      if (sl.isRegistered<HolidayRepository>()) sl.unregister<HolidayRepository>();
+    });
+
+    await open(tester, type: ClassChangeType.cancel);
+
+    expect(find.byKey(const ValueKey('change_holiday_notice')), findsOneWidget);
+    expect(find.textContaining('is a holiday: Victory Day'), findsOneWidget);
+    // The routine class is off that day, so there is nothing to pick and Save stays off.
+    expect(find.byKey(const ValueKey('target_a')), findsNothing);
+    expect(tester.widget<ElevatedButton>(find.byKey(const ValueKey('change_save'))).onPressed, isNull);
+  });
+
+  testWidgets('a report names the course\'s current teacher, not an outdated one on the routine slot', (tester) async {
+    final repo = FakeRepo(routine: [
+      ScheduleSlot(id: 'old', courseId: 'CSE-3101', courseCode: 'CSE-3101', courseTitle: 'OS', teacherId: 'previous_teacher',
+          teacherName: 'Previous Teacher', dayOfWeek: 'FRIDAY', startTime: '09:00 AM', endTime: '10:30 AM',
+          room: 'Room 302', targetYear: 3, targetSemester: 1),
+    ], courses: [os]);
+    tester.view.physicalSize = const Size(1000, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ClassChangeSheet(user: cr, repository: repo, now: now, initialDate: tomorrow, initialType: ClassChangeType.cancel),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('target_old')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('change_save')));
+    await tester.pumpAndSettle();
+    expect(repo.created.single.teacherId, 't1'); // the course's teacher
+    expect(repo.created.single.teacherName, 'Dr. Layek');
+  });
+}
+
+class _FakeHolidays implements HolidayRepository {
+  final Map<String, String> map;
+  _FakeHolidays(this.map);
+  @override
+  Future<Map<String, String>> holidayMap() async => map;
+  @override
+  Future<List<DepartmentHoliday>> listHolidays() async =>
+      [for (final e in map.entries) DepartmentHoliday(date: e.key, title: e.value)];
+  @override
+  Future<void> saveHoliday({required DateTime date, required String title, String? createdBy}) async {}
+  @override
+  Future<void> deleteHoliday(String dateKey) async {}
 }

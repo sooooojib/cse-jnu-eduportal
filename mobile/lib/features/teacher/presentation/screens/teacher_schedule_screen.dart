@@ -3,12 +3,20 @@ import '../../../../app/theme/role_colors.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/constants/role_constants.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/utils/class_time.dart';
 import '../../../../shared/widgets/dialogs/app_confirmation_dialog.dart';
 import '../../../../shared/widgets/states/app_error_state_view.dart';
 import '../../../attendance/presentation/screens/teacher_attendance_terminal_screen.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
+import '../../../curriculum/data/repositories/class_change_repository.dart';
+import '../../../curriculum/data/repositories/holiday_repository.dart';
+import '../../../curriculum/presentation/widgets/class_change_note.dart';
+import '../../../curriculum/domain/entities/class_change.dart';
 import '../../../curriculum/domain/entities/curriculum_entities.dart';
+import '../../../curriculum/domain/services/effective_schedule.dart';
 import '../../../curriculum/presentation/controllers/schedule_controller.dart';
+import '../../../curriculum/presentation/widgets/class_actions_sheet.dart';
+import '../../../curriculum/presentation/widgets/class_changes_card.dart';
 import '../../../curriculum/presentation/widgets/schedule_slot_form_dialog.dart';
 import '../../../curriculum/presentation/widgets/exam_management_view.dart';
 
@@ -26,13 +34,16 @@ class TeacherScheduleScreen extends StatefulWidget {
 
 class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
     with SingleTickerProviderStateMixin {
+  final _changesKey = GlobalKey<ClassChangesCardState>();
   late final ScheduleController _scheduleController;
   late final ExamsController _examsController;
   late final AuthController _authController;
   late final TabController _tabController;
 
   String? _selectedDay;
-  final List<String> _days = ['ALL', 'SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY'];
+  final List<String> _days = ['TODAY', 'TOMORROW', 'ALL', 'SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY'];
+  List<ClassChange> _classChanges = const [];
+  Map<String, String> _holidays = const {};
 
   @override
   void initState() {
@@ -51,24 +62,73 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
     super.dispose();
   }
 
+  String? _queryDayForFilter(String? filter) {
+    if (filter == null || filter == 'ALL' || filter == 'TODAY' || filter == 'TOMORROW') {
+      return null;
+    }
+    return filter;
+  }
+
   Future<void> _loadData() async {
     final user = _authController.currentUser;
     await Future.wait<dynamic>([
       _scheduleController.fetchSchedule(
-        day: _selectedDay == 'ALL' ? null : _selectedDay,
+        day: _queryDayForFilter(_selectedDay),
         teacherId: user?.id,
       ),
       _examsController.fetchExams(),
+      _loadChangesAndHolidays(),
     ]);
+  }
+
+  Future<void> _loadChangesAndHolidays() async {
+    final user = _authController.currentUser;
+    List<ClassChange> changes = const [];
+    Map<String, String> holidays = const {};
+
+    if (user != null && sl.isRegistered<ClassChangeRepository>()) {
+      try {
+        final repo = sl<ClassChangeRepository>();
+        final courses = await repo.plannableCourses(user);
+        final now = ClassTime.now();
+        final dates = [...ClassTime.pastDates(now).reversed, ...ClassTime.upcomingDates(now)];
+        changes = await repo.changesForCourses(
+          courseIds: courses.map((c) => c.id).toSet(),
+          from: dates.first,
+          to: dates.last,
+        );
+      } catch (_) {}
+    }
+
+    if (sl.isRegistered<HolidayRepository>()) {
+      try {
+        holidays = await sl<HolidayRepository>().holidayMap();
+      } catch (_) {}
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _classChanges = changes;
+      _holidays = holidays;
+    });
   }
 
   void _onDaySelected(String day) {
     setState(() => _selectedDay = day);
     final user = _authController.currentUser;
     _scheduleController.fetchSchedule(
-      day: day == 'ALL' ? null : day,
+      day: _queryDayForFilter(day),
       teacherId: user?.id,
     );
+  }
+
+  static DateTime _nextDateFor(String dayOfWeek, DateTime now) {
+    final today = ClassTime.dateOnly(now);
+    for (var i = 0; i < 7; i++) {
+      final d = today.add(Duration(days: i));
+      if (ClassTime.dayOfWeek(d) == dayOfWeek.toUpperCase()) return d;
+    }
+    return today;
   }
 
   Future<void> _handleDeleteSlot(ScheduleSlot slot) async {
@@ -134,8 +194,15 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
     return 0;
   }
 
-  String _determineSlotStatus(ScheduleSlot slot) {
-    final now = DateTime.now();
+  /// LIVE / COMPLETED only make sense for a class happening today: the
+  /// selected date must be today (or, in "All Days", the slot's weekday must
+  /// be today's). Any other day is simply UPCOMING.
+  String _determineSlotStatus(ScheduleSlot slot, {DateTime? effectiveDate}) {
+    final now = ClassTime.now();
+    final isToday = effectiveDate != null
+        ? ClassTime.dateKey(effectiveDate) == ClassTime.dateKey(now)
+        : slot.dayOfWeek.toUpperCase() == ClassTime.dayOfWeek(now);
+    if (!isToday) return 'UPCOMING';
     final currentMinutes = now.hour * 60 + now.minute;
     final startMinutes = _parseTimeToMinutes(slot.startTime);
     final endMinutes = _parseTimeToMinutes(slot.endTime);
@@ -292,6 +359,15 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (_authController.currentUser != null && sl.isRegistered<ClassChangeRepository>()) ...[
+                  ClassChangesCard(
+                    key: _changesKey,
+                    user: _authController.currentUser!,
+                    onChanged: _loadData,
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
                 // Day Filter Chips
                 SizedBox(
                   height: 38,
@@ -305,7 +381,12 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
 
                       return FilterChip(
                         label: Text(
-                          day == 'ALL' ? 'All Days' : day.substring(0, 3),
+                          switch (day) {
+                            'TODAY' => 'Today',
+                            'TOMORROW' => 'Tomorrow',
+                            'ALL' => 'All Days',
+                            _ => day.substring(0, 3),
+                          },
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
@@ -333,7 +414,12 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            _selectedDay == null || _selectedDay == 'ALL' ? "Scheduled Routine" : "$_selectedDay's Classes",
+                            switch (_selectedDay) {
+                              null || 'ALL' => 'Scheduled Routine',
+                              'TODAY' => "Today's Classes",
+                              'TOMORROW' => "Tomorrow's Classes",
+                              final d => "$d's Classes",
+                            },
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -383,52 +469,122 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
                     message: state.message,
                     onRetry: _loadData,
                   )
-                else if (state is ScheduleLoaded && state.slots.isEmpty)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(32),
-                    decoration: BoxDecoration(
-                      color: isDark ? AppColors.surfaceContainerDark : AppColors.surfaceContainerLight,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Column(
-                      children: [
-                        Icon(Icons.event_available_outlined, size: 48, color: Colors.grey.withOpacity(0.6)),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'No classes scheduled for this filter.',
-                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'Tap "+ Add Class" to create a new routine slot.',
-                          style: TextStyle(color: Colors.grey, fontSize: 12),
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton.icon(
-                          onPressed: () => _openScheduleDialog(),
-                          icon: const Icon(Icons.add),
-                          label: const Text('Schedule Class'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
-                            shape: const StadiumBorder(),
+                else if (state is ScheduleLoaded) ...[
+                  Builder(
+                    builder: (context) {
+                      final now = ClassTime.now();
+                      final DateTime? effectiveDate = switch (_selectedDay) {
+                        'TODAY' => ClassTime.dateOnly(now),
+                        'TOMORROW' => ClassTime.dateOnly(now.add(const Duration(days: 1))),
+                        null || 'ALL' => null,
+                        final d => _nextDateFor(d, now),
+                      };
+                      final holidayTitle = effectiveDate == null
+                          ? null
+                          : _holidays[ClassTime.dateKey(effectiveDate)];
+                      final visibleSlots = effectiveDate == null
+                          ? state.slots
+                          : EffectiveSchedule.forDate(
+                              routine: state.slots,
+                              changes: _classChanges,
+                              date: effectiveDate,
+                              holidays: _holidays,
+                            );
+
+                      final holidayNotice = holidayTitle == null
+                          ? null
+                          : Container(
+                              key: const ValueKey('schedule_holiday_notice'),
+                              width: double.infinity,
+                              margin: const EdgeInsets.only(bottom: 12),
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF13263E) : Colors.white,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: isDark ? Colors.white10 : const Color(0xFFE2E8F0)),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.event_busy_outlined,
+                                      size: 22, color: isDark ? Colors.white60 : const Color(0xFF64748B)),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text('Holiday: $holidayTitle',
+                                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          visibleSlots.isEmpty
+                                              ? 'No regular classes on this date.'
+                                              : 'Regular classes are off. Extra classes below still happen.',
+                                          style: TextStyle(
+                                            fontSize: 12.5,
+                                            color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                      if (holidayNotice != null && visibleSlots.isEmpty) return holidayNotice;
+
+                      if (visibleSlots.isEmpty) {
+                        return Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(32),
+                          decoration: BoxDecoration(
+                            color: isDark ? AppColors.surfaceContainerDark : AppColors.surfaceContainerLight,
+                            borderRadius: BorderRadius.circular(20),
                           ),
-                        ),
-                      ],
-                    ),
-                  )
-                else if (state is ScheduleLoaded)
-                  ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: state.slots.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 14),
-                    itemBuilder: (context, index) {
-                      final slot = state.slots[index];
-                      return _buildTimelineCard(slot, isDark);
+                          child: Column(
+                            children: [
+                              Icon(Icons.event_available_outlined, size: 48, color: Colors.grey.withValues(alpha: 0.6)),
+                              const SizedBox(height: 12),
+                              const Text(
+                                'No classes scheduled for this filter.',
+                                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                'Tap "+ Add Class" to create a new routine slot.',
+                                style: TextStyle(color: Colors.grey, fontSize: 12),
+                              ),
+                              const SizedBox(height: 16),
+                              ElevatedButton.icon(
+                                onPressed: () => _openScheduleDialog(),
+                                icon: const Icon(Icons.add),
+                                label: const Text('Schedule Class'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  foregroundColor: Colors.white,
+                                  shape: const StadiumBorder(),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      final list = ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: visibleSlots.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 14),
+                        itemBuilder: (context, index) {
+                          final slot = visibleSlots[index];
+                          return _buildTimelineCard(slot, isDark, effectiveDate: effectiveDate);
+                        },
+                      );
+                      return holidayNotice == null
+                          ? list
+                          : Column(children: [holidayNotice, list]);
                     },
                   ),
+                ],
 
                 const SizedBox(height: 80), // Padding for FAB
               ],
@@ -439,10 +595,15 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
     );
   }
 
-  Widget _buildTimelineCard(ScheduleSlot slot, bool isDark) {
-    final status = _determineSlotStatus(slot);
-    final isLive = status == 'LIVE';
+  Widget _buildTimelineCard(ScheduleSlot slot, bool isDark, {DateTime? effectiveDate}) {
+    final user = _authController.currentUser;
+    final status = _determineSlotStatus(slot, effectiveDate: effectiveDate);
+    final isLive = status == 'LIVE' && !slot.isCancelled && !slot.isNotTaken;
     final isCompleted = status == 'COMPLETED';
+    final hasEffectiveChange = slot.isCancelled || slot.isMoved || slot.isNotTaken;
+    final isOneDayVersion = slot.id.startsWith('change_') ||
+        hasEffectiveChange ||
+        (slot.isExtraClass && (slot.date?.isNotEmpty ?? false));
 
     return Container(
       decoration: BoxDecoration(
@@ -492,11 +653,35 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
                         ],
                       ),
                     ),
-                    if (isLive)
+                    if (hasEffectiveChange)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
-                          color: Colors.redAccent.withOpacity(0.12),
+                          color: slot.isCancelled || slot.isNotTaken
+                              ? Colors.redAccent.withValues(alpha: 0.12)
+                              : Colors.amber.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          slot.isCancelled
+                              ? 'Cancelled'
+                              : slot.isNotTaken
+                                  ? 'Not Taken'
+                                  : 'Moved',
+                          style: TextStyle(
+                            color: slot.isCancelled || slot.isNotTaken
+                                ? Colors.redAccent
+                                : const Color(0xFFB45309),
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      )
+                    else if (isLive)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Row(
@@ -524,7 +709,7 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.1),
+                          color: AppColors.primary.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Text('Upcoming', style: TextStyle(fontSize: 10, color: AppColors.primary, fontWeight: FontWeight.bold)),
@@ -536,10 +721,15 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
                 // Course Code & Title
                 Text(
                   '${slot.courseCode}: ${slot.courseTitle}',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    decoration: slot.isCancelled ? TextDecoration.lineThrough : null,
+                  ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
+                if (ClassChangeNote.shows(slot)) ClassChangeNote(slot: slot),
                 const SizedBox(height: 6),
 
                 // Room & Location
@@ -595,21 +785,39 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen>
                     ],
                     const Spacer(),
 
-                    // Edit & Delete Buttons
-                    IconButton(
-                      icon: const Icon(Icons.edit_outlined, size: 18),
-                      tooltip: 'Edit Slot',
-                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                      padding: const EdgeInsets.all(4),
-                      onPressed: () => _openScheduleDialog(existingSlot: slot),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
-                      tooltip: 'Delete Slot',
-                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                      padding: const EdgeInsets.all(4),
-                      onPressed: () => _handleDeleteSlot(slot),
-                    ),
+                    if (user != null &&
+                        sl.isRegistered<ClassChangeRepository>() &&
+                        effectiveDate != null)
+                      ClassModifyButton(
+                        user: user,
+                        slot: slot,
+                        date: effectiveDate,
+                        onChanged: () {
+                          _loadData();
+                          _changesKey.currentState?.reload();
+                        },
+                      ),
+
+                    // Edit & Delete act on the weekly routine only, never on a
+                    // one-day version (extra / moved / cancelled / not taken).
+                    if (!isOneDayVersion) ...[
+                      IconButton(
+                        key: ValueKey('edit_slot_${slot.id}'),
+                        icon: const Icon(Icons.edit_outlined, size: 18),
+                        tooltip: 'Edit Slot',
+                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                        padding: const EdgeInsets.all(4),
+                        onPressed: () => _openScheduleDialog(existingSlot: slot),
+                      ),
+                      IconButton(
+                        key: ValueKey('delete_slot_${slot.id}'),
+                        icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
+                        tooltip: 'Delete Slot',
+                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                        padding: const EdgeInsets.all(4),
+                        onPressed: () => _handleDeleteSlot(slot),
+                      ),
+                    ],
                   ],
                 ),
 

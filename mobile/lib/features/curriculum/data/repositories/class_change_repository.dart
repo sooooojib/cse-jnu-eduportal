@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../core/error/error_handler.dart';
 import '../../../../core/utils/class_time.dart';
@@ -72,12 +73,6 @@ class ClassChangeRepositoryImpl implements ClassChangeRepository {
       for (final d in main.docs) {
         byId[d.id] = ScheduleSlotModel.fromJson({'id': d.id, ...d.data()});
       }
-      try {
-        final legacy = await _firestore.collection('scheduleSlots').where('dayOfWeek', isEqualTo: day).get();
-        for (final d in legacy.docs) {
-          byId.putIfAbsent(d.id, () => ScheduleSlotModel.fromJson({'id': d.id, ...d.data()}));
-        }
-      } catch (_) {}
       return byId.values.toList();
     } catch (e) {
       throw ErrorHandler.handle(e);
@@ -174,11 +169,12 @@ class ClassChangeRepositoryImpl implements ClassChangeRepository {
   Future<void> create(ClassChange c) async {
     try {
       final date = DateTime.parse(c.date);
-      await _changes.add({
+      final docRef = await _changes.add({
         'type': c.type.value,
         'date': c.date,
         // Midday of the class date, used by security rules for the 7-day window.
-        'dateTs': Timestamp.fromDate(DateTime(date.year, date.month, date.day, 12)),
+        // Midday in Bangladesh of that date (the rules check date == its day).
+        'dateTs': Timestamp.fromDate(ClassTime.dhakaMidday(date)),
         'dayOfWeek': c.dayOfWeek,
         'courseId': c.courseId,
         'courseCode': c.courseCode,
@@ -199,9 +195,63 @@ class ClassChangeRepositoryImpl implements ClassChangeRepository {
         'createdByRole': c.createdByRole,
         'createdAt': FieldValue.serverTimestamp(),
       });
+
+      if (c.type != ClassChangeType.notTaken) {
+        // Tell the semester in the background: Save returns right away.
+        unawaited(_notifyBatch(c, referenceId: docRef.id).catchError((_) {}));
+      }
     } catch (e) {
       throw ErrorHandler.handle(e);
     }
+  }
+
+  /// Sends best-effort `SCHEDULE_UPDATE` notifications to students of the
+  /// target semester. Wrapped in try/catch so a notification failure never
+  /// blocks saving the class change itself.
+  Future<void> _notifyBatch(ClassChange c, {required String referenceId}) async {
+    try {
+      final snap = await _firestore
+          .collection('users')
+          .where('year', isEqualTo: c.targetYear)
+          .where('semester', isEqualTo: c.targetSemester)
+          .get();
+      final recipients = snap.docs.where((d) {
+        final role = (d.data()['role'] as String? ?? '').toUpperCase();
+        return d.id != c.createdBy && (role == 'STUDENT' || role == 'CR');
+      });
+      final name = c.courseCode.isNotEmpty ? c.courseCode : c.courseTitle;
+      final when = '${c.date}, ${ClassTime.normalize(c.startTime)}–${ClassTime.normalize(c.endTime)} (${c.room})';
+      final (title, body) = switch (c.type) {
+        ClassChangeType.cancel => (
+          'Class Cancelled: $name',
+          '$name on ${c.date} is cancelled.${(c.reason ?? '').trim().isNotEmpty ? ' ${c.reason!.trim()}' : ''}',
+        ),
+        ClassChangeType.move => (
+          'Class Moved: $name',
+          'Moved to $when.',
+        ),
+        ClassChangeType.extra => (
+          'Extra Class Added: $name',
+          '$name scheduled on $when.',
+        ),
+        ClassChangeType.notTaken => (
+          'Class Update: $name',
+          'Class on ${c.date} marked not taken.',
+        ),
+      };
+      await Future.wait(recipients.map((d) => _firestore.collection('notifications').add({
+            'userId': d.id,
+            'senderId': c.createdBy,
+            'title': title,
+            'body': body,
+            'notificationType': 'SCHEDULE_UPDATE',
+            'referenceType': 'CLASS_CHANGE',
+            'referenceId': referenceId,
+            'route': '/schedule',
+            'isRead': false,
+            'createdAt': FieldValue.serverTimestamp(),
+          }).then((_) {}, onError: (_) {})));
+    } catch (_) {}
   }
 
   @override

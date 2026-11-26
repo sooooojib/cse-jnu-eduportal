@@ -10,16 +10,16 @@ const RULES = fs.readFileSync(path.resolve(process.argv[2]), 'utf8');
 const USERS = {
   cr: { role: 'CR', year: 3, semester: 1, session: '2021-2022', isActive: true },
   student: { role: 'STUDENT', year: 3, semester: 1, isActive: true },
+  otherStudent: { role: 'STUDENT', year: 2, semester: 1, isActive: true },
   teacher: { role: 'TEACHER', assignedCourseIds: ['CSE-3101'], isActive: true },
   otherTeacher: { role: 'TEACHER', assignedCourseIds: ['CSE-1101'], isActive: true },
   admin: { role: 'ADMIN', isActive: true },
 };
 
 function daysFromNow(n) {
-  const d = new Date();
-  d.setDate(d.getDate() + n);
-  d.setHours(12, 0, 0, 0);
-  return d;
+  // Midday in Bangladesh of that day (06:00 UTC), as the app writes it (S2-10).
+  const t = new Date(Date.now() + 6 * 3600e3);
+  return new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate() + n, 6));
 }
 function key(d) {
   return d.toISOString().slice(0, 10);
@@ -61,6 +61,8 @@ async function test(name, fn) {
       const db = ctx.firestore();
       for (const [uid, data] of Object.entries(USERS)) await setDoc(doc(db, `users/${uid}`), data);
       await setDoc(doc(db, 'courses/CSE-3101'), { code: 'CSE-3101', teacherId: 'teacher', year: 3, semester: 1 });
+      await setDoc(doc(db, 'courses/CSE-1101'), { code: 'CSE-1101', teacherId: 'otherTeacher', year: 1, semester: 1 });
+      await setDoc(doc(db, 'schedules/slotOther'), { ...routineSlot, courseId: 'CSE-1101', targetYear: 1, teacherId: 'otherTeacher' });
       await setDoc(doc(db, 'schedules/routine1'), routineSlot);
       await setDoc(doc(db, 'schedules/oldExtra'), { ...routineSlot, date: '2026-01-01', createdBy: 'cr' });
       await setDoc(doc(db, 'classChanges/existing'), change('cr'));
@@ -95,6 +97,13 @@ async function test(name, fn) {
     await reset();
     await assertFails(addDoc(collection(as('cr'), 'classChanges'), change('cr', on(12))));
     await assertFails(addDoc(collection(as('cr'), 'classChanges'), change('cr', on(-10))));
+  });
+
+  await test('S2-10: the date must be the Dhaka date of dateTs', async () => {
+    await reset();
+    const d = daysFromNow(2);
+    const other = daysFromNow(3).toISOString().slice(0, 10);
+    await assertFails(addDoc(collection(as('cr'), 'classChanges'), change('cr', { date: other, dateTs: Timestamp.fromDate(d) })));
   });
 
   await test('CR can record changes for the past 7 days', async () => {
@@ -176,6 +185,64 @@ async function test(name, fn) {
     await assertFails(updateDoc(doc(as('otherTeacher'), 'schedules/routine1'), { room: 'Room 401' }));
     await assertFails(updateDoc(doc(as('teacher'), 'schedules/routine1'), { courseId: 'CSE-1101' }));
     await assertSucceeds(updateDoc(doc(as('admin'), 'schedules/routine1'), { room: 'Room 500' }));
+  });
+
+  await test('CR can send SCHEDULE_UPDATE notifications to own semester, not others', async () => {
+    await reset();
+    await assertSucceeds(addDoc(collection(as('cr'), 'notifications'), {
+      userId: 'student', senderId: 'cr', title: 'Class Moved', body: 'Room 401',
+      notificationType: 'SCHEDULE_UPDATE', isRead: false, referenceType: 'CLASS_CHANGE', referenceId: 'existing',
+    }));
+    await assertFails(addDoc(collection(as('cr'), 'notifications'), {
+      userId: 'otherStudent', senderId: 'cr', title: 'Class Moved', body: 'Room 401',
+      notificationType: 'SCHEDULE_UPDATE', isRead: false, referenceType: 'CLASS_CHANGE', referenceId: 'existing',
+    }));
+    // a notice must point at a real change made by the sender
+    await assertFails(addDoc(collection(as('cr'), 'notifications'), {
+      userId: 'student', senderId: 'cr', title: 'Class Moved', body: 'Room 401',
+      notificationType: 'SCHEDULE_UPDATE', isRead: false,
+    }));
+  });
+
+  await test('Only admin can write holidays; any signed-in user can read', async () => {
+    await reset();
+    await assertFails(setDoc(doc(as('cr'), 'holidays/2026-12-16'), { date: '2026-12-16', title: 'Victory Day' }));
+    await assertFails(setDoc(doc(as('teacher'), 'holidays/2026-12-16'), { date: '2026-12-16', title: 'Victory Day' }));
+    await assertSucceeds(setDoc(doc(as('admin'), 'holidays/2026-12-16'), { date: '2026-12-16', title: 'Victory Day' }));
+    await assertSucceeds(deleteDoc(doc(as('admin'), 'holidays/2026-12-16')));
+  });
+
+  await test('S1-04: a CR cannot file "not taken" for another semester\'s course', async () => {
+    await reset();
+    const d = on(-1);
+    await assertFails(addDoc(collection(as('cr'), 'classChanges'), change('cr', {
+      type: 'NOT_TAKEN', courseId: 'CSE-1101', courseCode: 'CSE-1101', teacherId: 'otherTeacher', originalSlotId: 'slotOther', ...d,
+    })));
+    // ...nor by claiming it is for their own semester
+    await assertFails(addDoc(collection(as('cr'), 'classChanges'), change('cr', {
+      type: 'NOT_TAKEN', courseId: 'CSE-1101', courseCode: 'CSE-1101', teacherId: 'otherTeacher', originalSlotId: 'slotOther',
+      targetYear: 3, targetSemester: 1, ...d,
+    })));
+  });
+
+  await test('S1-04: a report must name the course\'s real teacher', async () => {
+    await reset();
+    await assertFails(addDoc(collection(as('cr'), 'classChanges'), change('cr', {
+      type: 'NOT_TAKEN', teacherId: 'otherTeacher', originalSlotId: 'routine1', ...on(-1),
+    })));
+    await assertSucceeds(addDoc(collection(as('cr'), 'classChanges'), change('cr', {
+      type: 'NOT_TAKEN', teacherId: 'teacher', originalSlotId: 'routine1', ...on(-1),
+    })));
+  });
+
+  await test('S1-04: cancel / move / not taken must point at a class of that course', async () => {
+    await reset();
+    await assertFails(addDoc(collection(as('cr'), 'classChanges'), change('cr', { type: 'CANCEL', originalSlotId: 'slotOther' })));
+    await assertFails(addDoc(collection(as('cr'), 'classChanges'), change('cr', { type: 'MOVE', originalSlotId: 'noSuchSlot' })));
+    // "not taken" for an extra class of the same course is fine
+    await assertSucceeds(addDoc(collection(as('cr'), 'classChanges'), change('cr', {
+      type: 'NOT_TAKEN', originalSlotId: 'change_existing', ...on(0),
+    })));
   });
 
   await env.cleanup();

@@ -10,6 +10,7 @@ abstract class AuthRepository {
   Future<String> submitSignupRequest({
     required String fullName,
     required String email,
+    required String password,
     required String role,
     String? studentId,
     String? phone,

@@ -22,38 +22,59 @@ class TeacherMonitoringRepositoryImpl implements TeacherMonitoringRepository {
         _firestore.collection('users').get(),
         _firestore.collection('courses').get(),
         _firestore.collection('courseAssignments').get(),
-        _firestore.collection('attendanceSessions').get(),
+        // S2-11: only the chosen period's sessions when one is set.
+        (periodStart == null
+                ? _firestore.collection('attendanceSessions')
+                : _firestore.collection('attendanceSessions').where('sessionDate', isGreaterThanOrEqualTo: _key(periodStart)))
+            .get(),
         _firestore.collection('schedules').get(),
       ]);
-      final legacySlotDocs = await _legacySlotDocs();
       final changeDocs = await _classChangeDocs();
+      final retakes = await _retakeStudents();
+      final holidayDates = await _holidayDates();
 
       final users = results[0].docs.map((d) => UserModel.fromFirestore(d)).toList();
       final courses = results[1].docs.map((d) => CourseModel.fromFirestore(d)).toList();
       final assignments = results[2].docs.map((d) => CourseAssignmentModel.fromFirestore(d)).toList();
       final sessions = results[3].docs.map((d) => AttendanceSessionModel.fromFirestore(d)).toList();
 
-      // Routine lives in `schedules` (authoritative); `scheduleSlots` may hold
-      // legacy duplicates with the same id.
-      final slotsById = <String, ScheduleSlot>{};
-      for (final d in results[4].docs) {
-        slotsById[d.id] = ScheduleSlotModel.fromJson({'id': d.id, ...d.data()});
-      }
-      for (final d in legacySlotDocs) {
-        slotsById.putIfAbsent(d.id, () => ScheduleSlotModel.fromJson({'id': d.id, ...d.data()}));
-      }
+      // Routine lives exclusively in `schedules` (authoritative).
+      final slots = results[4].docs
+          .map<ScheduleSlot>((d) => ScheduleSlotModel.fromJson({'id': d.id, ...d.data()}))
+          .toList();
 
       return TeacherMonitoringCalculator.build(
         users: users,
         courses: courses,
         assignments: assignments,
         sessions: sessions,
-        routineSlots: slotsById.values.toList(),
+        routineSlots: slots,
         classChanges: changeDocs.map(ClassChangeRepositoryImpl.fromDoc).toList(),
+        holidayDates: holidayDates,
+        retakeStudents: retakes,
         periodStart: periodStart,
       );
     } catch (e) {
       throw ErrorHandler.handle(e);
+    }
+  }
+
+  static String _key(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  /// courseId -> students retaking it (optional input; ignore failures).
+  Future<Map<String, Set<String>>> _retakeStudents() async {
+    try {
+      final snap = await _firestore.collection('enrollments').where('type', isEqualTo: 'RETAKE').get();
+      final out = <String, Set<String>>{};
+      for (final d in snap.docs) {
+        final c = d.data()['courseId'] as String? ?? '';
+        final s = d.data()['studentId'] as String? ?? '';
+        if (c.isNotEmpty && s.isNotEmpty) out.putIfAbsent(c, () => <String>{}).add(s);
+      }
+      return out;
+    } catch (_) {
+      return const {};
     }
   }
 
@@ -66,12 +87,13 @@ class TeacherMonitoringRepositoryImpl implements TeacherMonitoringRepository {
     }
   }
 
-  /// Legacy `scheduleSlots` collection is optional; ignore failures.
-  Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> _legacySlotDocs() async {
+  /// Official holiday dates (`yyyy-MM-dd`); optional input, ignore failures.
+  Future<Set<String>> _holidayDates() async {
     try {
-      return (await _firestore.collection('scheduleSlots').get()).docs;
+      final snap = await _firestore.collection('holidays').get();
+      return snap.docs.map((d) => (d.data()['date'] as String?) ?? d.id).toSet();
     } catch (_) {
-      return const [];
+      return const {};
     }
   }
 }

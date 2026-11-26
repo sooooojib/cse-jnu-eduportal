@@ -13,11 +13,13 @@ import '../models/attendance_models.dart';
 import '../services/class_attendance_service.dart';
 import '../../domain/entities/attendance_entities.dart';
 import '../../domain/repositories/attendance_repository.dart';
+import '../../../../core/utils/class_time.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 // ─── DataSource ───────────────────────────────────────────────────────────────
 
 abstract class AttendanceRemoteDataSource {
-  Future<AttendanceSummaryModel> getMySummary();
+  Future<AttendanceSummaryModel> getMySummary({int? year, int? semester});
   Future<AttendanceVerificationResult> verifyCode(String code, {String? courseId});
   Future<AttendanceSessionModel> startSession({required String courseId, int? durationMinutes});
   Future<void> deactivateSession({required String sessionId});
@@ -47,9 +49,9 @@ class AttendanceRemoteDataSourceImpl implements AttendanceRemoteDataSource {
         _authoritativeGuard = authoritativeGuard ?? (sl.isRegistered<AuthoritativeGuard>() ? sl<AuthoritativeGuard>() : null);
 
   @override
-  Future<AttendanceSummaryModel> getMySummary() async {
-    // Attended ÷ held, where held = class days of the student's semester.
-    return await _service.mySummary() as AttendanceSummaryModel;
+  Future<AttendanceSummaryModel> getMySummary({int? year, int? semester}) async {
+    // Attended ÷ held, where held = class days of the chosen semester.
+    return await _service.mySummary(year: year, semester: semester) as AttendanceSummaryModel;
   }
 
   @override
@@ -169,7 +171,7 @@ class AttendanceRemoteDataSourceImpl implements AttendanceRemoteDataSource {
         "updatedAt": FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      throw ServerException(message: "Failed to deactivate attendance session: ${e.toString().replaceAll('Exception: ', '')}");
+      throw ServerException(message: 'Could not close the session. ${friendlyError(e)}');
     }
   }
 
@@ -181,11 +183,21 @@ class AttendanceRemoteDataSourceImpl implements AttendanceRemoteDataSource {
     final query = await _firestore.collection("attendanceSessions")
         .where("courseId", isEqualTo: courseId)
         .where("isActive", isEqualTo: true)
-        .limit(1)
         .get();
 
-    if (query.docs.isEmpty) return null;
-    return AttendanceSessionModel.fromFirestore(query.docs.first);
+    // Only this teacher's own, genuinely open session from today. Old demo /
+    // legacy sessions (no end time, another teacher, an earlier day) are
+    // ignored: they can't be resumed (the rules would deny every write).
+    final now = ClassTime.instant();
+    final today = ClassTime.todayKey();
+    for (final doc in query.docs) {
+      final session = AttendanceSessionModel.fromFirestore(doc);
+      final open = session.expiresAt != null && session.expiresAt!.isAfter(now);
+      final mine = session.teacherId == uid;
+      final fromToday = session.sessionDate == today;
+      if (open && mine && fromToday) return session;
+    }
+    return null;
   }
 
   @override
@@ -209,9 +221,18 @@ class AttendanceRemoteDataSourceImpl implements AttendanceRemoteDataSource {
 
     final dynamic rawYear = sData["targetYear"];
     final dynamic rawSem = sData["targetSemester"];
-    final int? yearInt = rawYear is int ? rawYear : int.tryParse(rawYear?.toString() ?? '');
-    final int? semInt = rawSem is int ? rawSem : int.tryParse(rawSem?.toString() ?? '');
+    int? yearInt = rawYear is int ? rawYear : int.tryParse(rawYear?.toString() ?? '');
+    int? semInt = rawSem is int ? rawSem : int.tryParse(rawSem?.toString() ?? '');
     final String courseId = sData["courseId"] as String? ?? "";
+
+    // Older sessions may not store the semester: take it from the course.
+    if ((yearInt == null || semInt == null) && courseId.isNotEmpty) {
+      try {
+        final c = (await _firestore.collection("courses").doc(courseId).get()).data();
+        yearInt ??= (c?["year"] as num?)?.toInt();
+        semInt ??= (c?["semester"] as num?)?.toInt();
+      } catch (_) {}
+    }
 
     final Map<String, Map<String, dynamic>> studentMap = {};
 
@@ -365,9 +386,9 @@ class AttendanceRepositoryImpl implements AttendanceRepository {
   AttendanceRepositoryImpl({required this.remoteDataSource});
 
   @override
-  Future<AttendanceSummary> getMySummary() async {
+  Future<AttendanceSummary> getMySummary({int? year, int? semester}) async {
     try {
-      return await remoteDataSource.getMySummary();
+      return await remoteDataSource.getMySummary(year: year, semester: semester);
     } catch (e) {
       throw ErrorHandler.handleException(e);
     }

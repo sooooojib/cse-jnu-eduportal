@@ -3,6 +3,35 @@
 class ClassTime {
   ClassTime._();
 
+  // ─── Bangladesh time (S2-10) ─────────────────────────────────────────────
+  // The department runs on Asia/Dhaka time (UTC+6, no daylight saving).
+  // "Today", the weekday and the time of day come from here, not from the
+  // phone's own time zone. [serverOffset] (server clock minus phone clock) is
+  // learned once after sign-in, so a phone with a wrong clock still gets the
+  // right day.
+
+  /// Server clock minus phone clock.
+  static Duration serverOffset = Duration.zero;
+
+  /// The real current moment, corrected by the server clock. Use it for
+  /// deadlines such as a session's expiry.
+  static DateTime instant() => DateTime.now().add(serverOffset);
+
+  /// Bangladesh wall-clock time now (for today / weekday / time of day).
+  static DateTime now() => dhaka(instant());
+
+  /// Wall-clock time in Bangladesh at the moment [t].
+  static DateTime dhaka(DateTime t) {
+    final u = t.toUtc().add(const Duration(hours: 6));
+    return DateTime(u.year, u.month, u.day, u.hour, u.minute, u.second, u.millisecond);
+  }
+
+  /// Today's date in Bangladesh, "2026-11-27".
+  static String todayKey() => dateKey(now());
+
+  /// Midday in Bangladesh of a calendar date, as a real moment (06:00 UTC).
+  static DateTime dhakaMidday(DateTime date) => DateTime.utc(date.year, date.month, date.day, 6);
+
   static const List<String> weekdayNames = [
     'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY',
   ];

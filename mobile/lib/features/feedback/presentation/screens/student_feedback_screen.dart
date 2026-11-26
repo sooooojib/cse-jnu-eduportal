@@ -10,6 +10,8 @@ import '../controllers/feedback_controller.dart';
 import '../../../curriculum/domain/entities/curriculum_entities.dart';
 import '../../../curriculum/domain/repositories/curriculum_repository.dart';
 import '../../domain/entities/feedback_entities.dart';
+import 'package:cse_jnu_eduportal/core/config/app_features.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 class StudentFeedbackScreen extends StatefulWidget {
   const StudentFeedbackScreen({super.key});
@@ -142,7 +144,7 @@ class _StudentFeedbackScreenState extends State<StudentFeedbackScreen> with Sing
       if (mounted) {
         setState(() => _isUploadingAttachment = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to attach file: $e')),
+          SnackBar(content: Text('Failed to attach file: ${friendlyError(e)}')),
         );
       }
     }
@@ -207,7 +209,7 @@ class _StudentFeedbackScreenState extends State<StudentFeedbackScreen> with Sing
       if (mounted) {
         messenger.showSnackBar(
           SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '').replaceAll('ServerException: ', '')),
+            content: Text(friendlyError(e)),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -374,7 +376,7 @@ class _StudentFeedbackScreenState extends State<StudentFeedbackScreen> with Sing
                     } catch (e) {
                       if (mounted) {
                         messenger.showSnackBar(
-                          SnackBar(content: Text('Failed to update: $e'), backgroundColor: Colors.redAccent),
+                          SnackBar(content: Text('Failed to update: ${friendlyError(e)}'), backgroundColor: Colors.redAccent),
                         );
                       }
                     }
@@ -563,8 +565,8 @@ class _StudentFeedbackScreenState extends State<StudentFeedbackScreen> with Sing
           ),
           const SizedBox(height: 16),
 
-          // Attachments Section
-          Row(
+          // Attachments Section (hidden while file uploads are off)
+          if (AppFeatures.fileUploads) Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('File Attachments', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),

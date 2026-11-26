@@ -16,6 +16,8 @@ abstract class CurriculumRepository {
   Future<void> deleteExam(String examId);
   Future<List<CourseAssignment>> getCourseAssignments({String? courseId, String? teacherId});
   Future<List<Enrollment>> getEnrollments({int? year, int? semester, String? studentId});
+  Future<void> addRetakeEnrollment(Course course);
+  Future<void> removeRetakeEnrollment(String courseId);
 }
 
 class GetMyCoursesUseCase {

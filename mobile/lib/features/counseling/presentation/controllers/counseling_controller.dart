@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../../domain/entities/counseling_entities.dart';
 import '../../domain/repositories/counseling_repository.dart';
-import '../../../../core/error/failures.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 abstract class CounselingState {}
 
@@ -86,7 +86,7 @@ class CounselingController extends ChangeNotifier {
       _state = CounselingLoaded(availableSlots: slots, myBookings: bookings);
       notifyListeners();
     } catch (e) {
-      final message = e is Failure ? e.message : e.toString();
+      final message = friendlyError(e);
       _state = CounselingError(message);
       notifyListeners();
     }
@@ -151,7 +151,7 @@ class CounselingController extends ChangeNotifier {
       );
       notifyListeners();
     } catch (e) {
-      final message = e is Failure ? e.message : e.toString();
+      final message = friendlyError(e);
       _state = CounselingError(message);
       notifyListeners();
     }

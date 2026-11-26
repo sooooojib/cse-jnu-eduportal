@@ -65,6 +65,7 @@ import '../../features/notifications/presentation/controllers/notification_contr
 
 // Admin Feature
 import '../../features/curriculum/data/repositories/class_change_repository.dart';
+import '../../features/curriculum/data/repositories/holiday_repository.dart';
 import '../../features/curriculum/data/repositories/exam_support_repository.dart';
 import '../../features/cr/data/repositories/cr_transfer_repository.dart';
 import '../../features/admin/data/repositories/teacher_monitoring_repository_impl.dart';
@@ -570,8 +571,12 @@ Future<void> initDependencies() async {
     () => ClassChangeRepositoryImpl(firestore: sl()),
   );
 
+  sl.registerLazySingleton<HolidayRepository>(
+    () => HolidayRepositoryImpl(firestore: sl()),
+  );
+
   sl.registerLazySingleton<ExamSupportRepository>(
-    () => ExamSupportRepositoryImpl(firestore: sl(), classes: sl()),
+    () => ExamSupportRepositoryImpl(firestore: sl(), classes: sl(), holidays: sl()),
   );
 
   sl.registerLazySingleton<GetAdminDashboardDataUseCase>(

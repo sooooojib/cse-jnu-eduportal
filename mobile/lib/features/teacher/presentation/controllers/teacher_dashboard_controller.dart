@@ -4,6 +4,7 @@ import '../../../auth/domain/entities/user.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../../domain/usecases/get_teacher_dashboard_data_usecase.dart';
 import 'teacher_dashboard_state.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 class TeacherDashboardController extends ChangeNotifier {
   final GetTeacherDashboardDataUseCase getTeacherDashboardDataUseCase;
@@ -43,7 +44,7 @@ class TeacherDashboardController extends ChangeNotifier {
       notifyListeners();
     } catch (e, stack) {
       AppLogger.e('Error loading teacher dashboard', e, stack);
-      _state = TeacherDashboardError(e.toString().replaceAll('Exception: ', ''));
+      _state = TeacherDashboardError(friendlyError(e));
       notifyListeners();
     }
   }

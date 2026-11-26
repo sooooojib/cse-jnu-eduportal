@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../../domain/entities/notification_entities.dart';
 import '../../domain/repositories/notification_repository.dart';
-import '../../../../core/error/failures.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 abstract class NotificationState {}
 class NotificationInitial extends NotificationState {}
@@ -42,7 +42,7 @@ class NotificationController extends ChangeNotifier {
       _state = NotificationLoaded(feed);
       notifyListeners();
     } catch (e) {
-      final message = e is Failure ? e.message : e.toString();
+      final message = friendlyError(e);
       _state = NotificationError(message);
       notifyListeners();
     }

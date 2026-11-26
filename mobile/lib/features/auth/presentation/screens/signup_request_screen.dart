@@ -7,12 +7,12 @@ import '../../../../core/constants/role_constants.dart';
 import '../../../../core/utils/academic_session.dart';
 import '../../../../core/utils/context_extensions.dart';
 import '../../../../core/utils/validators.dart';
-import '../../../../core/error/failures.dart';
 import '../../../../shared/widgets/buttons/app_primary_button.dart';
 import '../../../../shared/widgets/inputs/app_text_field.dart';
 import '../../../../shared/widgets/dialogs/app_dialog.dart';
 import '../../../../shared/widgets/theme/theme_toggle_button.dart';
 import '../../domain/usecases/signup_request_usecase.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 class SignupRequestScreen extends StatefulWidget {
   final SignupRequestUseCase signupRequestUseCase;
@@ -31,6 +31,8 @@ class _SignupRequestScreenState extends State<SignupRequestScreen> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _roleIdController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmController = TextEditingController();
 
   UserRole _selectedRole = UserRole.student;
   String? _selectedSession;
@@ -42,6 +44,8 @@ class _SignupRequestScreenState extends State<SignupRequestScreen> {
     _nameController.dispose();
     _emailController.dispose();
     _roleIdController.dispose();
+    _passwordController.dispose();
+    _confirmController.dispose();
     super.dispose();
   }
 
@@ -54,6 +58,7 @@ class _SignupRequestScreenState extends State<SignupRequestScreen> {
       await widget.signupRequestUseCase.execute(
         fullName: _nameController.text.trim(),
         email: _emailController.text.trim(),
+        password: _passwordController.text,
         role: _selectedRole.value,
         studentId: _selectedRole != UserRole.teacher ? _roleIdController.text.trim() : null,
         phone: _selectedRole == UserRole.teacher ? _roleIdController.text.trim() : null,
@@ -74,7 +79,7 @@ class _SignupRequestScreenState extends State<SignupRequestScreen> {
           child: const Icon(Icons.mark_email_read_outlined, size: 40, color: AppColors.primary),
         ),
         content: const Text(
-          'Your registration request has been submitted for administrative review. You will receive an email with your initial credentials once approved by the department.',
+          'Your account is created and waiting for approval. A teacher or the admin will review it. Once approved, sign in with this email and password.',
           textAlign: TextAlign.center,
           style: TextStyle(fontSize: 14, height: 1.5),
         ),
@@ -91,7 +96,7 @@ class _SignupRequestScreenState extends State<SignupRequestScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      final message = e is Failure ? e.message : e.toString();
+      final message = friendlyError(e);
       context.showSnackBar(message, isError: true);
     } finally {
       if (mounted) {
@@ -296,6 +301,29 @@ class _SignupRequestScreenState extends State<SignupRequestScreen> {
                                 keyboardType: TextInputType.emailAddress,
                                 prefixIcon: const Icon(Icons.mail_outline_rounded),
                                 validator: Validators.email,
+                                enabled: !_isSubmitting,
+                              ),
+                              const SizedBox(height: 16),
+
+                              // Password (the person's own login, used after approval)
+                              AppTextField(
+                                key: const ValueKey('signup_password'),
+                                controller: _passwordController,
+                                label: 'Password',
+                                hint: 'At least 6 characters',
+                                isPassword: true,
+                                prefixIcon: const Icon(Icons.lock_outline_rounded),
+                                validator: (v) => (v == null || v.length < 6) ? 'Use at least 6 characters' : null,
+                                enabled: !_isSubmitting,
+                              ),
+                              const SizedBox(height: 16),
+                              AppTextField(
+                                key: const ValueKey('signup_password_confirm'),
+                                controller: _confirmController,
+                                label: 'Confirm Password',
+                                isPassword: true,
+                                prefixIcon: const Icon(Icons.lock_outline_rounded),
+                                validator: (v) => v != _passwordController.text ? 'Passwords do not match' : null,
                                 enabled: !_isSubmitting,
                               ),
 

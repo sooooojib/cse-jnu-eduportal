@@ -51,7 +51,7 @@ void main() {
   });
 
   group('AuthRemoteDataSourceImpl Tests', () {
-    test('login succeeds and extracts authoritative custom claim role', () async {
+    test('login uses the role from the users record, not a stale token claim', () async {
       when(() => mockAuth.signInWithEmailAndPassword(
             email: 'teacher@cse.jnu.ac.bd',
             password: 'Password123!',
@@ -70,7 +70,7 @@ void main() {
       when(() => mockDocSnapshot.data()).thenReturn({
         'email': 'teacher@cse.jnu.ac.bd',
         'fullName': 'Dr. Mohammad Shafiul Alam',
-        'role': 'STUDENT', // Firestore says student, but custom claim says TEACHER!
+        'role': 'STUDENT', // the record says STUDENT; an old token claim says TEACHER
         'isActive': true,
       });
 
@@ -80,7 +80,7 @@ void main() {
       );
 
       expect(response.user.id, 'uid_teacher_1');
-      expect(response.user.role, UserRole.teacher); // Custom claim is authoritative!
+      expect(response.user.role, UserRole.student); // the record wins (same as the security rules)
       expect(response.accessToken, 'jwt_token_123');
     });
 
@@ -104,11 +104,31 @@ void main() {
         throwsA(isA<ServerException>().having(
           (e) => e.message,
           'message',
-          contains('not yet approved'),
+          contains('waiting for approval'),
         )),
       );
 
       verify(() => mockAuth.signOut()).called(1);
+    });
+
+    test('login explains a rejected signup with the reason', () async {
+      when(() => mockAuth.signInWithEmailAndPassword(email: 'student@cse.jnu.ac.bd', password: 'password123'))
+          .thenAnswer((_) async => mockCredential);
+      when(() => mockCredential.user).thenReturn(mockUser);
+      when(() => mockUser.uid).thenReturn('uid_123');
+      when(() => mockUsersCollection.doc('uid_123')).thenReturn(mockUserDoc);
+      when(() => mockUserDoc.get()).thenAnswer((_) async => mockDocSnapshot);
+      when(() => mockDocSnapshot.exists).thenReturn(false);
+      final requestSnap = MockDocumentSnapshot();
+      when(() => mockSignupCollection.doc('uid_123')).thenReturn(mockSignupDoc);
+      when(() => mockSignupDoc.get()).thenAnswer((_) async => requestSnap);
+      when(() => requestSnap.data()).thenReturn({'status': 'REJECTED', 'rejectionReason': 'Not a CSE student'});
+      when(() => mockAuth.signOut()).thenAnswer((_) async {});
+
+      expect(
+        () => dataSource.login(email: 'student@cse.jnu.ac.bd', password: 'password123'),
+        throwsA(isA<ServerException>().having((e) => e.message, 'message', contains('Not a CSE student'))),
+      );
     });
 
     test('login signs out and throws ServerException if account is deactivated', () async {
@@ -213,26 +233,31 @@ void main() {
       verify(() => mockAuth.signOut()).called(1);
     });
 
-    test('submitSignupRequest writes to signupRequests queue without elevating role', () async {
-      when(() => mockSignupCollection.add(any())).thenAnswer((_) async => mockSignupDoc);
-      when(() => mockSignupDoc.id).thenReturn('req_new_789');
+    test('submitSignupRequest creates the login, files the request under the uid, then signs out', () async {
+      when(() => mockAuth.createUserWithEmailAndPassword(email: 'applicant@cse.jnu.ac.bd', password: 'secret12'))
+          .thenAnswer((_) async => mockCredential);
+      when(() => mockCredential.user).thenReturn(mockUser);
+      when(() => mockUser.uid).thenReturn('uid_new_789');
+      when(() => mockSignupCollection.doc('uid_new_789')).thenReturn(mockSignupDoc);
+      when(() => mockSignupDoc.set(any())).thenAnswer((_) async {});
+      when(() => mockAuth.signOut()).thenAnswer((_) async {});
 
       final result = await dataSource.submitSignupRequest(
         fullName: 'Applicant One',
-        email: 'applicant@cse.jnu.ac.bd',
+        email: 'Applicant@cse.jnu.ac.bd',
+        password: 'secret12',
         role: 'STUDENT',
         studentId: '2024CSE099',
         phone: '+8801900000000',
       );
 
-      expect(result, 'req_new_789');
-      final captured = verify(() => mockSignupCollection.add(captureAny())).captured;
-      final payload = captured.first as Map<String, dynamic>;
-
+      expect(result, 'uid_new_789');
+      final payload = verify(() => mockSignupDoc.set(captureAny())).captured.first as Map<String, dynamic>;
       expect(payload['status'], 'PENDING');
-      expect(payload['fullName'], 'Applicant One');
+      expect(payload['userId'], 'uid_new_789');
       expect(payload['email'], 'applicant@cse.jnu.ac.bd');
       expect(payload['role'], 'STUDENT');
+      verify(() => mockAuth.signOut()).called(1); // can't use the app until approved
     });
   });
 }

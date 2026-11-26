@@ -2,6 +2,7 @@ import 'package:cse_jnu_eduportal/features/curriculum/data/repositories/class_ch
 import 'package:cse_jnu_eduportal/features/curriculum/domain/entities/class_change.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:cse_jnu_eduportal/features/curriculum/presentation/widgets/exam_tile.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -732,9 +733,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Upcoming Exams (1)'), findsOneWidget);
-      expect(find.text('CSE-3101: Data Structures Midterm'), findsOneWidget);
-      expect(find.text('Date: 2026-11-15 · 10:00 AM - 12:00 PM (Auditorium A)'), findsOneWidget);
-      expect(find.text('Sem 1'), findsOneWidget);
+      // Same calm exam card as the Exam Schedule (no red tile / "Sem" pill).
+      expect(find.byType(ExamTile), findsOneWidget);
+      expect(find.textContaining('Data Structures Midterm'), findsOneWidget);
+      expect(find.textContaining('Auditorium A'), findsOneWidget);
+      expect(find.text('Sem 1'), findsNothing);
 
       await tester.tap(find.byIcon(Icons.close_rounded));
       await tester.pumpAndSettle();
@@ -761,6 +764,78 @@ void main() {
       expect(find.text('Schedule'), findsWidgets);
       expect(find.text('Counseling'), findsWidgets);
       expect(find.text('Feedback'), findsWidgets);
+    });
+
+    testWidgets('Renders Live Attendance Open banner and Holiday banner when active', (tester) async {
+      int? navigatedTab;
+      final liveData = CrDashboardData(
+        crId: sampleCr.id,
+        crName: sampleCr.fullName,
+        email: sampleCr.email,
+        phone: sampleCr.phone,
+        role: UserRole.cr,
+        year: 3,
+        semester: 1,
+        studentId: '2022CSE001',
+        attendancePercentage: 94.2,
+        attendedClasses: 32,
+        totalClasses: 34,
+        isAttendanceEligible: true,
+        classesTodayCount: 0,
+        availableCounselingSlotsCount: 2,
+        myActiveCounselingCount: 0,
+        upcomingExamsCount: 0,
+        targetDateLabel: 'Monday · Dec 16, 2026',
+        dayOfWeek: 'WEDNESDAY',
+        tomorrowDateLabel: 'Thursday · Dec 17, 2026',
+        openAttendanceSessions: const [
+          AttendanceSession(
+            id: 'sess_1',
+            courseId: 'c1',
+            courseCode: 'CSE-3101',
+            courseTitle: 'Operating Systems',
+            teacherId: 't1',
+            teacherName: 'Dr. Layek',
+            code: '',
+            isActive: true,
+            status: 'ACTIVE',
+            sessionDate: '2026-12-16',
+            createdAt: '',
+          ),
+        ],
+        todayHolidayTitle: 'Victory Day',
+      );
+      when(() => mockCrRepo.getCrDashboardData(
+            crUser: any(named: 'crUser'),
+            currentTime: any(named: 'currentTime'),
+          )).thenAnswer((_) async => liveData);
+
+      final controller = CrDashboardController(
+        getCrDashboardDataUseCase: getDataUseCase,
+        addTomorrowSlotUseCase: addSlotUseCase,
+        authController: mockAuthController,
+      );
+
+      await tester.pumpWidget(
+        buildTestableWidget(
+          Scaffold(
+            body: CrDashboardScreen(
+              controller: controller,
+              wrapWithScaffold: false,
+              onNavigateTab: (tab) => navigatedTab = tab,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Attendance Open Now'), findsOneWidget);
+      expect(find.textContaining('CSE-3101'), findsWidgets);
+      expect(find.text('Today is a Holiday: Victory Day'), findsOneWidget);
+
+      await tester.tap(find.text('Attendance Open Now'));
+      await tester.pumpAndSettle();
+      expect(navigatedTab, 1);
     });
   });
 }

@@ -1,9 +1,12 @@
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'attendance_totals.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
 import '../../../../core/error/exceptions.dart';
 import '../../domain/entities/attendance_entities.dart';
 import '../models/attendance_models.dart';
+import '../../../../core/utils/class_time.dart';
+import '../../domain/services/class_keys.dart';
 
 /// Attendance without Cloud Functions, protected by security rules.
 ///
@@ -14,7 +17,8 @@ import '../models/attendance_models.dart';
 ///   code only while the teacher's screen keeps rotating (issued < 45 s ago).
 /// * **Right students only:** a student can only mark a session of their own
 ///   semester, once, while it is open.
-/// * **On time / late:** after `lateAfter` a self-mark is LATE.
+/// * **Present only:** self-marks are always PRESENT (late marking was
+///   removed); older LATE records still count as attended.
 /// * **Manual mode:** no code; the teacher marks the roster by hand.
 /// * **Auto absent:** finishing a session records everyone left as ABSENT,
 ///   so percentages are attended ÷ held.
@@ -42,6 +46,9 @@ abstract class ClassAttendanceService {
   /// Teacher sets the status of these students (writes only these).
   Future<void> saveMarks({required String sessionId, required List<AttendanceRosterItem> items});
 
+  /// Keeps `attendanceSessions/{sessionId}.totalPresentCount` synced live.
+  Future<void> updateSessionPresentCount(String sessionId, int presentCount);
+
   /// Records everyone without a mark as ABSENT, saves the count and closes.
   Future<void> finishSession({required String sessionId, required List<AttendanceRosterItem> roster});
 
@@ -58,7 +65,8 @@ abstract class ClassAttendanceService {
   Future<AttendanceVerificationResult> markWithCode(String code, {String? courseId, String? sessionId});
 
   /// Student: attended ÷ held per course for their semester.
-  Future<AttendanceSummary> mySummary();
+  /// [year] / [semester]: a past semester to look back at (default: current).
+  Future<AttendanceSummary> mySummary({int? year, int? semester});
 }
 
 class ClassAttendanceServiceImpl implements ClassAttendanceService {
@@ -120,7 +128,8 @@ class ClassAttendanceServiceImpl implements ClassAttendanceService {
     }
 
     final manual = mode.toUpperCase() == 'MANUAL';
-    final now = DateTime.now();
+    // S2-10: real moment from the server-corrected clock; the day in Dhaka.
+    final now = ClassTime.instant();
     final expiresAt = now.add(Duration(minutes: manual ? 180 : durationMinutes));
     final lateAfter = now.add(Duration(minutes: lateAfterMinutes));
     final ref = _sessions.doc();
@@ -135,7 +144,7 @@ class ClassAttendanceServiceImpl implements ClassAttendanceService {
       'mode': manual ? 'MANUAL' : 'CODE',
       'isActive': true,
       'status': 'ACTIVE',
-      'sessionDate': dateKey(now),
+      'sessionDate': ClassTime.todayKey(),
       'startTime': FieldValue.serverTimestamp(),
       'expiresAt': Timestamp.fromDate(expiresAt),
       'lateAfter': Timestamp.fromDate(lateAfter),
@@ -172,8 +181,8 @@ class ClassAttendanceServiceImpl implements ClassAttendanceService {
   @override
   Future<DateTime> extendSession(String sessionId, {int minutes = 5}) async {
     final ref = _sessions.doc(sessionId);
-    final cur = ((await ref.get()).data()?['expiresAt'] as Timestamp?)?.toDate() ?? DateTime.now();
-    final base = cur.isAfter(DateTime.now()) ? cur : DateTime.now();
+    final cur = ((await ref.get()).data()?['expiresAt'] as Timestamp?)?.toDate() ?? ClassTime.instant();
+    final base = cur.isAfter(ClassTime.instant()) ? cur : ClassTime.instant();
     final next = base.add(Duration(minutes: minutes));
     await ref.update({'expiresAt': Timestamp.fromDate(next), 'updatedAt': FieldValue.serverTimestamp()});
     return next;
@@ -217,6 +226,7 @@ class ClassAttendanceServiceImpl implements ClassAttendanceService {
             'markedById': uid,
             'isManualOverride': true,
             'date': s['sessionDate'],
+            if ((s['slotId'] as String? ?? '').isNotEmpty) 'slotId': s['slotId'],
             'verifiedAt': item.isPresent ? FieldValue.serverTimestamp() : null,
             'updatedAt': FieldValue.serverTimestamp(),
             'editLog': FieldValue.arrayUnion([
@@ -228,13 +238,78 @@ class ClassAttendanceServiceImpl implements ClassAttendanceService {
       }
       await batch.commit();
     }
+    try {
+      await updateSessionPresentCount(sessionId, await _countPresent(sessionId));
+    } catch (_) {}
+    await _updateStats(
+      s['courseId'] as String? ?? '',
+      ClassKeys.of(s['sessionDate'] as String? ?? '', s['slotId'] as String?),
+      items,
+    );
+  }
+
+  /// S2-11: keeps the small summary records in step with teacher marks.
+  /// Best effort (the marks themselves are already saved).
+  Future<void> _updateStats(String courseId, String date, List<AttendanceRosterItem> items) async {
+    if (courseId.isEmpty || date.isEmpty) return;
+    // Only students who are now present, or who had a mark that may have been
+    // present: a new ABSENT for someone with no mark changes nothing.
+    items = items.where((i) => i.isPresent || i.hasRecord).toList();
+    try {
+      for (var i = 0; i < items.length; i += 400) {
+        final batch = _db.batch();
+        for (final item in items.skip(i).take(400)) {
+          batch.set(
+            _db.collection('studentStats').doc(item.studentId),
+            {
+              'present': {
+                courseId: item.isPresent ? FieldValue.arrayUnion([date]) : FieldValue.arrayRemove([date]),
+              },
+              'lastCourseId': courseId,
+              'updatedAt': FieldValue.serverTimestamp(),
+            },
+            SetOptions(merge: true),
+          );
+        }
+        await batch.commit();
+      }
+    } catch (_) {}
+    try {
+      await AttendanceTotals.refreshCourse(_db, courseId);
+    } catch (_) {}
+  }
+
+  /// Present count from the saved records (not the on-screen roster).
+  Future<int> _countPresent(String sessionId) async {
+    final snap = await _records.where('sessionId', isEqualTo: sessionId).get();
+    return snap.docs.where((d) {
+      final st = (d.data()['status'] as String? ?? '').toUpperCase();
+      return st == 'PRESENT' || st == 'LATE';
+    }).length;
+  }
+
+  @override
+  Future<void> updateSessionPresentCount(String sessionId, int presentCount) async {
+    try {
+      await _sessions.doc(sessionId).update({
+        'totalPresentCount': presentCount,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (_) {}
   }
 
   @override
   Future<void> finishSession({required String sessionId, required List<AttendanceRosterItem> roster}) async {
     final missing = roster.where((r) => !r.hasRecord).map((r) => r.copyWith(status: 'ABSENT')).toList();
     await saveMarks(sessionId: sessionId, items: missing);
-    final present = roster.where((r) => r.hasRecord && r.isPresent).length;
+    // Recount from the saved records: the roster on screen may be a moment
+    // behind a student's own mark.
+    int present;
+    try {
+      present = await _countPresent(sessionId);
+    } catch (_) {
+      present = roster.where((r) => r.hasRecord && r.isPresent).length;
+    }
     await _sessions.doc(sessionId).update({
       'isActive': false,
       'status': 'COMPLETED',
@@ -242,12 +317,17 @@ class ClassAttendanceServiceImpl implements ClassAttendanceService {
       'totalPresentCount': present,
       'updatedAt': FieldValue.serverTimestamp(),
     });
+    // S2-11: "classes held" for this course, now that the count is final.
+    try {
+      final cid = (await _sessions.doc(sessionId).get()).data()?['courseId'] as String? ?? '';
+      if (cid.isNotEmpty) await AttendanceTotals.refreshCourse(_db, cid);
+    } catch (_) {}
   }
 
   @override
   Future<List<AttendanceSession>> recentSessions({int days = 7}) async {
     final uid = _uid;
-    final from = dateKey(DateTime.now().subtract(Duration(days: days)));
+    final from = dateKey(ClassTime.now().subtract(Duration(days: days)));
     final snap = await _sessions.where('teacherId', isEqualTo: uid).get();
     final list = snap.docs
         .map(AttendanceSessionModel.fromFirestore)
@@ -260,22 +340,34 @@ class ClassAttendanceServiceImpl implements ClassAttendanceService {
   @override
   Future<CourseAttendanceReport> courseReport(String courseId) async {
     final course = (await _db.collection('courses').doc(courseId).get()).data() ?? const {};
-    final today = dateKey(DateTime.now());
+    final today = ClassTime.todayKey();
     final sessions = await _sessions.where('courseId', isEqualTo: courseId).get();
-    final dates = sessions.docs
-        .map((d) => d.data()['sessionDate'] as String? ?? '')
-        .where((d) => d.isNotEmpty && d.compareTo(today) <= 0)
-        .toSet()
-        .toList()
-      ..sort();
     final records = await _records.where('courseId', isEqualTo: courseId).get();
+    // One class per (day, routine slot) (S2-13); held only if someone was
+    // present (an empty session is not a class — same rule everywhere).
+    final keyOfSession = <String, String>{
+      for (final d in sessions.docs)
+        d.id: ClassKeys.of(d.data()['sessionDate'] as String? ?? '', d.data()['slotId'] as String?),
+    };
+    String keyOfRecord(Map<String, dynamic> r) =>
+        keyOfSession[r['sessionId'] as String? ?? ''] ?? ClassKeys.of(r['date'] as String? ?? '', r['slotId'] as String?);
+    final presentKeys = <String>{
+      for (final d in records.docs)
+        if (['PRESENT', 'LATE'].contains((d.data()['status'] as String? ?? '').toUpperCase())) keyOfRecord(d.data()),
+    };
+    final dates = ClassKeys.normalize({
+      for (final d in sessions.docs)
+        if (((d.data()['totalPresentCount'] as num?)?.toInt() ?? 0) > 0 || presentKeys.contains(keyOfSession[d.id]))
+          keyOfSession[d.id]!,
+    }.where((k) => ClassKeys.dateOf(k).isNotEmpty && ClassKeys.dateOf(k).compareTo(today) <= 0)).toList()
+      ..sort();
     final attended = <String, Set<String>>{};
     final late = <String, Set<String>>{};
     final names = <String, (String, String)>{};
     for (final d in records.docs) {
       final r = d.data();
       final sid = r['studentId'] as String? ?? '';
-      final date = r['date'] as String? ?? '';
+      final date = keyOfRecord(r);
       final status = (r['status'] as String? ?? '').toUpperCase();
       names[sid] = ((r['studentRoll'] as String?) ?? '', (r['studentName'] as String?) ?? '');
       if (status == 'PRESENT' || status == 'LATE') attended.putIfAbsent(sid, () => {}).add(date);
@@ -283,54 +375,191 @@ class ClassAttendanceServiceImpl implements ClassAttendanceService {
     }
     final year = (course['year'] as num?)?.toInt();
     final sem = (course['semester'] as num?)?.toInt();
+    final cohortIds = <String>{};
+    final sessionVotes = <String, int>{};
     if (year != null && sem != null) {
       final students = await _db.collection('users').where('year', isEqualTo: year).where('semester', isEqualTo: sem).get();
       for (final d in students.docs) {
         final role = (d.data()['role'] as String? ?? '').toUpperCase();
         if (role != 'STUDENT' && role != 'CR') continue;
+        cohortIds.add(d.id);
+        final ses = (d.data()['session'] as String? ?? '').trim();
+        if (ses.isNotEmpty) sessionVotes[ses] = (sessionVotes[ses] ?? 0) + 1;
         names.putIfAbsent(d.id, () => ((d.data()['studentId'] as String?) ?? '', (d.data()['fullName'] as String?) ?? ''));
       }
     }
+    // Retake / explicit enrollments: listed, and counted from their enrollment date.
+    final since = <String, String>{};
+    try {
+      final enrollSnap = await _db.collection('enrollments').where('courseId', isEqualTo: courseId).get();
+      for (final enr in enrollSnap.docs) {
+        final sid = (enr.data()['studentId'] as String? ?? '').trim();
+        final from = enrolledSinceKey(enr.data());
+        if (sid.isNotEmpty && from != null && !cohortIds.contains(sid)) {
+          since[sid] = from;
+        }
+        if (sid.isEmpty || names.containsKey(sid)) continue;
+        final uDoc = await _db.collection('users').doc(sid).get();
+        if (uDoc.exists && uDoc.data() != null) {
+          final u = uDoc.data()!;
+          names.putIfAbsent(sid, () => ((u['studentId'] as String?) ?? '', (u['fullName'] as String?) ?? ''));
+        }
+      }
+    } catch (_) {}
+    var teacherName = (course['teacherName'] as String? ?? '').trim();
+    if (teacherName.isEmpty) {
+      final tid = (course['teacherId'] as String? ?? '').trim();
+      if (tid.isNotEmpty) {
+        try {
+          final tDoc = await _db.collection('users').doc(tid).get();
+          final tData = tDoc.data();
+          if (tData != null) {
+            teacherName =
+                ((tData['fullName'] as String?) ??
+                        (tData['name'] as String?) ??
+                        '')
+                    .trim();
+          }
+        } catch (_) {}
+      }
+    }
+    if (teacherName.isEmpty) {
+      for (final s in sessions.docs) {
+        final tn = (s.data()['teacherName'] as String? ?? '').trim();
+        if (tn.isNotEmpty) {
+          teacherName = tn;
+          break;
+        }
+      }
+    }
+
     final dateSet = dates.toSet();
     final rows = names.entries
-        .map((e) => StudentAttendanceRow(
-              studentId: e.key,
-              studentRoll: e.value.$1,
-              studentName: e.value.$2,
-              attended: (attended[e.key] ?? const {}).intersection(dateSet).length,
-              late: (late[e.key] ?? const {}).intersection(dateSet).length,
-              held: dates.length,
-            ))
+        .map((e) {
+          final from = since[e.key];
+          final myDates = from == null ? dateSet : dateSet.where((d) => ClassKeys.dateOf(d).compareTo(from) >= 0).toSet();
+          final presentDates = ClassKeys.match(myDates, attended[e.key] ?? const <String>{}).$1;
+          return StudentAttendanceRow(
+            studentId: e.key,
+            studentRoll: e.value.$1,
+            studentName: e.value.$2,
+            attended: presentDates.length,
+            late: (late[e.key] ?? const <String>{}).intersection(myDates).length,
+            held: myDates.length,
+            presentDates: presentDates,
+          );
+        })
         .toList()
       ..sort((a, b) => a.studentRoll.compareTo(b.studentRoll));
     return CourseAttendanceReport(
       courseId: courseId,
       courseCode: (course['code'] as String?) ?? courseId,
       courseTitle: (course['title'] as String?) ?? '',
+      teacherName: teacherName,
       classDates: dates,
       rows: rows,
+      year: year,
+      semester: sem,
+      // The batch's session: the one most of its students have.
+      session: sessionVotes.isEmpty
+          ? null
+          : (sessionVotes.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).first.key,
+      generatedOn: ClassTime.todayKey(),
     );
   }
 
   // ─── Student ─────────────────────────────────────────────────────────────
 
+  /// "yyyy-MM-dd" from which an enrollment's classes count: `enrolledOn`,
+  /// else `createdAt`, else null (count every class).
+  static String? enrolledSinceKey(Map<String, dynamic> data) {
+    final on = (data['enrolledOn'] as String?)?.trim() ?? '';
+    if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(on)) return on;
+    final created = data['createdAt'];
+    if (created is Timestamp) return dateKey(created.toDate());
+    if (created is String) {
+      final d = DateTime.tryParse(created);
+      if (d != null) return dateKey(d);
+    }
+    return null;
+  }
+
+  /// courseId → since-date for the student's explicit enrollments.
+  Future<Map<String, String?>> _enrollmentsSince(String uid) async {
+    try {
+      final snap = await _db.collection('enrollments').where('studentId', isEqualTo: uid).get();
+      final out = <String, String?>{};
+      for (final d in snap.docs) {
+        final cid = (d.data()['courseId'] as String? ?? '').trim();
+        if (cid.isNotEmpty) out[cid] = enrolledSinceKey(d.data());
+      }
+      return out;
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  Future<Set<String>> _enrolledCourseIds(String uid) async {
+    try {
+      final snap = await _db.collection('enrollments').where('studentId', isEqualTo: uid).get();
+      return snap.docs
+          .map((d) => (d.data()['courseId'] as String? ?? '').trim())
+          .where((id) => id.isNotEmpty)
+          .toSet();
+    } catch (_) {
+      return const {};
+    }
+  }
+
   Future<(Map<String, dynamic>, List<AttendanceSession>)> _openForMe() async {
-    final me = (await _db.collection('users').doc(_uid).get()).data() ?? const {};
+    final uid = _uid;
+    final me = (await _db.collection('users').doc(uid).get()).data() ?? const {};
     final year = (me['year'] as num?)?.toInt();
     final sem = (me['semester'] as num?)?.toInt();
-    if (year == null || sem == null) throw const ServerException(message: 'Your semester is not set yet.');
-    final now = DateTime.now();
-    final open = (await _sessions
-            .where('targetYear', isEqualTo: year)
-            .where('targetSemester', isEqualTo: sem)
-            .where('isActive', isEqualTo: true)
-            .get())
-        .docs
-        .map(AttendanceSessionModel.fromFirestore)
-        .where((s) => !s.isManualMode && (s.expiresAt?.isAfter(now) ?? false))
-        .toList()
+    final enrolled = await _enrolledCourseIds(uid);
+    if ((year == null || sem == null) && enrolled.isEmpty) {
+      throw const ServerException(message: 'Your semester is not set yet.');
+    }
+
+    final now = ClassTime.instant();
+    final byId = <String, AttendanceSession>{};
+
+    if (year != null && sem != null) {
+      final semSnap = await _sessions
+          .where('targetYear', isEqualTo: year)
+          .where('targetSemester', isEqualTo: sem)
+          .where('isActive', isEqualTo: true)
+          .get();
+      for (final d in semSnap.docs) {
+        final s = AttendanceSessionModel.fromFirestore(d);
+        if (!s.isManualMode && (s.expiresAt?.isAfter(now) ?? false)) {
+          byId[s.id] = s;
+        }
+      }
+    }
+
+    if (enrolled.isNotEmpty) {
+      final list = enrolled.toList();
+      for (var i = 0; i < list.length; i += 10) {
+        final chunk = list.skip(i).take(10).toList();
+        try {
+          final snap = await _sessions
+              .where('courseId', whereIn: chunk)
+              .where('isActive', isEqualTo: true)
+              .get();
+          for (final d in snap.docs) {
+            final s = AttendanceSessionModel.fromFirestore(d);
+            if (!s.isManualMode && (s.expiresAt?.isAfter(now) ?? false)) {
+              byId[s.id] = s;
+            }
+          }
+        } catch (_) {}
+      }
+    }
+
+    final open = byId.values.toList()
       ..sort((a, b) => (a.expiresAt ?? now).compareTo(b.expiresAt ?? now));
-    return (me, open.cast<AttendanceSession>());
+    return (me, open);
   }
 
   @override
@@ -343,7 +572,6 @@ class ClassAttendanceServiceImpl implements ClassAttendanceService {
     if (clean.length != 6) throw const ServerException(message: 'The code has 6 characters.');
     final found = await _openForMe();
     final me = found.$1;
-    final now = DateTime.now();
     final open = found.$2
         .where((s) => sessionId == null || s.id == sessionId)
         .where((s) => courseId == null || s.courseId == courseId)
@@ -370,106 +598,78 @@ class ClassAttendanceServiceImpl implements ClassAttendanceService {
         }
         throw const ServerException(message: 'Your teacher has already marked you. Ask them to change it.');
       }
-      final late = s.lateAfter != null && now.isAfter(s.lateAfter!);
-      for (final status in late ? ['LATE', 'PRESENT'] : ['PRESENT', 'LATE']) {
-        try {
-          await ref.set({
-            'id': ref.id,
-            'sessionId': s.id,
-            'studentId': uid,
-            'studentName': (me['fullName'] ?? '') as String,
-            'studentRoll': (me['studentId'] ?? '') as String,
-            'courseId': s.courseId,
-            'courseCode': s.courseCode,
-            'courseTitle': s.courseTitle,
-            'status': status,
-            'markedBy': 'SELF',
-            'codeUsed': clean,
-            'isManualOverride': false,
-            'date': s.sessionDate,
-            'verifiedAt': FieldValue.serverTimestamp(),
-          });
-          final name = s.courseTitle.isNotEmpty ? s.courseTitle : s.courseCode;
-          return AttendanceVerificationResult(
-            success: true,
-            message: status == 'LATE' ? 'Marked late for $name.' : 'You are marked present for $name.',
-            courseCode: s.courseCode,
-            courseTitle: s.courseTitle,
-            recordId: ref.id,
+      try {
+        // The record and +1 on the session's present count are one write, so
+        // the class counts as held even if the teacher's phone is closed
+        // (S2-03). The rules only allow the +1 together with a valid mark.
+        final batch = _db.batch()
+          ..set(ref, {
+          'id': ref.id,
+          'sessionId': s.id,
+          'studentId': uid,
+          'studentName': (me['fullName'] ?? '') as String,
+          'studentRoll': (me['studentId'] ?? '') as String,
+          'courseId': s.courseId,
+          'courseCode': s.courseCode,
+          'courseTitle': s.courseTitle,
+          'status': 'PRESENT',
+          'markedBy': 'SELF',
+          'codeUsed': clean,
+          'isManualOverride': false,
+          'date': s.sessionDate,
+          if ((s.slotId ?? '').isNotEmpty) 'slotId': s.slotId,
+          'verifiedAt': FieldValue.serverTimestamp(),
+        })
+          ..update(_sessions.doc(s.id), {'totalPresentCount': FieldValue.increment(1)})
+          // S2-11: the student's own present days (their display copy).
+          ..set(
+            _db.collection('studentStats').doc(uid),
+            {
+              'present': {s.courseId: FieldValue.arrayUnion([ClassKeys.of(s.sessionDate, s.slotId)])},
+              'updatedAt': FieldValue.serverTimestamp(),
+            },
+            SetOptions(merge: true),
           );
-        } catch (e) {
-          if (!_denied(e)) rethrow;
-          // Wrong code for this session, or on-time / late boundary: try next.
-        }
+        await batch.commit();
+        final name = s.courseTitle.isNotEmpty ? s.courseTitle : s.courseCode;
+        return AttendanceVerificationResult(
+          success: true,
+          message: 'You are marked present for $name.',
+          courseCode: s.courseCode,
+          courseTitle: s.courseTitle,
+          recordId: ref.id,
+        );
+      } catch (e) {
+        if (!_denied(e)) rethrow;
+        // Wrong code for this session: try next.
       }
     }
     throw const ServerException(message: 'Wrong or expired code. Use the code on the teacher\'s screen right now.');
   }
 
   @override
-  Future<AttendanceSummary> mySummary() async {
+  Future<AttendanceSummary> mySummary({int? year, int? semester}) async {
+    final pickYear = year;
+    final pickSem = semester;
+    return _summaryFor(pickYear, pickSem);
+  }
+
+  Future<AttendanceSummary> _summaryFor(int? pickYear, int? pickSem) async {
     final uid = _uid;
     final me = (await _db.collection('users').doc(uid).get()).data() ?? const {};
-    final year = (me['year'] as num?)?.toInt();
-    final sem = (me['semester'] as num?)?.toInt();
-    final today = dateKey(DateTime.now());
+    final myYear = (me['year'] as num?)?.toInt();
+    final mySem = (me['semester'] as num?)?.toInt();
+    // S2-05: past semesters stay visible after promotion. Retakes belong to
+    // the current semester's view only.
+    final year = pickYear ?? myYear;
+    final sem = pickSem ?? mySem;
+    final isCurrent = year == myYear && sem == mySem;
+    final since = isCurrent ? await _enrollmentsSince(uid) : const <String, String?>{};
 
-    final recordsSnap = await _records.where('studentId', isEqualTo: uid).get();
-    final records = recordsSnap.docs.map(AttendanceRecordModel.fromFirestore).toList()
-      ..sort((a, b) => (b.date ?? '').compareTo(a.date ?? ''));
-
-    // Classes held per course = distinct days with a session for my semester.
-    final held = <String, Set<String>>{};
-    final titles = <String, (String, String)>{};
-    if (year != null && sem != null) {
-      final sessions = await _sessions.where('targetYear', isEqualTo: year).where('targetSemester', isEqualTo: sem).get();
-      for (final d in sessions.docs) {
-        final s = d.data();
-        final cid = s['courseId'] as String? ?? '';
-        final date = s['sessionDate'] as String? ?? '';
-        if (cid.isEmpty || date.isEmpty || date.compareTo(today) > 0) continue;
-        held.putIfAbsent(cid, () => {}).add(date);
-        titles[cid] = ((s['courseCode'] as String?) ?? cid, (s['courseTitle'] as String?) ?? '');
-      }
-    }
-    final attended = <String, Set<String>>{};
-    final late = <String, Set<String>>{};
-    for (final r in records) {
-      final cid = r.courseId ?? '';
-      if (!held.containsKey(cid)) continue;
-      final st = r.status.toUpperCase();
-      if (st == 'PRESENT' || st == 'LATE') attended.putIfAbsent(cid, () => {}).add(r.date ?? '');
-      if (st == 'LATE') late.putIfAbsent(cid, () => {}).add(r.date ?? '');
-    }
-
-    final courses = held.entries.map((e) {
-      final days = e.value;
-      final went = (attended[e.key] ?? const <String>{}).intersection(days);
-      final pct = days.isEmpty ? 0.0 : went.length / days.length * 100;
-      final missed = days.difference(went).toList()..sort((a, b) => b.compareTo(a));
-      return CourseAttendanceModel(
-        courseId: e.key,
-        courseCode: titles[e.key]?.$1 ?? e.key,
-        courseTitle: titles[e.key]?.$2 ?? '',
-        attendedClasses: went.length,
-        totalClasses: days.length,
-        percentage: pct,
-        isEligible: pct >= 75,
-        absentDates: missed,
-        lateCount: (late[e.key] ?? const <String>{}).intersection(days).length,
-      );
-    }).toList()
-      ..sort((a, b) => a.courseCode.compareTo(b.courseCode));
-
-    final totalHeld = courses.fold<int>(0, (s, c) => s + c.totalClasses);
-    final totalWent = courses.fold<int>(0, (s, c) => s + c.attendedClasses);
-    return AttendanceSummaryModel(
-      overallPercentage: totalHeld == 0 ? 0 : totalWent / totalHeld * 100,
-      totalAttended: totalWent,
-      totalSessions: totalHeld,
-      courseSummaries: courses,
-      recentRecords: records.take(15).toList(),
-      isFromCache: recordsSnap.metadata.isFromCache,
-    );
+    // S2-11: a few small records instead of every session and mark.
+    final totals = AttendanceTotals(_db);
+    final courses = await totals.coursesOf(year, sem, extraIds: since.keys);
+    return totals.summary(uid: uid, courses: courses, since: since, today: ClassTime.todayKey());
   }
+
 }

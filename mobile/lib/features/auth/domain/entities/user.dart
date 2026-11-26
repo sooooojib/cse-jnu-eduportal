@@ -108,5 +108,5 @@ class User extends Equatable {
 
   /// Whether the dashboard should offer the Faculty / Admin view switcher.
   bool get canSwitchToAdminView =>
-      role == UserRole.chairman || (role == UserRole.teacher && isAdminDelegate);
+      role == UserRole.chairman || role == UserRole.teacher;
 }

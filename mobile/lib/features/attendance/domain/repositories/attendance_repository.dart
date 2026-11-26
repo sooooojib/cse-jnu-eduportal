@@ -1,7 +1,8 @@
 import '../entities/attendance_entities.dart';
 
 abstract class AttendanceRepository {
-  Future<AttendanceSummary> getMySummary();
+  /// [year] / [semester]: look back at a past semester (default: current).
+  Future<AttendanceSummary> getMySummary({int? year, int? semester});
   Future<AttendanceVerificationResult> verifyCode(String code, {String? courseId});
   Future<AttendanceSession> startSession({required String courseId, int? durationMinutes});
   Future<void> deactivateSession({required String sessionId});
@@ -14,7 +15,8 @@ class GetAttendanceSummaryUseCase {
   final AttendanceRepository repository;
   GetAttendanceSummaryUseCase(this.repository);
 
-  Future<AttendanceSummary> execute() => repository.getMySummary();
+  Future<AttendanceSummary> execute({int? year, int? semester}) =>
+      (year == null && semester == null) ? repository.getMySummary() : repository.getMySummary(year: year, semester: semester);
 }
 
 class VerifyAttendanceCodeUseCase {

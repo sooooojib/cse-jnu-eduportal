@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import '../services/class_keys.dart';
 
 class AttendanceSession extends Equatable {
   final String id;
@@ -308,6 +309,7 @@ class StudentAttendanceRow extends Equatable {
   final int attended;
   final int late;
   final int held;
+  final Set<String> presentDates;
 
   const StudentAttendanceRow({
     required this.studentId,
@@ -316,13 +318,22 @@ class StudentAttendanceRow extends Equatable {
     required this.attended,
     required this.late,
     required this.held,
+    this.presentDates = const {},
   });
 
   double get percentage => held == 0 ? 0 : attended / held * 100;
   bool get isBelow75 => held > 0 && percentage < 75;
 
   @override
-  List<Object?> get props => [studentId, studentRoll, studentName, attended, late, held];
+  List<Object?> get props => [
+        studentId,
+        studentRoll,
+        studentName,
+        attended,
+        late,
+        held,
+        presentDates,
+      ];
 }
 
 /// Attendance of every student in a course (for teachers and the Chairman).
@@ -330,29 +341,133 @@ class CourseAttendanceReport extends Equatable {
   final String courseId;
   final String courseCode;
   final String courseTitle;
+  final String teacherName;
   final List<String> classDates;
   final List<StudentAttendanceRow> rows;
+
+  /// The course's year / semester and the batch's session (if known).
+  final int? year;
+  final int? semester;
+  final String? session;
+
+  /// "yyyy-MM-dd" the report was made (so old printouts are recognisable).
+  final String? generatedOn;
 
   const CourseAttendanceReport({
     required this.courseId,
     required this.courseCode,
     required this.courseTitle,
+    this.teacherName = '',
     required this.classDates,
     required this.rows,
+    this.year,
+    this.semester,
+    this.session,
+    this.generatedOn,
   });
+
+  // ─── Shared text for the CSV and Excel exports ─────────────────────────
+
+  String get courseLine => courseTitle.isEmpty ? 'Course: $courseCode' : 'Course: $courseCode - $courseTitle';
+
+  String get detailsLine => [
+        'Teacher: ${teacherName.trim().isEmpty ? 'Not assigned' : teacherName.trim()}',
+        if (year != null && semester != null) 'Year $year, Semester $semester',
+        if ((session ?? '').isNotEmpty) 'Session $session',
+        'Classes held: ${classDates.length}',
+      ].join('   ·   ');
+
+  String? get generatedLine {
+    final d = DateTime.tryParse(generatedOn ?? '');
+    if (d == null) return null;
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return 'Generated on ${d.day} ${months[d.month - 1]} ${d.year}';
+  }
+
+  /// "—" while no class has been held (0 % would read as failing).
+  static String percentText(StudentAttendanceRow r) => r.held == 0 ? '—' : '${r.percentage.toStringAsFixed(1)}%';
+
+  static String eligibleText(StudentAttendanceRow r) => r.held == 0 ? '—' : (r.isBelow75 ? 'No' : 'Yes');
+
+  /// Class average over students who had at least one class (null if none).
+  double? get averagePercent {
+    final counted = rows.where((r) => r.held > 0).toList();
+    if (counted.isEmpty) return null;
+    return counted.fold<double>(0, (s, r) => s + r.percentage) / counted.length;
+  }
+
+  String get summaryLine => [
+        'Students: ${rows.length}',
+        'Class average: ${averagePercent == null ? '—' : '${averagePercent!.toStringAsFixed(1)}%'}',
+        'Below 75%: ${below75.length}',
+      ].join('   ·   ');
 
   List<StudentAttendanceRow> get below75 => rows.where((r) => r.isBelow75).toList();
 
-  /// Spreadsheet-friendly text (paste into Excel / Google Sheets).
+  /// Formats an ISO `yyyy-MM-dd` date into compact `d.M.yy` (e.g. `26.11.26`).
+  static String formatShortDate(String isoDate) {
+    final parts = isoDate.split('-');
+    if (parts.length != 3) return isoDate;
+    final y = parts[0].length >= 2 ? parts[0].substring(parts[0].length - 2) : parts[0];
+    final m = int.tryParse(parts[1])?.toString() ?? parts[1];
+    final d = int.tryParse(parts[2])?.toString() ?? parts[2];
+    return '$d.$m.$y';
+  }
+
+  /// Spreadsheet-friendly CSV matrix with university/course/teacher header and P/A per date.
   String toCsv() {
-    String q(String v) => v.contains(',') || v.contains('"') ? '"${v.replaceAll('"', '""')}"' : v;
-    final b = StringBuffer('Roll,Name,Attended,Late,Classes held,Percentage\n');
-    for (final r in rows) {
-      b.writeln([q(r.studentRoll), q(r.studentName), r.attended, r.late, r.held, r.percentage.toStringAsFixed(1)].join(','));
+    String q(String v) =>
+        v.contains(',') || v.contains('"') || v.contains('\n')
+            ? '"${v.replaceAll('"', '""')}"'
+            : v;
+    final sortedDates = [...classDates]..sort();
+    final sortedRows = [...rows]
+      ..sort((a, b) => a.studentRoll.compareTo(b.studentRoll));
+    final b = StringBuffer()
+      ..writeln(q('Jagannath University — Department of Computer Science & Engineering'))
+      ..writeln(q(courseLine))
+      ..writeln(q(detailsLine));
+    if (generatedLine != null) b.writeln(q(generatedLine!));
+    b.writeln(
+      [
+        'Sl',
+        'Roll',
+        'Name',
+        ...ClassKeys.labels(sortedDates, formatShortDate),
+        'Present',
+        'Absent',
+        '%',
+        'Eligible (75%)',
+      ].map((v) => q(v.toString())).join(','),
+    );
+    for (var i = 0; i < sortedRows.length; i++) {
+      final r = sortedRows[i];
+      final absentCount = (r.held - r.attended).clamp(0, r.held);
+      b.writeln(
+        [
+          '${i + 1}',
+          q(r.studentRoll),
+          q(r.studentName),
+          ...sortedDates.map((d) => r.presentDates.contains(d) ? 'P' : 'A'),
+          '${r.attended}',
+          '$absentCount',
+          percentText(r),
+          eligibleText(r),
+        ].join(','),
+      );
     }
+    b.writeln(q(summaryLine));
     return b.toString();
   }
 
+
   @override
-  List<Object?> get props => [courseId, courseCode, courseTitle, classDates, rows];
+  List<Object?> get props => [
+        courseId,
+        courseCode,
+        courseTitle,
+        teacherName,
+        classDates,
+        rows,
+      ];
 }

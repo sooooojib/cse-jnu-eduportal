@@ -145,20 +145,34 @@ class EnrollmentModel extends Enrollment {
     required super.year,
     required super.semester,
     required super.enrolledCourseIds,
+    this.type = '',
   });
 
+  /// e.g. 'RETAKE' for a student's own retake / backlog enrollment; empty for
+  /// admin-created enrollments.
+  final String type;
+
+  bool get isRetake => type.toUpperCase() == 'RETAKE';
+
   factory EnrollmentModel.fromJson(Map<String, dynamic> json) {
+    final ids = (json['enrolledCourseIds'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .where((id) => id.isNotEmpty)
+            .toList() ??
+        <String>[];
+    final singleCourseId = (json['courseId'] as String?)?.trim() ?? '';
+    if (ids.isEmpty && singleCourseId.isNotEmpty) {
+      ids.add(singleCourseId);
+    }
     return EnrollmentModel(
       id: json['id'] as String? ?? '',
       studentId: json['studentId'] as String? ?? '',
       studentName: json['studentName'] as String? ?? '',
       studentRoll: json['studentRoll'] as String? ?? '',
-      year: json['year'] as int? ?? 1,
-      semester: json['semester'] as int? ?? 1,
-      enrolledCourseIds: (json['enrolledCourseIds'] as List<dynamic>?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          const [],
+      year: (json['year'] as num?)?.toInt() ?? 1,
+      semester: (json['semester'] as num?)?.toInt() ?? 1,
+      enrolledCourseIds: ids,
+      type: (json['type'] as String?) ?? '',
     );
   }
 

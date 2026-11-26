@@ -364,10 +364,10 @@ void main() {
       expect(find.byKey(const ValueKey('directory_level_filter')), findsNothing);
     });
 
-    testWidgets('Prompts destructive confirmation before deleting user', (tester) async {
+    testWidgets('Deactivates (not deletes) a user after confirmation', (tester) async {
       when(() => mockAdminRepo.getAllUsers(roleFilter: any(named: 'roleFilter')))
           .thenAnswer((_) async => [sampleStudent]);
-      when(() => mockAdminRepo.deleteUser(userId: 'uid_student_1'))
+      when(() => mockAdminRepo.toggleUserActiveStatus(userId: 'uid_student_1', isActive: false))
           .thenAnswer((_) async {});
 
       await tester.pumpWidget(buildTestableWidget(
@@ -375,22 +375,40 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      // Open the user actions menu, then choose Delete
-      final menuBtn = find.byIcon(Icons.more_vert_rounded);
-      expect(menuBtn, findsOneWidget);
-      await tester.tap(menuBtn);
+      await tester.tap(find.byIcon(Icons.more_vert_rounded));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Delete user'));
+      expect(find.text('Delete user'), findsNothing);
+      await tester.tap(find.text('Deactivate'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Delete User Account?'), findsOneWidget);
-      expect(find.textContaining('permanently delete Sadia Sultana'), findsOneWidget);
+      expect(find.text('Deactivate Sadia Sultana?'), findsOneWidget);
+      expect(find.textContaining('reactivate them later'), findsOneWidget);
 
-      // Tap Delete in confirmation dialog
-      await tester.tap(find.widgetWithText(ElevatedButton, 'Delete User'));
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Deactivate'));
       await tester.pumpAndSettle();
 
-      verify(() => mockAdminRepo.deleteUser(userId: 'uid_student_1')).called(1);
+      verify(() => mockAdminRepo.toggleUserActiveStatus(userId: 'uid_student_1', isActive: false)).called(1);
+      verifyNever(() => mockAdminRepo.deleteUser(userId: any(named: 'userId')));
+    });
+
+    testWidgets('A deactivated user is labelled and can be reactivated', (tester) async {
+      when(() => mockAdminRepo.getAllUsers(roleFilter: any(named: 'roleFilter')))
+          .thenAnswer((_) async => [sampleStudent.copyWith(isActive: false)]);
+      when(() => mockAdminRepo.toggleUserActiveStatus(userId: 'uid_student_1', isActive: true))
+          .thenAnswer((_) async {});
+
+      await tester.pumpWidget(buildTestableWidget(
+        AdminUserDirectoryScreen(repository: mockAdminRepo),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Deactivated'), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.more_vert_rounded));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Reactivate'));
+      await tester.pumpAndSettle();
+
+      verify(() => mockAdminRepo.toggleUserActiveStatus(userId: 'uid_student_1', isActive: true)).called(1);
     });
   });
 

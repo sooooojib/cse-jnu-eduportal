@@ -36,6 +36,31 @@ class SemesterRemoteDataSourceImpl implements SemesterRemoteDataSource {
         _auth = auth ?? fb.FirebaseAuth.instance,
         _functions = functions ?? FirebaseFunctions.instance;
 
+  /// The student's own requests, newest first. Uses the
+  /// (studentId, createdAt desc) index; if that index is missing or still
+  /// building, falls back to an unordered query sorted on the phone, so the
+  /// semester card never breaks with "requires an index".
+  Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> _myRequests(String uid, {int? limit}) async {
+    final base = _firestore.collection("semesterUpgradeRequests").where("studentId", isEqualTo: uid);
+    try {
+      var q = base.orderBy("createdAt", descending: true);
+      if (limit != null) q = q.limit(limit);
+      return (await q.get()).docs;
+    } on FirebaseException catch (e) {
+      if (e.code != 'failed-precondition') rethrow;
+      AppLogger.w('semesterUpgradeRequests index missing; sorting on device. $e');
+      final docs = (await base.get()).docs.toList();
+      int millis(QueryDocumentSnapshot<Map<String, dynamic>> d) {
+        final v = d.data()["createdAt"];
+        if (v is Timestamp) return v.millisecondsSinceEpoch;
+        if (v is String) return DateTime.tryParse(v)?.millisecondsSinceEpoch ?? 0;
+        return 0;
+      }
+      docs.sort((a, b) => millis(b).compareTo(millis(a)));
+      return limit != null && docs.length > limit ? docs.sublist(0, limit) : docs;
+    }
+  }
+
   @override
   Future<SemesterStatusModel> getStatus() async {
     final uid = _auth.currentUser?.uid;
@@ -49,14 +74,9 @@ class SemesterRemoteDataSourceImpl implements SemesterRemoteDataSource {
     final currentSemester = userData["semester"] as int?;
 
     // Check for any pending/recent upgrade request
-    final upgradeSnap = await _firestore
-        .collection("semesterUpgradeRequests")
-        .where("studentId", isEqualTo: uid)
-        .orderBy("createdAt", descending: true)
-        .limit(10)
-        .get();
+    final upgradeDocs = await _myRequests(uid, limit: 10);
 
-    if (upgradeSnap.docs.isEmpty) {
+    if (upgradeDocs.isEmpty) {
       return SemesterStatusModel(
         currentYear: currentYear,
         currentSemester: currentSemester,
@@ -65,7 +85,7 @@ class SemesterRemoteDataSourceImpl implements SemesterRemoteDataSource {
     }
 
     // Find the most recent non-dismissed request
-    final nonDismissed = upgradeSnap.docs.where((doc) {
+    final nonDismissed = upgradeDocs.where((doc) {
       final data = doc.data();
       return data["status"] != "DISMISSED" && data["isDismissed"] != true;
     }).toList();
@@ -256,13 +276,9 @@ class SemesterRemoteDataSourceImpl implements SemesterRemoteDataSource {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw const ServerException(message: "Not authenticated.");
 
-    final snapshot = await _firestore
-        .collection("semesterUpgradeRequests")
-        .where("studentId", isEqualTo: uid)
-        .orderBy("createdAt", descending: true)
-        .get();
+    final docs = await _myRequests(uid);
 
-    return snapshot.docs.map((doc) {
+    return docs.map((doc) {
       return SemesterUpgradeRequestModel.fromJson({"id": doc.id, ...doc.data()});
     }).toList();
   }

@@ -15,6 +15,9 @@ import '../../../auth/domain/entities/user.dart';
 import '../../../auth/domain/repositories/user_repository.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../controllers/profile_controller.dart';
+import 'package:cse_jnu_eduportal/core/config/app_features.dart';
+import 'delete_account_button.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 class StudentProfileDialog extends StatefulWidget {
   final User student;
@@ -76,6 +79,13 @@ class _StudentProfileDialogState extends State<StudentProfileDialog> {
   }
 
   Future<void> _showPhotoPickerSheet(BuildContext context, bool isDark) async {
+    final hasPhoto = _currentStudent.avatarUrl != null && _currentStudent.avatarUrl!.isNotEmpty;
+    if (!AppFeatures.fileUploads && !hasPhoto) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(AppFeatures.uploadsOffMessage)),
+      );
+      return;
+    }
     await showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -107,6 +117,7 @@ class _StudentProfileDialogState extends State<StudentProfileDialog> {
             ),
             const SizedBox(height: 16),
 
+            if (AppFeatures.fileUploads) ...[
             // 1. Photo Gallery
             _buildSourceOptionTile(
               icon: Icons.photo_library_rounded,
@@ -148,6 +159,7 @@ class _StudentProfileDialogState extends State<StudentProfileDialog> {
               },
             ),
 
+            ],
             if (_currentStudent.avatarUrl != null && _currentStudent.avatarUrl!.isNotEmpty) ...[
               const SizedBox(height: 10),
               _buildSourceOptionTile(
@@ -249,7 +261,7 @@ class _StudentProfileDialogState extends State<StudentProfileDialog> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Could not access image: $e'),
+            content: Text('Could not access image: ${friendlyError(e)}'),
             backgroundColor: const Color(0xFFDC2626),
             behavior: SnackBarBehavior.floating,
           ),
@@ -274,7 +286,7 @@ class _StudentProfileDialogState extends State<StudentProfileDialog> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Could not access file system: $e'),
+            content: Text('Could not access file system: ${friendlyError(e)}'),
             backgroundColor: const Color(0xFFDC2626),
             behavior: SnackBarBehavior.floating,
           ),
@@ -380,7 +392,7 @@ class _StudentProfileDialogState extends State<StudentProfileDialog> {
         setState(() => _isUploadingPhoto = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to save avatar: $e'),
+            content: Text('Failed to save avatar: ${friendlyError(e)}'),
             backgroundColor: const Color(0xFFDC2626),
             behavior: SnackBarBehavior.floating,
           ),
@@ -426,7 +438,7 @@ class _StudentProfileDialogState extends State<StudentProfileDialog> {
         setState(() => _isUploadingPhoto = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to remove photo: $e'),
+            content: Text('Failed to remove photo: ${friendlyError(e)}'),
             backgroundColor: const Color(0xFFDC2626),
             behavior: SnackBarBehavior.floating,
           ),
@@ -490,7 +502,7 @@ class _StudentProfileDialogState extends State<StudentProfileDialog> {
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to update profile: $e'),
+            content: Text('Failed to update profile: ${friendlyError(e)}'),
             backgroundColor: const Color(0xFFDC2626),
             behavior: SnackBarBehavior.floating,
           ),
@@ -582,7 +594,7 @@ class _StudentProfileDialogState extends State<StudentProfileDialog> {
                   } catch (e) {
                     if (mounted) {
                       messenger.showSnackBar(
-                        SnackBar(content: Text('Request error: $e'), backgroundColor: Colors.redAccent),
+                        SnackBar(content: Text('Request error: ${friendlyError(e)}'), backgroundColor: Colors.redAccent),
                       );
                     }
                   }
@@ -955,6 +967,17 @@ class _StudentProfileDialogState extends State<StudentProfileDialog> {
                 ),
               ),
             ),
+            if (_currentStudent.role == UserRole.student || _currentStudent.role == UserRole.cr) ...[
+              const SizedBox(height: 6),
+              Center(
+                child: DeleteAccountButton(
+                  onDeleted: () async {
+                    if (mounted) Navigator.pop(context);
+                    await widget.onLogout();
+                  },
+                ),
+              ),
+            ],
           ],
         ),
       ),

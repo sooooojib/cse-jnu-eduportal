@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../../domain/usecases/admin_usecases.dart';
 import 'admin_dashboard_state.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 class AdminDashboardController extends ChangeNotifier {
   final GetAdminDashboardDataUseCase _getDataUseCase;
@@ -39,7 +40,7 @@ class AdminDashboardController extends ChangeNotifier {
       );
       notifyListeners();
     } catch (e) {
-      _state = AdminDashboardError(message: e.toString());
+      _state = AdminDashboardError(message: friendlyError(e));
       notifyListeners();
     }
   }
@@ -80,7 +81,7 @@ class AdminDashboardController extends ChangeNotifier {
     } catch (e) {
       _state = current.copyWith(
         isProcessingAction: false,
-        actionErrorMessage: e.toString(),
+        actionErrorMessage: friendlyError(e),
       );
       notifyListeners();
       return false;
@@ -119,7 +120,7 @@ class AdminDashboardController extends ChangeNotifier {
     } catch (e) {
       _state = current.copyWith(
         isProcessingAction: false,
-        actionErrorMessage: e.toString(),
+        actionErrorMessage: friendlyError(e),
       );
       notifyListeners();
       return false;
@@ -152,7 +153,7 @@ class AdminDashboardController extends ChangeNotifier {
     } catch (e) {
       _state = current.copyWith(
         isProcessingAction: false,
-        actionErrorMessage: e.toString(),
+        actionErrorMessage: friendlyError(e),
       );
       notifyListeners();
       return false;
@@ -188,7 +189,7 @@ class AdminDashboardController extends ChangeNotifier {
     } catch (e) {
       _state = current.copyWith(
         isProcessingAction: false,
-        actionErrorMessage: e.toString(),
+        actionErrorMessage: friendlyError(e),
       );
       notifyListeners();
       return false;

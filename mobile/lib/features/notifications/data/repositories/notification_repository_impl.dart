@@ -101,7 +101,8 @@ class NotificationRemoteDataSourceImpl implements NotificationRemoteDataSource {
 
     await _firestore.collection("users").doc(uid).update({
       "fcmTokens": FieldValue.arrayUnion([token.trim()]),
-      "lastDeviceTokenUpdatedAt": FieldValue.serverTimestamp(),
+      // Only fields a user may change on their own profile (rules).
+      "updatedAt": FieldValue.serverTimestamp(),
     });
   }
 
@@ -112,7 +113,8 @@ class NotificationRemoteDataSourceImpl implements NotificationRemoteDataSource {
 
     await _firestore.collection("users").doc(uid).update({
       "fcmTokens": FieldValue.arrayRemove([token.trim()]),
-      "lastDeviceTokenUpdatedAt": FieldValue.serverTimestamp(),
+      // Only fields a user may change on their own profile (rules).
+      "updatedAt": FieldValue.serverTimestamp(),
     });
   }
 }

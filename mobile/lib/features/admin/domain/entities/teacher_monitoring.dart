@@ -51,8 +51,12 @@ class CourseDeliveryStats extends Equatable {
 
   final String? lastClassDate;
 
-  /// Delivered classes, newest first.
+  /// Delivered classes with at least 1 student present, newest first.
   final List<DeliveredClass> history;
+
+  /// Attendance sessions on days where 0 students were marked present,
+  /// newest first (flagged instead of counting as held).
+  final List<DeliveredClass> emptySessions;
 
   /// One-day changes in the period (up to today), newest first: extra,
   /// cancelled, moved, and classes the CR reported as not taken.
@@ -74,6 +78,7 @@ class CourseDeliveryStats extends Equatable {
     required this.expectedClassesSoFar,
     required this.lastClassDate,
     required this.history,
+    this.emptySessions = const [],
     this.changes = const [],
   });
 
@@ -129,6 +134,7 @@ class CourseDeliveryStats extends Equatable {
         expectedClassesSoFar,
         lastClassDate,
         history,
+        emptySessions,
         changes,
       ];
 }

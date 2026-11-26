@@ -5,6 +5,7 @@ import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../controllers/counseling_controller.dart';
 import '../../domain/entities/counseling_entities.dart';
 import '../widgets/create_counseling_slot_dialog.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 class TeacherCounselingScreen extends StatefulWidget {
   final CounselingController? controller;
@@ -292,7 +293,7 @@ class _TeacherCounselingScreenState extends State<TeacherCounselingScreen> with 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(e.toString().replaceAll('Exception: ', '').replaceAll('ServerException: ', '')),
+              content: Text(friendlyError(e)),
               backgroundColor: Colors.redAccent,
             ),
           );
@@ -358,7 +359,7 @@ class _TeacherCounselingScreenState extends State<TeacherCounselingScreen> with 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(e.toString().replaceAll('Exception: ', '').replaceAll('ServerException: ', '')),
+              content: Text(friendlyError(e)),
               backgroundColor: Colors.redAccent,
             ),
           );
@@ -396,7 +397,7 @@ class _TeacherCounselingScreenState extends State<TeacherCounselingScreen> with 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(e.toString().replaceAll('Exception: ', '').replaceAll('ServerException: ', '')),
+              content: Text(friendlyError(e)),
               backgroundColor: Colors.redAccent,
             ),
           );

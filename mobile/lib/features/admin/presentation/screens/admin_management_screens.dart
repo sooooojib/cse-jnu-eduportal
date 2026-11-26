@@ -26,6 +26,8 @@ import '../widgets/admin_pending_signups_card.dart' show SessionBadge;
 import '../widgets/signup_approval_dialog.dart';
 import '../utils/request_ordering.dart';
 import '../widgets/admin_filter_dropdown.dart';
+import '../../data/datasources/admin_remote_datasource.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 1. ADMIN USER DIRECTORY SCREEN
@@ -95,7 +97,7 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage = e.toString();
+        _errorMessage = friendlyError(e);
       });
     }
   }
@@ -135,7 +137,7 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
       messenger.showSnackBar(SnackBar(content: Text(success), backgroundColor: const Color(0xFF047857)));
       _loadUsers();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: const Color(0xFFDC2626)));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyError(e)), backgroundColor: const Color(0xFFDC2626)));
     }
   }
 
@@ -159,7 +161,12 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
   }
 
   Future<void> _changeRole(User user) async {
-    const options = [UserRole.teacher, UserRole.chairman, UserRole.admin];
+    final viewerIsAdmin = _viewer == null || _viewer!.role == UserRole.admin;
+    // Staff stay staff, students stay students; the Chairman can't grant or
+    // remove Admin.
+    final options = AdminRemoteDataSourceImpl.roleChoicesFor(user.role)
+        .where((r) => viewerIsAdmin || r != UserRole.admin)
+        .toList();
     final picked = await showDialog<UserRole>(
       context: context,
       builder: (ctx) => SimpleDialog(
@@ -179,7 +186,7 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
           const Padding(
             padding: EdgeInsets.fromLTRB(24, 8, 24, 0),
             child: Text(
-              'The user must sign out and sign in again for the new role to take effect.',
+              'The new role applies the next time they open the app.',
               style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ),
@@ -187,6 +194,22 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
       ),
     );
     if (picked == null) return;
+    if (picked == UserRole.cr) {
+      // One CR per batch: name the current CR who will become a student.
+      final current = _allUsers
+          .where((u) => u.id != user.id && u.role == UserRole.cr && u.year == user.year && u.semester == user.semester)
+          .toList();
+      if (!mounted) return;
+      final ok = await AppConfirmationDialog.show(
+        context: context,
+        title: 'Make ${user.fullName} the CR?',
+        message: current.isEmpty
+            ? 'Year ${user.year ?? '-'}, Semester ${user.semester ?? '-'} has no CR now.'
+            : '${current.map((u) => u.fullName).join(', ')} is the CR of Year ${user.year}, Semester ${user.semester} now and will become a student.',
+        confirmText: 'Make CR',
+      );
+      if (ok != true) return;
+    }
     await _runUserAction(
       () => _repository.updateUserRole(userId: user.id, role: picked),
       '${user.fullName} is now ${picked.label}',
@@ -224,8 +247,14 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
   Widget _buildUserMenu(User user) {
     final viewer = _viewer;
     final viewerIsSystemAdmin = viewer == null || viewer.role == UserRole.admin;
-    final canDelete = viewerIsSystemAdmin || user.role != UserRole.admin;
-    final canChangeRole = viewerIsSystemAdmin && (user.role.hasTeacherAccess || user.role == UserRole.admin) && user.id != viewer?.id;
+    // S2-07: deactivate instead of delete (never yourself; the Chairman
+    // can't deactivate an Admin).
+    final canDelete = (viewerIsSystemAdmin || user.role != UserRole.admin) && user.id != viewer?.id;
+    // Free plan: direct, rule-checked change (S2-04). Admin: anyone; Chairman:
+    // anyone except Admins. Never your own role.
+    final viewerIsChairman = viewer?.role == UserRole.chairman;
+    final canChangeRole = user.id != viewer?.id &&
+        (viewerIsSystemAdmin || (viewerIsChairman && user.role != UserRole.admin));
 
     return PopupMenuButton<String>(
       tooltip: 'User actions',
@@ -241,59 +270,58 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
           case 'session':
             _editSession(user);
             break;
-          case 'delete':
-            _confirmDeleteUser(user);
+          case 'deactivate':
+            _confirmDeactivate(user);
+            break;
+          case 'reactivate':
+            _runUserAction(
+              () => _repository.toggleUserActiveStatus(userId: user.id, isActive: true),
+              '${user.fullName} can sign in again.',
+            );
             break;
         }
       },
       itemBuilder: (_) => [
-        if (user.role == UserRole.teacher)
-          PopupMenuItem(
-            value: 'delegate',
-            child: Text(user.isAdminDelegate ? 'Revoke signup committee access' : 'Grant signup committee access'),
-          ),
         if (canChangeRole) const PopupMenuItem(value: 'role', child: Text('Change role')),
         if (user.role.isStudentSide) const PopupMenuItem(value: 'session', child: Text('Set academic session')),
-        if (canDelete)
+        if (canDelete && user.isActive)
           const PopupMenuItem(
-            value: 'delete',
-            child: Text('Delete user', style: TextStyle(color: Color(0xFFDC2626))),
+            value: 'deactivate',
+            child: Text('Deactivate', style: TextStyle(color: Color(0xFFDC2626))),
           ),
+        if (canDelete && !user.isActive) const PopupMenuItem(value: 'reactivate', child: Text('Reactivate')),
       ],
     );
   }
 
-  Future<void> _confirmDeleteUser(User user) async {
+  Future<void> _confirmDeactivate(User user) async {
+    // Tell the admin exactly what changes for a teacher or a CR.
+    var extra = '';
+    if (user.role.hasTeacherAccess) {
+      try {
+        final courses = (await _repository.getAllCourses()).where((c) => c.teacherId == user.id).toList();
+        if (courses.isNotEmpty) {
+          extra = '\n\nThese courses will have no teacher until you assign one: '
+              '${courses.map((c) => c.code).join(', ')}.';
+        }
+      } catch (_) {}
+    } else if (user.role == UserRole.cr) {
+      extra = '\n\nThey stop being CR; appoint a new CR with "Change role".';
+    }
+    if (!mounted) return;
     final confirmed = await AppConfirmationDialog.show(
       context: context,
-      title: 'Delete User Account?',
-      message: 'Are you sure you want to permanently delete ${user.fullName} (${user.email})? This action cannot be undone and unlinks their course assignments.',
-      confirmText: 'Delete User',
+      title: 'Deactivate ${user.fullName}?',
+      message: 'They can no longer sign in or use the app. Their records are kept, and you can reactivate them later.$extra',
+      confirmText: 'Deactivate',
       isDestructive: true,
-      icon: Icons.delete_forever_rounded,
+      icon: Icons.person_off_outlined,
     );
-
-    if (confirmed == true && mounted) {
-      final messenger = ScaffoldMessenger.of(context);
-      try {
-        await _repository.deleteUser(userId: user.id);
-        if (mounted) {
-          messenger.showSnackBar(
-            SnackBar(
-              content: Text('${user.fullName} deleted successfully.'),
-              backgroundColor: const Color(0xFF047857),
-            ),
-          );
-          _loadUsers();
-        }
-      } catch (e) {
-        if (mounted) {
-          messenger.showSnackBar(
-            SnackBar(content: Text('Failed to delete: $e'), backgroundColor: const Color(0xFFDC2626)),
-          );
-        }
-      }
-    }
+    if (confirmed != true || !mounted) return;
+    await _runUserAction(
+      () => _repository.toggleUserActiveStatus(userId: user.id, isActive: false),
+      '${user.fullName} is deactivated.',
+    );
   }
 
   void _showCreateUserModal() {
@@ -515,7 +543,7 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
                                   setModalState(() => isSubmitting = false);
                                   if (mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text(err.toString()), backgroundColor: const Color(0xFFDC2626)),
+                                      SnackBar(content: Text(friendlyError(err)), backgroundColor: const Color(0xFFDC2626)),
                                     );
                                   }
                                 }
@@ -703,11 +731,13 @@ class _AdminUserDirectoryScreenState extends State<AdminUserDirectoryScreen> {
                                               crossAxisAlignment: CrossAxisAlignment.start,
                                               children: [
                                                 Text(
-                                                  user.fullName,
+                                                  user.isActive ? user.fullName : '${user.fullName} · Deactivated',
                                                   style: TextStyle(
                                                     fontSize: 15,
                                                     fontWeight: FontWeight.w700,
-                                                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                                    color: !user.isActive
+                                                        ? const Color(0xFF94A3B8)
+                                                        : (isDark ? Colors.white : const Color(0xFF0F172A)),
                                                   ),
                                                   maxLines: 1,
                                                   overflow: TextOverflow.ellipsis,
@@ -936,7 +966,7 @@ class _AdminSignupRequestsScreenState extends State<AdminSignupRequestsScreen> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage = e.toString();
+        _errorMessage = friendlyError(e);
       });
     }
   }
@@ -958,7 +988,7 @@ class _AdminSignupRequestsScreenState extends State<AdminSignupRequestsScreen> {
       _loadRequests();
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: const Color(0xFFDC2626)),
+        SnackBar(content: Text(friendlyError(e)), backgroundColor: const Color(0xFFDC2626)),
       );
     }
   }
@@ -994,7 +1024,7 @@ class _AdminSignupRequestsScreenState extends State<AdminSignupRequestsScreen> {
         _loadRequests();
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: const Color(0xFFDC2626)),
+          SnackBar(content: Text(friendlyError(e)), backgroundColor: const Color(0xFFDC2626)),
         );
       }
     }
@@ -1206,7 +1236,7 @@ class _AdminSemesterRequestsScreenState extends State<AdminSemesterRequestsScree
   }
 
   static bool _isBackwards(SemesterUpgradeRequest r) =>
-      r.requestedYear * 10 + r.requestedSemester < r.currentYear * 10 + r.currentSemester;
+      r.hasRequestedLevel && r.requestedYear * 10 + r.requestedSemester < r.currentYear * 10 + r.currentSemester;
 
   Widget _buildListFilters() {
     return Padding(
@@ -1268,7 +1298,7 @@ class _AdminSemesterRequestsScreenState extends State<AdminSemesterRequestsScree
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage = e.toString();
+        _errorMessage = friendlyError(e);
       });
     }
   }
@@ -1290,7 +1320,7 @@ class _AdminSemesterRequestsScreenState extends State<AdminSemesterRequestsScree
         _loadRequests();
       } catch (e) {
         messenger.showSnackBar(
-          SnackBar(content: Text('Failed: $e'), backgroundColor: const Color(0xFFDC2626)),
+          SnackBar(content: Text('Failed: ${friendlyError(e)}'), backgroundColor: const Color(0xFFDC2626)),
         );
       }
     }
@@ -1328,7 +1358,7 @@ class _AdminSemesterRequestsScreenState extends State<AdminSemesterRequestsScree
         _loadRequests();
       } catch (e) {
         messenger.showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: const Color(0xFFDC2626)),
+          SnackBar(content: Text(friendlyError(e)), backgroundColor: const Color(0xFFDC2626)),
         );
       }
     }
@@ -1384,7 +1414,7 @@ class _AdminSemesterRequestsScreenState extends State<AdminSemesterRequestsScree
             _buildDetailRow('Student Name', req.studentName),
             _buildDetailRow('Roll / ID', req.studentRoll),
             _buildDetailRow('Current Standing', 'Year ${req.currentYear}, Semester ${req.currentSemester}'),
-            _buildDetailRow('Requested Standing', 'Year ${req.requestedYear}, Semester ${req.requestedSemester}'),
+            _buildDetailRow('Requested Standing', req.requestedLabel),
             _buildDetailRow('Submission Date', req.createdAt),
             if (req.rejectionReason != null && req.rejectionReason!.isNotEmpty)
               _buildDetailRow('Rejection Reason', req.rejectionReason!, isError: true),
@@ -1563,7 +1593,9 @@ class _AdminSemesterRequestsScreenState extends State<AdminSemesterRequestsScree
                                             borderRadius: BorderRadius.circular(10),
                                           ),
                                           child: Text(
-                                            'Y${req.currentYear}S${req.currentSemester} ➔ Y${req.requestedYear}S${req.requestedSemester}',
+                                            req.hasRequestedLevel
+                                                ? 'Y${req.currentYear}S${req.currentSemester} ➔ Y${req.requestedYear}S${req.requestedSemester}'
+                                                : 'Requested semester missing',
                                             style: TextStyle(
                                               fontWeight: FontWeight.bold,
                                               fontSize: 12,
@@ -1744,7 +1776,7 @@ class _AdminCourseManagementScreenState extends State<AdminCourseManagementScree
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage = e.toString();
+        _errorMessage = friendlyError(e);
       });
     }
   }
@@ -1866,6 +1898,18 @@ class _AdminCourseManagementScreenState extends State<AdminCourseManagementScree
                             return;
                           }
 
+                          if (existing != null && (existing.year != year || existing.semester != sem)) {
+                            // S2-08: the routine and upcoming exams move too.
+                            final ok = await AppConfirmationDialog.show(
+                              context: context,
+                              title: 'Move $code to Year $year, Semester $sem?',
+                              message: 'Its routine classes and upcoming exams move with it. '
+                                  'Past attendance and past exams stay under Year ${existing.year}, Semester ${existing.semester}.',
+                              confirmText: 'Move course',
+                            );
+                            if (ok != true) return;
+                          }
+
                           setSt(() => isSaving = true);
                           try {
                             final c = Course(
@@ -1895,7 +1939,7 @@ class _AdminCourseManagementScreenState extends State<AdminCourseManagementScree
                           } catch (e) {
                             setSt(() => isSaving = false);
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Error: $e'), backgroundColor: const Color(0xFFDC2626)),
+                              SnackBar(content: Text(friendlyError(e)), backgroundColor: const Color(0xFFDC2626)),
                             );
                           }
                         },
@@ -1927,7 +1971,7 @@ class _AdminCourseManagementScreenState extends State<AdminCourseManagementScree
         _loadCourses();
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: const Color(0xFFDC2626)),
+          SnackBar(content: Text(friendlyError(e)), backgroundColor: const Color(0xFFDC2626)),
         );
       }
     }
@@ -2114,7 +2158,7 @@ class _AdminTeacherAssignmentScreenState extends State<AdminTeacherAssignmentScr
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage = e.toString();
+        _errorMessage = friendlyError(e);
       });
     }
   }
@@ -2201,6 +2245,24 @@ class _AdminTeacherAssignmentScreenState extends State<AdminTeacherAssignmentScr
                           .toList(),
                       onChanged: (v) => setSt(() => selectedCourseId = v ?? selectedCourseId),
                     ),
+                    Builder(builder: (_) {
+                      // A course has one teacher: assigning replaces the current one.
+                      final c = _courses.where((c) => c.id == selectedCourseId).firstOrNull;
+                      final current = c?.teacherId;
+                      if (current == null || current.isEmpty || current == selectedTeacherId) {
+                        return const SizedBox.shrink();
+                      }
+                      final name = (c?.teacherName?.isNotEmpty ?? false)
+                          ? c!.teacherName!
+                          : (_teachers.where((t) => t.id == current).firstOrNull?.fullName ?? 'the current teacher');
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          'Now taught by $name. Assigning replaces them: they lose attendance, exams and class changes for this course.',
+                          style: const TextStyle(fontSize: 12, color: Color(0xFFB45309)),
+                        ),
+                      );
+                    }),
                     const SizedBox(height: 14),
                     CheckboxListTile(
                       title: const Text('Course Coordinator', style: TextStyle(fontSize: 13)),
@@ -2241,7 +2303,7 @@ class _AdminTeacherAssignmentScreenState extends State<AdminTeacherAssignmentScr
                             }
                           } catch (e) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Error: $e'), backgroundColor: const Color(0xFFDC2626)),
+                              SnackBar(content: Text(friendlyError(e)), backgroundColor: const Color(0xFFDC2626)),
                             );
                           }
                         },
@@ -2280,7 +2342,7 @@ class _AdminTeacherAssignmentScreenState extends State<AdminTeacherAssignmentScr
         _loadData();
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: const Color(0xFFDC2626)),
+          SnackBar(content: Text(friendlyError(e)), backgroundColor: const Color(0xFFDC2626)),
         );
       }
     }
@@ -2792,7 +2854,7 @@ class _AdminAttendanceOverviewScreenState extends State<AdminAttendanceOverviewS
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage = e.toString();
+        _errorMessage = friendlyError(e);
       });
     }
   }
@@ -3009,7 +3071,7 @@ class _AdminFeedbackModerationScreenState extends State<AdminFeedbackModerationS
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage = e.toString();
+        _errorMessage = friendlyError(e);
       });
     }
   }
@@ -3056,10 +3118,18 @@ class _AdminFeedbackModerationScreenState extends State<AdminFeedbackModerationS
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text('${item.courseCode} - ${item.teacherName}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                  Expanded(
+                                    child: Text(
+                                      '${item.courseCode} - ${item.teacherName}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
                                   Row(
+                                    mainAxisSize: MainAxisSize.min,
                                     children: List.generate(5, (s) {
                                       return Icon(
                                         s < item.rating ? Icons.star_rounded : Icons.star_border_rounded,
@@ -3074,40 +3144,52 @@ class _AdminFeedbackModerationScreenState extends State<AdminFeedbackModerationS
                               Text(item.comments, style: const TextStyle(fontSize: 13, height: 1.4)),
                               const SizedBox(height: 8),
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Row(
-                                    children: [
-                                      if (item.isAnonymous)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.grey[200],
-                                            borderRadius: BorderRadius.circular(6),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              const Icon(Icons.shield_rounded, size: 12, color: Colors.blueGrey),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                item.studentName != null && item.studentName!.contains('Anonymous')
-                                                    ? item.studentName!
-                                                    : 'Anonymous Student',
-                                                style: TextStyle(
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: isDark ? Colors.white70 : Colors.black87,
-                                                ),
+                                  Expanded(
+                                    child: item.isAnonymous
+                                        ? Align(
+                                            alignment: Alignment.centerLeft,
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.grey[200],
+                                                borderRadius: BorderRadius.circular(6),
                                               ),
-                                            ],
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Icon(Icons.shield_rounded, size: 12, color: Colors.blueGrey),
+                                                  const SizedBox(width: 4),
+                                                  Flexible(
+                                                    child: Text(
+                                                      item.studentName != null && item.studentName!.contains('Anonymous')
+                                                          ? item.studentName!
+                                                          : 'Anonymous Student',
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: isDark ? Colors.white70 : Colors.black87,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          )
+                                        : Text(
+                                            'By: ${item.studentName ?? "Department Student"}',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(fontSize: 11, color: Colors.grey),
                                           ),
-                                        )
-                                      else
-                                        Text('By: ${item.studentName ?? "Department Student"}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                                    ],
                                   ),
-                                  Text(item.createdAt.length >= 10 ? item.createdAt.substring(0, 10) : item.createdAt, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    item.createdAt.length >= 10 ? item.createdAt.substring(0, 10) : item.createdAt,
+                                    style: const TextStyle(fontSize: 10, color: Colors.grey),
+                                  ),
                                 ],
                               ),
                               if (item.replies.isNotEmpty) ...[

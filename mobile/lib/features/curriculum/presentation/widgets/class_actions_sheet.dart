@@ -9,6 +9,7 @@ import '../../data/repositories/class_change_repository.dart';
 import '../../domain/entities/class_change.dart';
 import '../../domain/entities/curriculum_entities.dart';
 import 'class_change_sheet.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 /// What can be done to one class on one date from its Modify button.
 enum ClassAction { move, cancel, notTaken, undo }
@@ -85,7 +86,7 @@ class ClassModifyButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final actions = ClassActions.available(user: user, slot: slot, date: date, now: now ?? DateTime.now());
+    final actions = ClassActions.available(user: user, slot: slot, date: date, now: now ?? ClassTime.now());
     if (actions.isEmpty) return const SizedBox.shrink();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final green = isDark ? const Color(0xFF6EE7B7) : const Color(0xFF047857);
@@ -170,7 +171,7 @@ class ClassActionsSheet extends StatefulWidget {
         await repo.undo(change.id);
         onChanged?.call();
       } catch (e) {
-        messenger.showSnackBar(SnackBar(content: Text('Could not undo: $e'), backgroundColor: const Color(0xFFDC2626)));
+        messenger.showSnackBar(SnackBar(content: Text('Could not undo: ${friendlyError(e)}'), backgroundColor: const Color(0xFFDC2626)));
       }
       return;
     }

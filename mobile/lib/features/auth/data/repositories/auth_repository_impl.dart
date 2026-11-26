@@ -108,6 +108,7 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<String> submitSignupRequest({
     required String fullName,
     required String email,
+    required String password,
     required String role,
     String? studentId,
     String? phone,
@@ -117,6 +118,7 @@ class AuthRepositoryImpl implements AuthRepository {
       return await remoteDataSource.submitSignupRequest(
         fullName: fullName,
         email: email,
+        password: password,
         role: role,
         studentId: studentId,
         phone: phone,

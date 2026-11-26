@@ -11,6 +11,7 @@ import 'package:cse_jnu_eduportal/features/curriculum/domain/repositories/curric
 import 'package:cse_jnu_eduportal/features/curriculum/domain/entities/curriculum_entities.dart';
 import 'package:cse_jnu_eduportal/core/di/injection_container.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:cse_jnu_eduportal/core/config/app_features.dart';
 
 class MockFeedbackRepository extends Mock implements FeedbackRepository {}
 class MockCurriculumRepository extends Mock implements CurriculumRepository {}
@@ -366,7 +367,7 @@ void main() {
       expect(find.text('Course & Faculty Evaluation'), findsOneWidget);
       expect(find.text('Submit Anonymously'), findsOneWidget);
       expect(find.text('Submit Faculty Feedback'), findsOneWidget);
-      expect(find.text('File Attachments'), findsOneWidget);
+      expect(find.text('File Attachments'), AppFeatures.fileUploads ? findsOneWidget : findsNothing);
     });
 
     testWidgets('Toggling anonymous displays authoritative server-side security guarantee banner', (tester) async {
@@ -476,7 +477,7 @@ void main() {
       expect(find.text('Reply to Feedback'), findsOneWidget);
       expect(find.text('Your Response'), findsOneWidget);
       expect(find.text('Send Reply'), findsOneWidget);
-      expect(find.text('Add File'), findsOneWidget);
+      expect(find.text('Add File'), AppFeatures.fileUploads ? findsOneWidget : findsNothing);
     });
   });
 }

@@ -12,6 +12,7 @@ import '../../domain/entities/curriculum_entities.dart';
 import '../../domain/services/exam_rules.dart';
 import '../controllers/schedule_controller.dart';
 import 'exam_form_dialog.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 /// Exam details with the actions the user is allowed:
 /// Edit, Cancel exam (stays listed, struck through), Share on WhatsApp, and
@@ -152,7 +153,7 @@ class ExamDetailsDialog extends StatelessWidget {
       messenger.showSnackBar(const SnackBar(content: Text('Exam cancelled. Students have been told.')));
       navigator.pop(true);
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Could not cancel: $e'), backgroundColor: const Color(0xFFDC2626)));
+      messenger.showSnackBar(SnackBar(content: Text('Could not cancel: ${friendlyError(e)}'), backgroundColor: const Color(0xFFDC2626)));
     }
   }
 

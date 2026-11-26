@@ -3,7 +3,9 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/network/cache_metadata.dart';
 import '../../../../shared/widgets/states/cached_data_badge.dart';
+import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../controllers/attendance_controller.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 class StudentAttendanceScreen extends StatefulWidget {
   final AttendanceController? controller;
@@ -31,6 +33,46 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
     _controller = widget.controller ?? sl<AttendanceController>();
     _controller.fetchSummary();
     _controller.loadOpenSessions();
+  }
+
+  /// Current semester plus every earlier one (1-1 .. now), newest first.
+  List<(int, int)> get _semesters {
+    final me = sl.isRegistered<AuthController>() ? sl<AuthController>().currentUser : null;
+    final y = me?.year, s = me?.semester;
+    if (y == null || s == null) return const [];
+    final out = <(int, int)>[];
+    for (var yy = y; yy >= 1; yy--) {
+      for (var ss = 2; ss >= 1; ss--) {
+        if (yy == y && ss > s) continue;
+        out.add((yy, ss));
+      }
+    }
+    return out;
+  }
+
+  Widget _semesterPicker() {
+    final list = _semesters;
+    if (list.length < 2) return const SizedBox.shrink();
+    final viewing = _controller.viewingSemester ?? list.first;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (final l in list)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ChoiceChip(
+                  label: Text(l == list.first ? 'Now · ${l.$1}-${l.$2}' : '${l.$1}-${l.$2}'),
+                  selected: viewing == l,
+                  onSelected: (_) => _controller.fetchSummary(semester: l == list.first ? null : l, keepView: false),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _refresh() async {
@@ -170,12 +212,7 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
       }
     } catch (e) {
       if (mounted) {
-        String msg = e.toString()
-            .replaceAll('Exception: ', '')
-            .replaceAll('ServerException: ', '')
-            .replaceAll('Failure: ', '')
-            .replaceAll('ServerFailure: ', '')
-            .trim();
+        String msg = friendlyError(e);
         if (msg.contains('Dart exception thrown from converted Future') || msg.contains('boxed error')) {
           msg = 'Unable to verify code at this time. Please check your network and try again.';
         }
@@ -316,6 +353,9 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
                   ),
                 ),
                 const SizedBox(height: 28),
+
+                // Past semesters stay visible after promotion (S2-05).
+                _semesterPicker(),
 
                 // Course Attendance Standing Summary
                 Row(
@@ -477,14 +517,10 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
                                 ),
                               ),
                             ],
-                            if (item.absentDates.isNotEmpty || item.lateCount > 0) ...[
+                            if (item.absentDates.isNotEmpty) ...[
                               const SizedBox(height: 4),
                               Text(
-                                [
-                                  if (item.absentDates.isNotEmpty)
-                                    'Missed: ${item.absentDates.take(4).map(_shortDate).join(', ')}${item.absentDates.length > 4 ? ' +${item.absentDates.length - 4} more' : ''}',
-                                  if (item.lateCount > 0) 'Late ${item.lateCount}×',
-                                ].join(' · '),
+                                'Missed: ${item.absentDates.take(4).map(_shortDate).join(', ')}${item.absentDates.length > 4 ? ' +${item.absentDates.length - 4} more' : ''}',
                                 style: TextStyle(fontSize: 12, color: isDark ? AppColors.outlineDark : AppColors.outlineLight),
                               ),
                             ],

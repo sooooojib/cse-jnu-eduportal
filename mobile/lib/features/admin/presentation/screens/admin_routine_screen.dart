@@ -11,6 +11,7 @@ import '../../../curriculum/presentation/widgets/course_kinds.dart';
 import '../../../curriculum/presentation/widgets/time_range_field.dart';
 import '../widgets/admin_filter_dropdown.dart';
 import '../widgets/signup_approval_dialog.dart' show AcademicLevel;
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 /// The central weekly routine, one per semester (Year 1 · Semester 1 …
 /// Year 4 · Semester 2), set by an admin or the Chairman.
@@ -71,7 +72,7 @@ class _AdminRoutineScreenState extends State<AdminRoutineScreen> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'Could not load the routine. ($e)';
+        _error = 'Could not load the routine. ${friendlyError(e)}';
       });
     }
   }
@@ -112,7 +113,7 @@ class _AdminRoutineScreenState extends State<AdminRoutineScreen> {
       await _curriculum.deleteScheduleSlot(s.id);
       _load();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Could not remove: $e'), backgroundColor: const Color(0xFFDC2626)));
+      messenger.showSnackBar(SnackBar(content: Text('Could not remove: ${friendlyError(e)}'), backgroundColor: const Color(0xFFDC2626)));
     }
   }
 
@@ -334,7 +335,7 @@ class _RoutineSlotEditorState extends State<RoutineSlotEditor> {
 
   /// Next date falling on [_day], used to reuse the date-based clash check.
   DateTime get _sampleDate {
-    final today = ClassTime.dateOnly(DateTime.now());
+    final today = ClassTime.dateOnly(ClassTime.now());
     for (var i = 0; i < 7; i++) {
       final d = today.add(Duration(days: i));
       if (ClassTime.dayOfWeek(d) == _day) return d;
@@ -402,7 +403,7 @@ class _RoutineSlotEditorState extends State<RoutineSlotEditor> {
       ));
       navigator.pop(true);
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Could not save: $e'), backgroundColor: const Color(0xFFDC2626)));
+      messenger.showSnackBar(SnackBar(content: Text('Could not save: ${friendlyError(e)}'), backgroundColor: const Color(0xFFDC2626)));
       if (mounted) setState(() => _saving = false);
     }
   }

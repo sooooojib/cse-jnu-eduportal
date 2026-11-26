@@ -15,6 +15,8 @@ import 'package:cse_jnu_eduportal/features/curriculum/presentation/widgets/exam_
 import 'package:cse_jnu_eduportal/features/curriculum/presentation/widgets/exam_form_dialog.dart';
 import 'package:cse_jnu_eduportal/features/curriculum/presentation/widgets/exam_management_view.dart';
 import 'package:cse_jnu_eduportal/shared/widgets/dialogs/app_confirmation_dialog.dart';
+import 'package:cse_jnu_eduportal/features/curriculum/data/repositories/holiday_repository.dart';
+import 'package:cse_jnu_eduportal/core/utils/class_time.dart';
 
 class MockCurriculumRepository extends Mock implements CurriculumRepository {}
 class MockAuthController extends Mock implements AuthController {}
@@ -451,6 +453,31 @@ void main() {
     });
   });
 
+  group('S2-13: holiday warning', () {
+    testWidgets('An exam on a holiday shows a warning (saving is still allowed)', (tester) async {
+      when(() => mockRepo.getAllCourses(year: 3, semester: 1)).thenAnswer((_) async => [sampleCourse1, sampleCourse2]);
+      final tomorrow = ClassTime.dateOnly(DateTime.now()).add(const Duration(days: 1));
+      if (sl.isRegistered<HolidayRepository>()) sl.unregister<HolidayRepository>();
+      sl.registerLazySingleton<HolidayRepository>(() => _Holidays({ClassTime.dateKey(tomorrow): 'Victory Day'}));
+      addTearDown(() => sl.unregister<HolidayRepository>());
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => ExamFormDialog.show(context: context, userRole: UserRole.cr, defaultYear: 3, defaultSemester: 1),
+              child: const Text('Open Form'),
+            ),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('Open Form'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('exam_holiday_warning')), findsOneWidget);
+      expect(find.textContaining('Victory Day'), findsOneWidget);
+    });
+  });
+
   group('STAGE 22: ExamManagementView Widget & Tabs Tests', () {
     testWidgets('13. ExamManagementView switches between Upcoming and Past tabs', (tester) async {
       when(() => mockRepo.getExams(
@@ -556,4 +583,19 @@ void main() {
       expect(find.text('Schedule an Exam'), findsOneWidget);
     });
   });
+}
+
+
+class _Holidays implements HolidayRepository {
+  final Map<String, String> map;
+  _Holidays(this.map);
+  @override
+  Future<Map<String, String>> holidayMap() async => map;
+  @override
+  Future<List<DepartmentHoliday>> listHolidays() async =>
+      [for (final e in map.entries) DepartmentHoliday(date: e.key, title: e.value)];
+  @override
+  Future<void> saveHoliday({required DateTime date, required String title, String? createdBy}) async {}
+  @override
+  Future<void> deleteHoliday(String dateKey) async {}
 }

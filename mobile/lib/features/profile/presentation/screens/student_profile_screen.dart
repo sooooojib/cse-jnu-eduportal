@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../../../shared/widgets/dialogs/app_confirmation_dialog.dart';
+import '../../../curriculum/data/models/curriculum_models.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app/router/route_names.dart';
 import '../../../../app/theme/app_colors.dart';
@@ -10,6 +12,9 @@ import '../../../curriculum/domain/entities/curriculum_entities.dart';
 import '../../../curriculum/domain/repositories/curriculum_repository.dart';
 import '../../domain/entities/semester_status.dart';
 import '../controllers/profile_controller.dart';
+import '../widgets/delete_account_button.dart';
+import '../../../../core/constants/role_constants.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 class StudentProfileScreen extends StatefulWidget {
   final ProfileController? profileController;
@@ -22,6 +27,7 @@ class StudentProfileScreen extends StatefulWidget {
 class _StudentProfileScreenState extends State<StudentProfileScreen> {
   late final ProfileController _profileController;
   List<Course> _enrolledCourses = [];
+  Set<String> _retakeCourseIds = {};
   bool _isLoadingCourses = true;
 
   @override
@@ -36,14 +42,144 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
     await _profileController.fetchSemesterStatus();
     try {
       final courses = await sl<GetMyCoursesUseCase>().execute();
+      Set<String> retakeIds = {};
+      final uid = sl<AuthController>().currentUser?.id;
+      if (uid != null && sl.isRegistered<CurriculumRepository>()) {
+        try {
+          final enrollments = await sl<CurriculumRepository>().getEnrollments(studentId: uid);
+          // Only the student's own RETAKE enrollments get the badge / ✕
+          // (admin-created enrollments can't be removed by the student).
+          retakeIds = {
+            for (final e in enrollments)
+              if (e is EnrollmentModel && e.isRetake) ...e.enrolledCourseIds,
+          };
+        } catch (_) {}
+      }
       if (mounted) {
         setState(() {
           _enrolledCourses = courses;
+          _retakeCourseIds = retakeIds;
           _isLoadingCourses = false;
         });
       }
     } catch (_) {
       if (mounted) setState(() => _isLoadingCourses = false);
+    }
+  }
+
+  Future<void> _showAddRetakeDialog() async {
+    if (!sl.isRegistered<CurriculumRepository>()) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final me = sl<AuthController>().currentUser;
+      if (me?.year == null || me?.semester == null) {
+        messenger.showSnackBar(const SnackBar(content: Text('Your semester is not set yet.')));
+        return;
+      }
+      final myLevel = me!.year! * 10 + me.semester!;
+      final allCourses = await sl<CurriculumRepository>().getAllCourses();
+      final existingIds = _enrolledCourses.map((c) => c.id).toSet();
+      // Retakes are only for courses of an earlier semester than yours.
+      final available = allCourses
+          .where((c) => !existingIds.contains(c.id) && c.year * 10 + c.semester < myLevel)
+          .toList()
+        ..sort((a, b) => (a.year * 10 + a.semester).compareTo(b.year * 10 + b.semester) != 0
+            ? (a.year * 10 + a.semester).compareTo(b.year * 10 + b.semester)
+            : a.code.compareTo(b.code));
+      if (!mounted) return;
+      if (available.isEmpty) {
+        messenger.showSnackBar(const SnackBar(content: Text('No earlier-semester courses available to retake.')));
+        return;
+      }
+
+      Course selected = available.first;
+      await showDialog(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (ctx, setDialogState) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text('Add Retake / Backlog Course', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Only courses from earlier semesters. A retake appears in your schedule, attendance and exams; '
+                  'attendance counts from today.',
+                  style: TextStyle(fontSize: 12.5),
+                ),
+                const SizedBox(height: 14),
+                DropdownButtonFormField<Course>(
+                  value: selected,
+                  isExpanded: true,
+                  items: available
+                      .map((c) => DropdownMenuItem(
+                            value: c,
+                            child: Text(
+                              '${c.code} — ${c.title} (Y${c.year}S${c.semester})',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setDialogState(() => selected = v);
+                  },
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+              ElevatedButton(
+                onPressed: () async {
+                  Navigator.pop(dialogContext);
+                  try {
+                    await sl<CurriculumRepository>().addRetakeEnrollment(selected);
+                    await _loadProfileData();
+                    if (mounted) {
+                      messenger.showSnackBar(
+                        SnackBar(content: Text('Added retake course ${selected.code}.'), backgroundColor: Colors.green),
+                      );
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      messenger.showSnackBar(SnackBar(content: Text('Could not add course: ${friendlyError(e)}'), backgroundColor: Colors.redAccent));
+                    }
+                  }
+                },
+                child: const Text('Enroll'),
+              ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(SnackBar(content: Text('Failed to load course catalog: ${friendlyError(e)}'), backgroundColor: Colors.redAccent));
+      }
+    }
+  }
+
+  Future<void> _removeRetakeCourse(Course course) async {
+    final ok = await AppConfirmationDialog.show(
+      context: context,
+      title: 'Remove retake course?',
+      message: '${course.code} will be removed from your schedule, attendance and exams.',
+      confirmText: 'Remove',
+      isDestructive: true,
+      icon: Icons.remove_circle_outline_rounded,
+    );
+    if (ok != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await sl<CurriculumRepository>().removeRetakeEnrollment(course.id);
+      await _loadProfileData();
+      if (mounted) {
+        messenger.showSnackBar(SnackBar(content: Text('Removed ${course.code} from retake courses.')));
+      }
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(SnackBar(content: Text('Failed to remove course: ${friendlyError(e)}'), backgroundColor: Colors.redAccent));
+      }
     }
   }
 
@@ -158,7 +294,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                       if (mounted) {
                         messenger.showSnackBar(
                           SnackBar(
-                            content: Text(e.toString().replaceAll('Exception: ', '')),
+                            content: Text(friendlyError(e)),
                             backgroundColor: Colors.redAccent,
                           ),
                         );
@@ -272,7 +408,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                       if (mounted) {
                         messenger.showSnackBar(
                           SnackBar(
-                            content: Text(e.toString().replaceAll('Exception: ', '')),
+                            content: Text(friendlyError(e)),
                             backgroundColor: Colors.redAccent,
                           ),
                         );
@@ -306,7 +442,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
       if (mounted) {
         messenger.showSnackBar(
           SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
+            content: Text(friendlyError(e)),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -663,13 +799,25 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                   const SizedBox(height: 24),
 
                   // Enrolled Courses Section
-                  Text(
-                    'Enrolled Courses (${_enrolledCourses.length})',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? AppColors.onSurfaceDark : AppColors.onSurfaceLight,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Enrolled Courses (${_enrolledCourses.length})',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? AppColors.onSurfaceDark : AppColors.onSurfaceLight,
+                          ),
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: _showAddRetakeDialog,
+                        icon: const Icon(Icons.add_rounded, size: 18),
+                        label: const Text('Add Retake'),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
 
@@ -693,6 +841,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                       separatorBuilder: (_, __) => const SizedBox(height: 10),
                       itemBuilder: (context, index) {
                         final course = _enrolledCourses[index];
+                        final isRetake = _retakeCourseIds.contains(course.id);
                         return Container(
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
@@ -724,9 +873,30 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      course.title,
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                    Row(
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            course.title,
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                          ),
+                                        ),
+                                        if (isRetake) ...[
+                                          const SizedBox(width: 6),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFFFF7ED),
+                                              borderRadius: BorderRadius.circular(6),
+                                              border: Border.all(color: const Color(0xFFFED7AA)),
+                                            ),
+                                            child: const Text(
+                                              'Retake',
+                                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFC2410C)),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
@@ -739,6 +909,12 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                                   ],
                                 ),
                               ),
+                              if (isRetake)
+                                IconButton(
+                                  tooltip: 'Remove Retake Course',
+                                  icon: const Icon(Icons.close_rounded, size: 18, color: Colors.redAccent),
+                                  onPressed: () => _removeRetakeCourse(course),
+                                ),
                             ],
                           ),
                         );
@@ -766,6 +942,17 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                       },
                     ),
                   ),
+                  if (user?.role == UserRole.student || user?.role == UserRole.cr) ...[
+                    const SizedBox(height: 8),
+                    Center(
+                      child: DeleteAccountButton(
+                        onDeleted: () async {
+                          await authController.logout();
+                          if (mounted) context.go(RouteNames.login);
+                        },
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 20),
                 ],
               ),

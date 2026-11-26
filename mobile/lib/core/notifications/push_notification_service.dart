@@ -146,11 +146,16 @@ class PushNotificationServiceImpl implements PushNotificationService {
     switch (type) {
       case 'COUNSELING_STATUS':
       case 'COUNSELING_APPROVED':
+      case 'COUNSELING_REJECTED':
+      case 'COUNSELING_CANCELLED':
+      case 'COUNSELING_BOOKING':
       case 'COUNSELING_SLOT':
         return '/counseling';
       case 'FEEDBACK_REPLY':
+      case 'FEEDBACK':
         return '/feedback';
       case 'FEEDBACK_SUBMISSION':
+      case 'FEEDBACK_RECEIVED':
         return '/teacher/feedback';
       case 'SEMESTER_DECISION':
       case 'SEMESTER':
@@ -158,7 +163,14 @@ class PushNotificationServiceImpl implements PushNotificationService {
         return '/profile';
       case 'ATTENDANCE':
       case 'ATTENDANCE_VERIFIED':
+      case 'ATTENDANCE_SESSION':
         return '/attendance';
+      case 'EXAM_UPDATE':
+      case 'SCHEDULE_UPDATE':
+      case 'ROUTINE_ANNOUNCEMENT':
+        return '/schedule';
+      case 'CR_TRANSFER':
+        return '/my-class?tab=requests';
       case 'SIGNUP_DECISION':
         return '/dashboard/student';
       case 'NOTICE':

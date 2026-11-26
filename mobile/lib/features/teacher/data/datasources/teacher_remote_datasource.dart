@@ -10,6 +10,7 @@ import '../../../auth/domain/entities/user.dart';
 import '../../../curriculum/data/models/curriculum_models.dart';
 import '../../../curriculum/domain/entities/curriculum_entities.dart';
 import '../../domain/entities/teacher_dashboard_data.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 abstract class TeacherRemoteDataSource {
   Future<TeacherDashboardData> getTeacherDashboardData({
@@ -30,7 +31,7 @@ class TeacherRemoteDataSourceImpl implements TeacherRemoteDataSource {
     DateTime? currentTime,
   }) async {
     try {
-      final now = currentTime ?? DateTime.now();
+      final now = currentTime ?? ClassTime.now();
 
       // 1. Time-aware window calculation
       final bool isTomorrow = now.hour >= 17 || now.hour < 5;
@@ -102,7 +103,7 @@ class TeacherRemoteDataSourceImpl implements TeacherRemoteDataSource {
     } catch (e, stack) {
       AppLogger.e('Error fetching teacher dashboard data', e, stack);
       if (e is ServerException) rethrow;
-      throw ServerException(message: 'Failed to load teacher dashboard data: $e');
+      throw ServerException(message: 'Could not load the dashboard. ${friendlyError(e)}');
     }
   }
 
@@ -187,18 +188,28 @@ class TeacherRemoteDataSourceImpl implements TeacherRemoteDataSource {
     return courses;
   }
 
-  /// Applies the one-day changes on [date] that concern this teacher.
+  /// Applies the one-day changes and holidays on [date] that concern this teacher.
   Future<List<ScheduleSlot>> _applyChanges(
     User teacher,
     DateTime date,
     List<ScheduleSlot> routine,
     Set<String> assignedIds,
   ) async {
+    final dateKey = ClassTime.dateKey(date);
+    Map<String, String> holidays = const {};
+    try {
+      final hDoc = await _firestore.collection('holidays').doc(dateKey).get();
+      if (hDoc.exists) {
+        holidays = {dateKey: (hDoc.data()?['title'] as String? ?? 'University Holiday')};
+      }
+    } catch (_) {}
+    // On a holiday EffectiveSchedule drops the routine but keeps extra classes.
+
     List<ClassChange> changes = const [];
     try {
       final snap = await _firestore
           .collection('classChanges')
-          .where('date', isEqualTo: ClassTime.dateKey(date))
+          .where('date', isEqualTo: dateKey)
           .get();
       changes = snap.docs
           .map(ClassChangeRepositoryImpl.fromDoc)
@@ -207,7 +218,7 @@ class TeacherRemoteDataSourceImpl implements TeacherRemoteDataSource {
     } catch (e) {
       AppLogger.w('Failed to load class changes for teacher: $e');
     }
-    return EffectiveSchedule.forDate(routine: routine, changes: changes, date: date);
+    return EffectiveSchedule.forDate(routine: routine, changes: changes, date: date, holidays: holidays);
   }
 
   Future<List<ScheduleSlot>> _fetchTimeAwareClasses(
@@ -225,16 +236,14 @@ class TeacherRemoteDataSourceImpl implements TeacherRemoteDataSource {
         return;
       }
 
-      // Check teacher attribution: by ID, by Name, or by assigned course codes
+      // A class is mine if it is one of my courses, or the slot names me by
+      // ID. Never by name: two teachers can share a name.
       final bool matchesTeacherId =
           model.teacherId.isNotEmpty && model.teacherId == teacher.id;
-      final bool matchesTeacherName = model.teacherName.isNotEmpty &&
-          model.teacherName.trim().toLowerCase() ==
-              teacher.fullName.trim().toLowerCase();
-      final bool matchesCourse = assignedCodes.contains(model.courseCode.toUpperCase()) ||
-          assignedIds.contains(model.courseId);
+      final bool matchesCourse = assignedIds.contains(model.courseId) ||
+          (model.courseId.isEmpty && assignedCodes.contains(model.courseCode.toUpperCase()));
 
-      if (matchesTeacherId || matchesTeacherName || matchesCourse) {
+      if (matchesTeacherId || matchesCourse) {
         final key = model.id.isNotEmpty ? model.id : doc.id;
         slotMap[key] = model;
       }
@@ -252,18 +261,6 @@ class TeacherRemoteDataSourceImpl implements TeacherRemoteDataSource {
       AppLogger.w('Failed to query schedules for teacher: $e');
     }
 
-    try {
-      final snapshotSlots = await _firestore
-          .collection('scheduleSlots')
-          .where('dayOfWeek', isEqualTo: normDay)
-          .get();
-      for (final doc in snapshotSlots.docs) {
-        processDoc(doc);
-      }
-    } catch (e) {
-      AppLogger.w('Failed to query scheduleSlots for teacher: $e');
-    }
-
     final slots = slotMap.values.toList();
     // Sort chronologically by start time
     slots.sort((a, b) => a.startTime.compareTo(b.startTime));
@@ -277,23 +274,20 @@ class TeacherRemoteDataSourceImpl implements TeacherRemoteDataSource {
     Set<String> assignedIds,
   ) async {
     try {
-      final snapshot = await _firestore.collection('exams').get();
-      final List<Exam> exams = [];
+      // Only that day's exams (dates are stored as yyyy-MM-dd), and only for
+      // my own courses.
       final targetDateStr = DateFormat('yyyy-MM-dd').format(targetDate);
-      final targetFormatted1 = DateFormat('MMM d, yyyy').format(targetDate);
-      final targetFormatted2 = DateFormat('MMM d').format(targetDate);
+      final snapshot = await _firestore
+          .collection('exams')
+          .where('examDate', isEqualTo: targetDateStr)
+          .get();
+      final List<Exam> exams = [];
 
       for (final doc in snapshot.docs) {
         final exam = ExamModel.fromFirestore(doc);
-        final matchesCourse = assignedCodes.contains(exam.courseCode.toUpperCase()) ||
-            assignedIds.contains(exam.courseId);
-
-        final examDateClean = exam.examDate.trim();
-        final matchesDate = examDateClean.contains(targetDateStr) ||
-            examDateClean.contains(targetFormatted1) ||
-            examDateClean.contains(targetFormatted2);
-
-        if (matchesCourse || matchesDate) {
+        final matchesCourse = assignedIds.contains(exam.courseId) ||
+            (exam.courseId.isEmpty && assignedCodes.contains(exam.courseCode.toUpperCase()));
+        if (matchesCourse) {
           exams.add(exam);
         }
       }
@@ -323,20 +317,8 @@ class TeacherRemoteDataSourceImpl implements TeacherRemoteDataSource {
           .where('status', isEqualTo: 'PENDING')
           .get();
 
-      if (snapById.docs.isNotEmpty) {
-        return snapById.docs.length;
-      }
-
-      // Fallback by name if seeded with name
-      if (teacher.fullName.isNotEmpty) {
-        final snapByName = await _firestore
-            .collection('counselingBookings')
-            .where('teacherName', isEqualTo: teacher.fullName)
-            .where('status', isEqualTo: 'PENDING')
-            .get();
-        return snapByName.docs.length;
-      }
-      return 0;
+      // Bookings are matched by teacher id only (never by name).
+      return snapById.docs.length;
     } catch (_) {
       return 0;
     }

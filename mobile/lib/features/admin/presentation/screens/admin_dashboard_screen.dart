@@ -24,6 +24,7 @@ import '../controllers/admin_dashboard_state.dart';
 import '../widgets/admin_header.dart';
 import '../widgets/admin_overview_grid.dart';
 import '../widgets/admin_quick_actions_grid.dart';
+import 'package:cse_jnu_eduportal/core/utils/refresh_on_reopen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   final AdminDashboardController? controller;
@@ -41,9 +42,13 @@ class AdminDashboardScreen extends StatefulWidget {
   State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
 }
 
-class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
+class _AdminDashboardScreenState extends State<AdminDashboardScreen> with RefreshOnReopen {
   late final AdminDashboardController _controller;
   late final AuthController _authController;
+
+  // S2-13: reload when the app / tab is reopened.
+  @override
+  void onReopened() => _controller.loadDashboard(refresh: true);
 
   @override
   void initState() {

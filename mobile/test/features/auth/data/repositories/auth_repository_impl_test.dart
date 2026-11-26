@@ -166,6 +166,7 @@ void main() {
       when(() => mockRemoteDataSource.submitSignupRequest(
             fullName: 'Tahmid Rahman',
             email: 'tahmid@cse.jnu.ac.bd',
+            password: 'secret12',
             role: 'STUDENT',
             studentId: '2024CSE015',
             phone: '+8801800000000',
@@ -174,6 +175,7 @@ void main() {
       final reqId = await repository.submitSignupRequest(
         fullName: 'Tahmid Rahman',
         email: 'tahmid@cse.jnu.ac.bd',
+        password: 'secret12',
         role: 'STUDENT',
         studentId: '2024CSE015',
         phone: '+8801800000000',
@@ -192,7 +194,7 @@ void main() {
       expect(emitted, isNull);
     });
 
-    test('authStateChanges streams UserModel with custom claim role when user is active', () async {
+    test('authStateChanges uses the record role, ignoring a stale token claim', () async {
       final mockFbUser = MockFbUser();
       final mockTokenResult = MockIdTokenResult();
 
@@ -209,7 +211,7 @@ void main() {
       when(() => mockDocSnapshot.data()).thenReturn({
         'email': 'cr@cse.jnu.ac.bd',
         'fullName': 'Batch CR',
-        'role': 'STUDENT', // Firestore says STUDENT, but Custom Claim says CR!
+        'role': 'STUDENT', // the record says STUDENT; an old token claim says CR
         'isActive': true,
       });
 
@@ -217,7 +219,7 @@ void main() {
       final user = await stream.first;
 
       expect(user, isNotNull);
-      expect(user?.role, UserRole.cr); // Custom claim took precedence!
+      expect(user?.role, UserRole.student); // the record wins
     });
 
     test('authStateChanges returns null if account was deactivated in Firestore', () async {

@@ -55,6 +55,16 @@ class SemesterUpgradeRequest extends Equatable {
 
   final String? updatedAt;
 
+  /// The student's note ("Completed all 3-1 finals…").
+  final String? notes;
+
+  /// False when the request has no requested semester (old / broken data):
+  /// it can only be rejected.
+  bool get hasRequestedLevel => requestedYear > 0 && requestedSemester > 0;
+
+  String get currentLabel => 'Year $currentYear · Sem $currentSemester';
+  String get requestedLabel => hasRequestedLevel ? 'Year $requestedYear · Sem $requestedSemester' : 'Requested semester missing';
+
   const SemesterUpgradeRequest({
     required this.id,
     required this.studentId,
@@ -68,6 +78,7 @@ class SemesterUpgradeRequest extends Equatable {
     this.rejectionReason,
     required this.createdAt,
     this.updatedAt,
+    this.notes,
   });
 
   @override

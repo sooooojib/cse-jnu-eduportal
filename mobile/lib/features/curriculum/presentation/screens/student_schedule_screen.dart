@@ -11,7 +11,12 @@ import '../../../../core/di/injection_container.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../../../../shared/widgets/dialogs/app_confirmation_dialog.dart';
 import '../../../../shared/widgets/states/app_error_state_view.dart';
+import '../../data/repositories/class_change_repository.dart';
+import '../../data/repositories/holiday_repository.dart';
+import '../../domain/entities/class_change.dart';
 import '../../domain/entities/curriculum_entities.dart';
+import '../../domain/repositories/curriculum_repository.dart';
+import '../../domain/services/effective_schedule.dart';
 import '../controllers/schedule_controller.dart';
 import '../widgets/exam_management_view.dart';
 import '../../../../core/communication/whatsapp_share_dialog.dart';
@@ -34,7 +39,10 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen>
   late final TabController _tabController;
 
   String? _selectedDay;
-  final List<String> _days = ['ALL', 'SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY'];
+  final List<String> _days = ['TODAY', 'TOMORROW', 'ALL', 'SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY'];
+  List<ClassChange> _classChanges = const [];
+  Map<String, String> _holidays = const {};
+  List<ScheduleSlot> _retakeSlots = const [];
 
   @override
   void initState() {
@@ -52,23 +60,92 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen>
     super.dispose();
   }
 
+  String? _queryDayForFilter(String? filter) {
+    if (filter == null || filter == 'ALL' || filter == 'TODAY' || filter == 'TOMORROW') {
+      return null;
+    }
+    return filter;
+  }
+
   Future<void> _loadData() async {
     final user = _authController.currentUser;
-    await Future.wait([
+    await Future.wait<dynamic>([
       _scheduleController.fetchSchedule(
-        day: _selectedDay == 'ALL' ? null : _selectedDay,
+        day: _queryDayForFilter(_selectedDay),
         year: user?.year,
         semester: user?.semester,
       ),
-      _examsController.fetchExams(),
+      _examsController.fetchExams(
+        year: _examView?.$1 ?? user?.year,
+        semester: _examView?.$2 ?? user?.semester,
+      ),
+      _loadChangesAndHolidays(),
     ]);
+  }
+
+  Future<void> _loadChangesAndHolidays() async {
+    final user = _authController.currentUser;
+    List<ClassChange> changes = const [];
+    Map<String, String> holidays = const {};
+
+    if (user?.year != null && user?.semester != null && sl.isRegistered<ClassChangeRepository>()) {
+      try {
+        final now = ClassTime.now();
+        final dates = [...ClassTime.pastDates(now).reversed, ...ClassTime.upcomingDates(now)];
+        changes = await sl<ClassChangeRepository>().changesForBatch(
+          year: user!.year!,
+          semester: user.semester!,
+          from: dates.first,
+          to: dates.last,
+        );
+      } catch (_) {}
+    }
+
+    if (sl.isRegistered<HolidayRepository>()) {
+      try {
+        holidays = await sl<HolidayRepository>().holidayMap();
+      } catch (_) {}
+    }
+
+    List<ScheduleSlot> retakeSlots = const [];
+    if (user != null && sl.isRegistered<CurriculumRepository>()) {
+      try {
+        final repo = sl<CurriculumRepository>();
+        final enrollments = await repo.getEnrollments(studentId: user.id);
+        final retakeYearsSems = <String, (int, int)>{};
+        final retakeCourseIds = <String>{};
+        for (final e in enrollments) {
+          retakeCourseIds.addAll(e.enrolledCourseIds);
+          retakeYearsSems['${e.year}_${e.semester}'] = (e.year, e.semester);
+        }
+        if (retakeCourseIds.isNotEmpty) {
+          final fetched = await Future.wait(
+            retakeYearsSems.values.map((ys) => repo.getSchedule(year: ys.$1, semester: ys.$2)),
+          );
+          // Kept for every weekday; the day chip filters at build time, so
+          // switching chips works without reloading.
+          retakeSlots = [
+            for (final list in fetched)
+              for (final s in list)
+                if (retakeCourseIds.contains(s.courseId)) s,
+          ];
+        }
+      } catch (_) {}
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _classChanges = changes;
+      _holidays = holidays;
+      _retakeSlots = retakeSlots;
+    });
   }
 
   void _onDaySelected(String day) {
     setState(() => _selectedDay = day);
     final user = _authController.currentUser;
     _scheduleController.fetchSchedule(
-      day: day == 'ALL' ? null : day,
+      day: _queryDayForFilter(day),
       year: user?.year,
       semester: user?.semester,
     );
@@ -154,8 +231,8 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen>
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: isDark
-                      ? AppColors.outlineDark.withOpacity(0.2)
-                      : AppColors.outlineLight.withOpacity(0.15),
+                      ? AppColors.outlineDark.withValues(alpha: 0.2)
+                      : AppColors.outlineLight.withValues(alpha: 0.15),
                 ),
               ),
               child: TabBar(
@@ -242,7 +319,12 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen>
 
                       return FilterChip(
                         label: Text(
-                          day == 'ALL' ? 'All Days' : day.substring(0, 3),
+                          switch (day) {
+                            'TODAY' => 'Today',
+                            'TOMORROW' => 'Tomorrow',
+                            'ALL' => 'All Days',
+                            _ => day.substring(0, 3),
+                          },
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
@@ -272,35 +354,77 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen>
                     message: state.message,
                     onRetry: _loadData,
                   )
-                else if (state is ScheduleLoaded && state.slots.isEmpty)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(32),
-                    decoration: BoxDecoration(
-                      color: isDark ? AppColors.surfaceContainerDark : AppColors.surfaceContainerLight,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Column(
-                      children: [
-                        const Icon(Icons.calendar_today_outlined, size: 40, color: Colors.grey),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'No classes scheduled for this filter.',
-                          style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey),
-                        ),
-                        if (isCr) ...[
-                          const SizedBox(height: 14),
-                          OutlinedButton.icon(
-                            onPressed: _openChangeSheet,
-                            icon: const Icon(Icons.edit_calendar_rounded, size: 18),
-                            label: const Text('Change a Class'),
+                else if (state is ScheduleLoaded) ...[
+                  Builder(
+                    builder: (context) {
+                      final now = ClassTime.now();
+                      final DateTime? effectiveDate = switch (_selectedDay) {
+                        'TODAY' => ClassTime.dateOnly(now),
+                        'TOMORROW' => ClassTime.dateOnly(now.add(const Duration(days: 1))),
+                        null || 'ALL' => null,
+                        final d => nextDateFor(d, now),
+                      };
+                      final String? holidayTitle = effectiveDate == null
+                          ? null
+                          : _holidays[ClassTime.dateKey(effectiveDate)];
+                      final chipDay = _queryDayForFilter(_selectedDay);
+                      final combinedById = <String, ScheduleSlot>{
+                        for (final s in state.slots) s.id: s,
+                        for (final s in _retakeSlots)
+                          if (chipDay == null || s.dayOfWeek.toUpperCase() == chipDay) s.id: s,
+                      };
+                      final combinedSlots = combinedById.values.toList();
+                      final List<ScheduleSlot> visibleSlots = effectiveDate == null
+                          ? combinedSlots
+                          : EffectiveSchedule.forDate(
+                              routine: combinedSlots,
+                              changes: _classChanges,
+                              date: effectiveDate,
+                              holidays: _holidays,
+                            );
+
+                      if (holidayTitle != null && visibleSlots.isEmpty) {
+                        return _buildHolidayNoticeCard(holidayTitle, isDark, hasExtras: false);
+                      }
+                      if (visibleSlots.isEmpty) {
+                        return Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(32),
+                          decoration: BoxDecoration(
+                            color: isDark ? AppColors.surfaceContainerDark : AppColors.surfaceContainerLight,
+                            borderRadius: BorderRadius.circular(16),
                           ),
-                        ],
-                      ],
-                    ),
-                  )
-                else if (state is ScheduleLoaded)
-                  _buildListView(state.slots, isDark, isCr),
+                          child: Column(
+                            children: [
+                              const Icon(Icons.calendar_today_outlined, size: 40, color: Colors.grey),
+                              const SizedBox(height: 12),
+                              const Text(
+                                'No classes scheduled for this filter.',
+                                style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey),
+                              ),
+                              if (isCr) ...[
+                                const SizedBox(height: 14),
+                                OutlinedButton.icon(
+                                  onPressed: _openChangeSheet,
+                                  icon: const Icon(Icons.edit_calendar_rounded, size: 18),
+                                  label: const Text('Change a Class'),
+                                ),
+                              ],
+                            ],
+                          ),
+                        );
+                      }
+                      final list = _buildListView(visibleSlots, isDark, isCr, dateForActions: effectiveDate);
+                      return holidayTitle == null
+                          ? list
+                          : Column(children: [
+                              _buildHolidayNoticeCard(holidayTitle, isDark, hasExtras: true),
+                              const SizedBox(height: 12),
+                              list,
+                            ]);
+                    },
+                  ),
+                ],
               ],
             ),
           ),
@@ -319,7 +443,48 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen>
     return today;
   }
 
-  Widget _buildListView(List<ScheduleSlot> slots, bool isDark, bool isCr) {
+  /// Calm holiday notice (same card style as the rest of the app).
+  Widget _buildHolidayNoticeCard(String title, bool isDark, {required bool hasExtras}) {
+    final muted = isDark ? Colors.white60 : const Color(0xFF64748B);
+    return Container(
+      key: const ValueKey('schedule_holiday_notice'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF13263E) : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: isDark ? Colors.white10 : const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.event_busy_outlined, size: 22, color: muted),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Holiday: $title', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                const SizedBox(height: 2),
+                Text(
+                  hasExtras
+                      ? 'Regular classes are off. Extra classes below still happen.'
+                      : 'No regular classes on this date.',
+                  style: TextStyle(fontSize: 12.5, color: muted),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildListView(
+    List<ScheduleSlot> slots,
+    bool isDark,
+    bool isCr, {
+    DateTime? dateForActions,
+  }) {
     final user = _authController.currentUser;
     final allDays = _selectedDay == null || _selectedDay == 'ALL';
     return ListView.separated(
@@ -345,7 +510,7 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen>
                 ? ClassModifyButton(
                     user: user,
                     slot: slot,
-                    date: nextDateFor(slot.dayOfWeek, DateTime.now()),
+                    date: dateForActions ?? nextDateFor(slot.dayOfWeek, ClassTime.now()),
                     onChanged: () {
                       _loadData();
                       _changesKey.currentState?.reload();
@@ -357,14 +522,57 @@ class _StudentScheduleScreenState extends State<StudentScheduleScreen>
     );
   }
 
+  /// Past semester whose exams are shown (null = current). S2-05: exams of
+  /// earlier semesters stay visible after promotion.
+  (int, int)? _examView;
+
+  List<(int, int)> _semestersSoFar() {
+    final user = _authController.currentUser;
+    final y = user?.year, s = user?.semester;
+    if (y == null || s == null) return const [];
+    return [
+      for (var yy = y; yy >= 1; yy--)
+        for (var ss = 2; ss >= 1; ss--)
+          if (!(yy == y && ss > s)) (yy, ss),
+    ];
+  }
+
   Widget _buildExamScheduleTab(bool isDark) {
     final user = _authController.currentUser;
-    final role = user?.role ?? UserRole.student;
-    return ExamManagementView(
-      userRole: role,
-      academicYear: user?.year,
-      academicSemester: user?.semester,
-      onRefresh: _loadData,
+    final list = _semestersSoFar();
+    final view = _examView;
+    // Past semesters are read-only (nobody schedules exams there).
+    final role = view == null ? (user?.role ?? UserRole.student) : UserRole.student;
+    return Column(
+      children: [
+        if (list.length > 1)
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+            child: Row(
+              children: [
+                for (final l in list)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(l == list.first ? 'Now · ${l.$1}-${l.$2}' : '${l.$1}-${l.$2}'),
+                      selected: (view ?? list.first) == l,
+                      onSelected: (_) => setState(() => _examView = l == list.first ? null : l),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        Expanded(
+          child: ExamManagementView(
+            key: ValueKey('exams-${view?.$1}-${view?.$2}'),
+            userRole: role,
+            academicYear: view?.$1 ?? user?.year,
+            academicSemester: view?.$2 ?? user?.semester,
+            onRefresh: _loadData,
+          ),
+        ),
+      ],
     );
   }
 }

@@ -292,7 +292,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Welcome back'), findsOneWidget);
-      expect(find.text('Faculty View'), findsOneWidget);
+      expect(find.text('Faculty'), findsOneWidget);
       expect(find.text('Department Admin'), findsOneWidget);
     });
 
@@ -312,7 +312,7 @@ void main() {
       expect(find.text('Teacher Course Monitoring'), findsOneWidget);
     });
 
-    testWidgets('Regular teacher cannot open admin routes and sees no view switcher', (tester) async {
+    testWidgets('A teacher cannot open other admin pages, but gets the Faculty / Admin switch', (tester) async {
       when(() => mockAuthController.state).thenReturn(const Authenticated(user: teacherUser));
       when(() => mockAuthController.currentUser).thenReturn(teacherUser);
 
@@ -325,9 +325,9 @@ void main() {
       await tester.pumpWidget(MaterialApp.router(routerConfig: router));
       await tester.pumpAndSettle();
 
-      expect(find.text('Teacher Course Monitoring'), findsNothing);
+      expect(find.text('Teacher Course Monitoring'), findsNothing); // Admin / Chairman only
       expect(find.textContaining('Welcome back'), findsOneWidget);
-      expect(find.text('Faculty View'), findsNothing);
+      expect(find.text('Faculty'), findsOneWidget); // every teacher can switch to the request queues
     });
 
     testWidgets('Disabled account user is redirected to Login Screen', (tester) async {

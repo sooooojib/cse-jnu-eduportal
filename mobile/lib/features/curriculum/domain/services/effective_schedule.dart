@@ -27,8 +27,12 @@ class EffectiveSchedule {
     required List<ScheduleSlot> routine,
     required List<ClassChange> changes,
     required DateTime date,
+    Map<String, String> holidays = const {},
   }) {
     final key = ClassTime.dateKey(date);
+    // On a holiday the weekly routine is off, but one-day EXTRA classes the
+    // CR / teacher deliberately added (e.g. a make-up class) still happen.
+    final isHoliday = holidays.containsKey(key);
     final day = ClassTime.dayOfWeek(date);
 
     final todays = changes.where((c) => c.date == key).toList();
@@ -40,6 +44,7 @@ class EffectiveSchedule {
     for (final s in routine) {
       if (s.dayOfWeek.toUpperCase() != day) continue;
       if (s.date != null && s.date!.isNotEmpty && s.date != key) continue;
+      if (isHoliday && (s.date == null || s.date!.isEmpty)) continue;
       if (s.isCancelled) continue;
 
       final cancel = cancels[s.id];
@@ -111,6 +116,7 @@ class EffectiveSchedule {
     required int targetYear,
     required int targetSemester,
     String? ignoreSlotId,
+    Map<String, String> holidays = const {},
   }) {
     final start = ClassTime.toMinutes(startTime);
     final end = ClassTime.toMinutes(endTime);
@@ -120,7 +126,7 @@ class EffectiveSchedule {
     final roomKey = room.trim().toLowerCase();
     final clashes = <ScheduleClash>[];
 
-    for (final s in forDate(routine: routine, changes: changes, date: date)) {
+    for (final s in forDate(routine: routine, changes: changes, date: date, holidays: holidays)) {
       if (s.isCancelled || s.id == ignoreSlotId) continue;
       final ss = ClassTime.toMinutes(s.startTime);
       final se = ClassTime.toMinutes(s.endTime);

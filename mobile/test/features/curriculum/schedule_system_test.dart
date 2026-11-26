@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cse_jnu_eduportal/core/utils/class_time.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -372,6 +373,57 @@ void main() {
       expect(find.text('Room 501'), findsOneWidget);
       expect(find.byIcon(Icons.edit_outlined), findsWidgets);
       expect(find.byIcon(Icons.delete_outline), findsWidgets);
+    });
+
+    testWidgets('Edit / Delete only on the weekly routine, never on a one-day class', (tester) async {
+      when(() => mockAuth.currentUser).thenReturn(sampleTeacher);
+      when(() => mockAuth.state).thenReturn(Authenticated(user: sampleTeacher));
+      final oneDayExtra = sampleSlot1.copyWith(id: 'extra_1', isExtraClass: true, date: '2026-01-01');
+      final cancelled = sampleSlot1.copyWith(id: 'cancelled_1', status: 'CANCELLED');
+      when(() => mockRepo.getSchedule(
+            day: any(named: 'day'),
+            year: any(named: 'year'),
+            semester: any(named: 'semester'),
+            teacherId: any(named: 'teacherId'),
+          )).thenAnswer((_) async => [sampleSlot1, oneDayExtra, cancelled]);
+      tester.view.physicalSize = const Size(1000, 3000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(buildTestableWidget(const TeacherScheduleScreen()));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('edit_slot_slot_1')), findsOneWidget);
+      expect(find.byKey(const ValueKey('delete_slot_slot_1')), findsOneWidget);
+      expect(find.byKey(const ValueKey('edit_slot_extra_1')), findsNothing);
+      expect(find.byKey(const ValueKey('delete_slot_extra_1')), findsNothing);
+      expect(find.byKey(const ValueKey('edit_slot_cancelled_1')), findsNothing);
+      expect(find.byKey(const ValueKey('delete_slot_cancelled_1')), findsNothing);
+    });
+
+    testWidgets('"Live now" only for a class happening today, not another weekday', (tester) async {
+      when(() => mockAuth.currentUser).thenReturn(sampleTeacher);
+      when(() => mockAuth.state).thenReturn(Authenticated(user: sampleTeacher));
+      final today = ClassTime.dayOfWeek(DateTime.now());
+      final otherDay = ClassTime.dayOfWeek(DateTime.now().add(const Duration(days: 1)));
+      final allDay = sampleSlot1.copyWith(startTime: '12:00 AM', endTime: '11:59 PM');
+      when(() => mockRepo.getSchedule(
+            day: any(named: 'day'),
+            year: any(named: 'year'),
+            semester: any(named: 'semester'),
+            teacherId: any(named: 'teacherId'),
+          )).thenAnswer((_) async => [
+            allDay.copyWith(id: 'today_slot', dayOfWeek: today),
+            allDay.copyWith(id: 'other_slot', dayOfWeek: otherDay),
+          ]);
+      tester.view.physicalSize = const Size(1000, 3000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(buildTestableWidget(const TeacherScheduleScreen()));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Live now'), findsOneWidget);
     });
 
     testWidgets('Tapping delete icon shows AppConfirmationDialog', (tester) async {

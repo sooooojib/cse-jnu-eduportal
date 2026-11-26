@@ -163,20 +163,22 @@ class FeedbackRemoteDataSourceImpl implements FeedbackRemoteDataSource {
       "createdAt": FieldValue.serverTimestamp(),
     };
 
-    final docRef = await _firestore.collection("feedback").add(feedbackPayload);
-
-    // Save isolated identity in feedbackIdentities
-    try {
-      await _firestore.collection("feedbackIdentities").doc(docRef.id).set({
-        "feedbackId": docRef.id,
-        "studentId": uid,
-        "studentName": currentUser?.displayName ?? "Student",
-        "studentEmail": currentUser?.email ?? "",
-        "teacherId": teacherId,
-        "isAnonymous": isAnonymous,
-        "createdAt": FieldValue.serverTimestamp(),
-      });
-    } catch (_) {}
+    // The feedback and its hidden identity record are written in ONE batch,
+    // so an anonymous feedback can never be left without its owner (the
+    // security rules require this).
+    final docRef = _firestore.collection("feedback").doc();
+    final batch = _firestore.batch();
+    batch.set(docRef, feedbackPayload);
+    batch.set(_firestore.collection("feedbackIdentities").doc(docRef.id), {
+      "feedbackId": docRef.id,
+      "studentId": uid,
+      "studentName": currentUser?.displayName ?? "Student",
+      "studentEmail": currentUser?.email ?? "",
+      "teacherId": teacherId,
+      "isAnonymous": isAnonymous,
+      "createdAt": FieldValue.serverTimestamp(),
+    });
+    await batch.commit();
 
     return FeedbackItemModel.fromJson({
       "id": docRef.id,

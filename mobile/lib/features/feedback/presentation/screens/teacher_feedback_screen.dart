@@ -9,6 +9,8 @@ import '../../../../core/storage/cloud_storage_service.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../controllers/feedback_controller.dart';
 import '../../domain/entities/feedback_entities.dart';
+import 'package:cse_jnu_eduportal/core/config/app_features.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 class TeacherFeedbackScreen extends StatefulWidget {
   final String? teacherId;
@@ -160,7 +162,7 @@ class _TeacherFeedbackScreenState extends State<TeacherFeedbackScreen> with Sing
               } catch (e) {
                 setSheetState(() => isUploading = false);
                 ScaffoldMessenger.of(sheetCtx).showSnackBar(
-                  SnackBar(content: Text('Failed to attach file: $e')),
+                  SnackBar(content: Text('Failed to attach file: ${friendlyError(e)}')),
                 );
               }
             }
@@ -275,7 +277,7 @@ class _TeacherFeedbackScreenState extends State<TeacherFeedbackScreen> with Sing
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text('Attachments', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                        TextButton.icon(
+                        if (AppFeatures.fileUploads) TextButton.icon(
                           icon: isUploading
                               ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
                               : const Icon(Icons.attach_file_rounded, size: 16),
@@ -356,7 +358,7 @@ class _TeacherFeedbackScreenState extends State<TeacherFeedbackScreen> with Sing
                                 } catch (e) {
                                   if (mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.redAccent),
+                                      SnackBar(content: Text('Failed: ${friendlyError(e)}'), backgroundColor: Colors.redAccent),
                                     );
                                   }
                                 }

@@ -7,9 +7,11 @@ import '../../../../core/di/injection_container.dart';
 import '../../../../core/utils/class_time.dart';
 import '../../../auth/domain/entities/user.dart';
 import '../../data/repositories/class_change_repository.dart';
+import '../../data/repositories/holiday_repository.dart';
 import '../../domain/entities/class_change.dart';
 import '../../domain/entities/curriculum_entities.dart';
 import '../../domain/services/effective_schedule.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 /// One form for one-day class changes used by the CR (their own batch) and
 /// teachers (their own courses). The weekly routine itself is never edited.
@@ -70,6 +72,12 @@ class ClassChangeSheet extends StatefulWidget {
 
 class _ClassChangeSheetState extends State<ClassChangeSheet> {
   late final ClassChangeRepository _repo;
+
+  /// Department holidays (date key → reason). On a holiday regular classes
+  /// are off: only an Extra (make-up) class can be added.
+  Map<String, String> _holidays = const {};
+  String? get _holidayReason => _holidays[ClassTime.dateKey(_date)];
+  bool get _isHoliday => _holidayReason != null;
   late final List<DateTime> _upcoming; // today .. +7
   late final List<DateTime> _past; // yesterday .. -7 (CR / admin only)
   late ClassChangeType _type;
@@ -113,7 +121,7 @@ class _ClassChangeSheetState extends State<ClassChangeSheet> {
   void initState() {
     super.initState();
     _repo = widget.repository ?? sl<ClassChangeRepository>();
-    final now = widget.now ?? DateTime.now();
+    final now = widget.now ?? ClassTime.now();
     _upcoming = ClassTime.upcomingDates(now);
     _past = _canReport ? ClassTime.pastDates(now) : const [];
     _type = widget.initialType == ClassChangeType.notTaken && !_canReport
@@ -133,6 +141,7 @@ class _ClassChangeSheetState extends State<ClassChangeSheet> {
       _date = _today;
     }
     _loadCourses();
+    _loadHolidays();
     _loadDay();
   }
 
@@ -141,6 +150,14 @@ class _ClassChangeSheetState extends State<ClassChangeSheet> {
     _roomCtrl.dispose();
     _reasonCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadHolidays() async {
+    if (!sl.isRegistered<HolidayRepository>()) return;
+    try {
+      final map = await sl<HolidayRepository>().holidayMap();
+      if (mounted) setState(() => _holidays = map);
+    } catch (_) {}
   }
 
   Future<void> _loadCourses() async {
@@ -163,7 +180,7 @@ class _ClassChangeSheetState extends State<ClassChangeSheet> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'Could not load the routine for this day. ($e)';
+        _error = 'Could not load the routine for this day. ${friendlyError(e)}';
       });
       return;
     }
@@ -191,7 +208,7 @@ class _ClassChangeSheetState extends State<ClassChangeSheet> {
         _loading = false;
         _error = denied
             ? 'Class changes are not enabled on the server yet. Ask the admin to deploy the latest security rules (firebase deploy --only firestore:rules).'
-            : 'Could not load this day\'s class changes. ($e)';
+            : 'Could not load this day\'s class changes. ${friendlyError(e)}';
       });
     }
   }
@@ -205,6 +222,7 @@ class _ClassChangeSheetState extends State<ClassChangeSheet> {
           routine: _routine,
           changes: _dayChanges,
           date: _date,
+          holidays: _holidays,
         )
         .where(
           (s) =>
@@ -264,11 +282,14 @@ class _ClassChangeSheetState extends State<ClassChangeSheet> {
       targetYear: year,
       targetSemester: sem,
       ignoreSlotId: _type == ClassChangeType.move ? _target?.id : null,
+      holidays: _holidays,
     );
   }
 
   bool get _canSave {
     if (_saving || _loading) return false;
+    // Regular classes are off on a holiday: nothing to cancel / move / report.
+    if (_isHoliday && _type != ClassChangeType.extra) return false;
     switch (_type) {
       case ClassChangeType.extra:
         return _course != null &&
@@ -311,6 +332,19 @@ class _ClassChangeSheetState extends State<ClassChangeSheet> {
     });
   }
 
+  Course? _courseOf(ScheduleSlot s) => _courses.where((c) => c.id == s.courseId).firstOrNull;
+
+  String _courseTeacherId(ScheduleSlot s) {
+    final t = _courseOf(s)?.teacherId ?? '';
+    return t.isNotEmpty ? t : s.teacherId;
+  }
+
+  String _courseTeacherName(ScheduleSlot s) {
+    final c = _courseOf(s);
+    final t = c?.teacherName ?? '';
+    return (c?.teacherId ?? '').isNotEmpty && t.isNotEmpty ? t : s.teacherName;
+  }
+
   Future<void> _save() async {
     final u = widget.user;
     final key = ClassTime.dateKey(_date);
@@ -350,8 +384,10 @@ class _ClassChangeSheetState extends State<ClassChangeSheet> {
         courseId: s.courseId,
         courseCode: s.courseCode,
         courseTitle: s.courseTitle,
-        teacherId: s.teacherId,
-        teacherName: s.teacherName,
+        // The course's current teacher (a routine slot can be out of date after
+        // a reassignment); the security rules check this.
+        teacherId: _courseTeacherId(s),
+        teacherName: _courseTeacherName(s),
         targetYear: s.targetYear,
         targetSemester: s.targetSemester,
         startTime: cancel ? ClassTime.normalize(s.startTime) : _start!,
@@ -384,7 +420,7 @@ class _ClassChangeSheetState extends State<ClassChangeSheet> {
     } catch (e) {
       messenger.showSnackBar(
         SnackBar(
-          content: Text('Could not save: $e'),
+          content: Text('Could not save: ${friendlyError(e)}'),
           backgroundColor: const Color(0xFFDC2626),
         ),
       );
@@ -489,6 +525,34 @@ class _ClassChangeSheetState extends State<ClassChangeSheet> {
                 style: TextStyle(fontSize: 12.5, color: muted),
               ),
             const SizedBox(height: 16),
+
+            if (_isHoliday) ...[
+              Container(
+                key: const ValueKey('change_holiday_notice'),
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF13263E) : Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: isDark ? Colors.white10 : const Color(0xFFE2E8F0)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.event_busy_outlined, size: 20, color: muted),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '${DateFormat('EEE, MMM d').format(_date)} is a holiday: $_holidayReason. '
+                        'Regular classes are off${_type == ClassChangeType.extra ? '' : ', so there is nothing to ${_type == ClassChangeType.cancel ? 'cancel' : (_type == ClassChangeType.move ? 'move' : 'report')}'}. '
+                        'You can still add an Extra class.',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
 
             // 1. What
             if (!_focused) ...[

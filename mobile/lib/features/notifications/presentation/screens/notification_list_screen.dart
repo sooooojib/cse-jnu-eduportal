@@ -207,15 +207,20 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
   IconData _getIconForType(String type) {
     switch (type.toUpperCase()) {
       case 'ATTENDANCE_VERIFIED':
+      case 'ATTENDANCE_SESSION':
       case 'ATTENDANCE':
         return Icons.fact_check_outlined;
       case 'COUNSELING_APPROVED':
+      case 'COUNSELING_REJECTED':
+      case 'COUNSELING_CANCELLED':
+      case 'COUNSELING_BOOKING':
       case 'COUNSELING_STATUS':
       case 'COUNSELING_SLOT':
         return Icons.support_agent;
       case 'FEEDBACK_RECEIVED':
       case 'FEEDBACK_REPLY':
       case 'FEEDBACK_SUBMISSION':
+      case 'FEEDBACK':
         return Icons.rate_review_outlined;
       case 'SEMESTER_UPGRADE':
       case 'SEMESTER_DECISION':
@@ -223,6 +228,11 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
         return Icons.upgrade;
       case 'EXAM_UPDATE':
         return Icons.assignment_outlined;
+      case 'SCHEDULE_UPDATE':
+      case 'ROUTINE_ANNOUNCEMENT':
+        return Icons.event_note_outlined;
+      case 'CR_TRANSFER':
+        return Icons.swap_horiz_rounded;
       default:
         return Icons.notifications_active_outlined;
     }
@@ -235,11 +245,16 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
     switch (notif.notificationType.toUpperCase()) {
       case 'COUNSELING_STATUS':
       case 'COUNSELING_APPROVED':
+      case 'COUNSELING_REJECTED':
+      case 'COUNSELING_CANCELLED':
+      case 'COUNSELING_BOOKING':
       case 'COUNSELING_SLOT':
         return '/counseling';
       case 'FEEDBACK_REPLY':
+      case 'FEEDBACK':
         return '/feedback';
       case 'FEEDBACK_SUBMISSION':
+      case 'FEEDBACK_RECEIVED':
         return '/teacher/feedback';
       case 'SEMESTER_DECISION':
       case 'SEMESTER':
@@ -247,9 +262,14 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
         return '/profile';
       case 'ATTENDANCE':
       case 'ATTENDANCE_VERIFIED':
+      case 'ATTENDANCE_SESSION':
         return '/attendance';
       case 'EXAM_UPDATE':
+      case 'SCHEDULE_UPDATE':
+      case 'ROUTINE_ANNOUNCEMENT':
         return '/schedule';
+      case 'CR_TRANSFER':
+        return '/my-class?tab=requests';
       default:
         return null;
     }

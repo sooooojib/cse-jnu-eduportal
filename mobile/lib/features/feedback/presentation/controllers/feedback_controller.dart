@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../../domain/entities/feedback_entities.dart';
 import '../../domain/repositories/feedback_repository.dart';
-import '../../../../core/error/failures.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 abstract class FeedbackState {}
 
@@ -85,7 +85,7 @@ class FeedbackController extends ChangeNotifier {
       );
       notifyListeners();
     } catch (e) {
-      final message = e is Failure ? e.message : e.toString();
+      final message = friendlyError(e);
       _state = FeedbackError(message);
       notifyListeners();
     }
@@ -175,7 +175,7 @@ class FeedbackController extends ChangeNotifier {
       );
       notifyListeners();
     } catch (e) {
-      final message = e is Failure ? e.message : e.toString();
+      final message = friendlyError(e);
       _state = FeedbackError(message);
       notifyListeners();
     }
@@ -260,7 +260,7 @@ class FeedbackController extends ChangeNotifier {
       );
       notifyListeners();
     } catch (e) {
-      final message = e is Failure ? e.message : e.toString();
+      final message = friendlyError(e);
       _state = FeedbackError(message);
       notifyListeners();
     }

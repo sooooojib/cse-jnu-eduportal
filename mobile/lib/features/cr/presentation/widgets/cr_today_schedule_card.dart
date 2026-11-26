@@ -54,7 +54,7 @@ class _CrTodayScheduleCardState extends State<CrTodayScheduleCard> {
   bool get isShowingTomorrow => _selectedDay == 1;
 
   DateTime get _shownDate {
-    final today = ClassTime.dateOnly(DateTime.now());
+    final today = ClassTime.dateOnly(ClassTime.now());
     return isShowingTomorrow ? today.add(const Duration(days: 1)) : today;
   }
 
@@ -68,7 +68,7 @@ class _CrTodayScheduleCardState extends State<CrTodayScheduleCard> {
     if (raw.isNotEmpty && !raw.startsWith('Today · ') && !raw.startsWith('Tomorrow · ')) {
       return raw;
     }
-    final now = DateTime.now();
+    final now = ClassTime.now();
     final date = isShowingTomorrow ? now.add(const Duration(days: 1)) : now;
     return DateFormat('EEEE · MMM d, yyyy').format(date);
   }

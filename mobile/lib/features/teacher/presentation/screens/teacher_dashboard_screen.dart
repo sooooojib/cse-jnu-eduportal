@@ -31,6 +31,7 @@ import '../../../attendance/presentation/screens/teacher_attendance_terminal_scr
 import 'teacher_schedule_screen.dart';
 import '../../../counseling/presentation/screens/teacher_counseling_screen.dart';
 import '../../../feedback/presentation/screens/teacher_feedback_screen.dart';
+import 'package:cse_jnu_eduportal/core/utils/refresh_on_reopen.dart';
 
 class TeacherDashboardScreen extends StatefulWidget {
   final TeacherDashboardController? controller;
@@ -48,7 +49,7 @@ class TeacherDashboardScreen extends StatefulWidget {
   State<TeacherDashboardScreen> createState() => _TeacherDashboardScreenState();
 }
 
-class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
+class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> with RefreshOnReopen {
   late final TeacherDashboardController _controller;
   int _currentNavIndex = 0;
   final _changesKey = GlobalKey<ClassChangesCardState>();
@@ -67,6 +68,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     setState(() => _mode = mode);
     DashboardModePreference.write(user.id, mode);
   }
+
+  // S2-13: reload quietly when the app / tab is reopened.
+  @override
+  void onReopened() => _controller.refreshData();
 
   @override
   void initState() {
@@ -409,7 +414,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 const SizedBox(height: 14),
                 DashboardModeSelector(
                   currentMode: mode,
-                  adminLabel: currentUser.role.isChairman ? 'Department Admin' : 'Signup Committee',
+                  adminLabel: currentUser.role.isChairman ? 'Department Admin' : 'Requests',
                   onModeChanged: (m) => _setMode(currentUser, m),
                 ),
               ],

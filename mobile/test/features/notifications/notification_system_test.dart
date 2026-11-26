@@ -121,10 +121,26 @@ void main() {
         '/profile',
       );
 
-      // Attendance
+      // Attendance & Schedule / Class Changes & CR Transfer
       expect(
         PushNotificationServiceImpl.resolveDeepLinkRoute({'notificationType': 'ATTENDANCE_VERIFIED'}),
         '/attendance',
+      );
+      expect(
+        PushNotificationServiceImpl.resolveDeepLinkRoute({'notificationType': 'ATTENDANCE_SESSION'}),
+        '/attendance',
+      );
+      expect(
+        PushNotificationServiceImpl.resolveDeepLinkRoute({'notificationType': 'SCHEDULE_UPDATE'}),
+        '/schedule',
+      );
+      expect(
+        PushNotificationServiceImpl.resolveDeepLinkRoute({'notificationType': 'EXAM_UPDATE'}),
+        '/schedule',
+      );
+      expect(
+        PushNotificationServiceImpl.resolveDeepLinkRoute({'notificationType': 'CR_TRANSFER'}),
+        '/my-class?tab=requests',
       );
 
       // Signup Decision

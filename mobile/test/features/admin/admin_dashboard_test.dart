@@ -42,6 +42,11 @@ import 'package:cse_jnu_eduportal/features/admin/presentation/controllers/admin_
 import 'package:cse_jnu_eduportal/features/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:cse_jnu_eduportal/features/admin/presentation/widgets/admin_pending_signups_card.dart';
 import 'package:cse_jnu_eduportal/features/admin/presentation/widgets/admin_pending_semester_card.dart';
+import 'package:cse_jnu_eduportal/features/admin/presentation/widgets/admin_quick_actions_grid.dart';
+import 'package:cse_jnu_eduportal/features/admin/presentation/widgets/department_holidays_sheet.dart';
+import 'package:cse_jnu_eduportal/features/curriculum/data/repositories/holiday_repository.dart';
+
+class MockHolidayRepo extends Mock implements HolidayRepository {}
 
 class MockAdminRepository extends Mock implements AdminRepository {}
 class MockAuthController extends Mock implements AuthController {}
@@ -470,6 +475,72 @@ void main() {
       expect(find.text('Faculty'), findsOneWidget);
       expect(find.text('Students'), findsOneWidget);
       expect(find.text('CRs'), findsOneWidget);
+    });
+
+    testWidgets('11. Mark Holiday card appears for Admin and Chairman, hidden for Delegate Teacher', (tester) async {
+      // Admin
+      when(() => mockAuthController.currentUser).thenReturn(adminUser);
+      await tester.pumpWidget(
+        const MaterialApp(home: Scaffold(body: SingleChildScrollView(child: AdminQuickActionsGrid()))),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Mark Holiday'), findsOneWidget);
+
+      // Chairman
+      when(() => mockAuthController.currentUser).thenReturn(
+        const User(
+          id: 'uid_chair_1',
+          email: 'chair@cse.jnu.ac.bd',
+          fullName: 'Dept Chairman',
+          role: UserRole.chairman,
+        ),
+      );
+      await tester.pumpWidget(
+        const MaterialApp(home: Scaffold(body: SingleChildScrollView(child: AdminQuickActionsGrid()))),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Mark Holiday'), findsOneWidget);
+
+      // Teacher (committee / delegate)
+      when(() => mockAuthController.currentUser).thenReturn(
+        const User(
+          id: 'uid_del_1',
+          email: 'committee@cse.jnu.ac.bd',
+          fullName: 'Committee Member',
+          role: UserRole.teacher,
+          isAdminDelegate: true,
+        ),
+      );
+      await tester.pumpWidget(
+        const MaterialApp(home: Scaffold(body: SingleChildScrollView(child: AdminQuickActionsGrid()))),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Mark Holiday'), findsNothing);
+    });
+
+    testWidgets('12. DepartmentHolidaysSheet renders without overflow on small viewport', (tester) async {
+      final holidayRepo = MockHolidayRepo();
+      when(() => holidayRepo.listHolidays()).thenAnswer((_) async => const [
+            DepartmentHoliday(date: '2026-12-16', title: 'Victory Day'),
+          ]);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 360, maxWidth: 360),
+                child: Material(child: DepartmentHolidaysSheet(repository: holidayRepo)),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Department Holidays'), findsOneWidget);
+      expect(find.text('Victory Day'), findsOneWidget);
+      expect(find.text('Add Holiday'), findsOneWidget);
     });
   });
 }

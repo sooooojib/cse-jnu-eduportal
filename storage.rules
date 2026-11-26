@@ -1,38 +1,43 @@
 rules_version = '2';
+// S1-11: roles come from the Firestore users record (login-token roles are
+// never set in this project), only approved active members can touch files,
+// and counseling / feedback files are limited to the people involved.
+//
+// Note: files are normally shown through their download URL (which carries its
+// own access token). These rules guard SDK access: listing, reading by path,
+// uploading and deleting.
 service firebase.storage {
   match /b/{bucket}/o {
 
-    function isAuthenticated() {
-      return request.auth != null;
+    // ─── Who is asking (read from Firestore, like firestore.rules) ─────────────
+    function userDoc(uid) {
+      return firestore.get(/databases/(default)/documents/users/$(uid));
     }
 
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+    function isMember() {
+      return request.auth != null &&
+        firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+        userDoc(request.auth.uid).data.get('isActive', true) != false;
+    }
+
+    function myRole() {
+      return string(userDoc(request.auth.uid).data.get('role', '')).upper();
     }
 
     function isAdmin() {
-      return isAuthenticated() && (
-        request.auth.token.role == 'ADMIN' ||
-        request.auth.token.role == 'admin'
-      );
+      return isMember() && myRole() in ['ADMIN', 'CHAIRMAN'];
     }
 
     function isTeacher() {
-      return isAuthenticated() && (
-        request.auth.token.role == 'TEACHER' ||
-        request.auth.token.role == 'teacher'
-      );
+      return isMember() && myRole() in ['TEACHER', 'FACULTY', 'ADMIN', 'CHAIRMAN'];
     }
 
-    function isStudentOrCr() {
-      return isAuthenticated() && (
-        request.auth.token.role == 'STUDENT' ||
-        request.auth.token.role == 'student' ||
-        request.auth.token.role == 'CR' ||
-        request.auth.token.role == 'cr'
-      );
+    function isStudent() {
+      return isMember() && (myRole() in ['STUDENT', 'CR'] ||
+        userDoc(request.auth.uid).data.get('isCR', false) == true);
     }
 
+    // ─── Upload checks ─────────────────────────────────────────────────────────
     function isValidImage() {
       return request.resource.contentType.matches('image/(jpeg|png|webp)') &&
              request.resource.size <= 5 * 1024 * 1024;
@@ -48,74 +53,72 @@ service firebase.storage {
       ) && request.resource.size <= 10 * 1024 * 1024;
     }
 
-    function hasValidMetadata() {
+    function uploadedByMe() {
       return request.resource.metadata != null &&
-             request.resource.metadata.uploadedBy == request.auth.uid;
+             request.resource.metadata.get('uploadedBy', '') == request.auth.uid;
     }
 
-    // ─── 1. NOTICE ATTACHMENTS (Admin only upload & delete, all authenticated read) ───
+    function iUploaded() {
+      return request.auth != null && resource.metadata != null &&
+             resource.metadata.get('uploadedBy', '') == request.auth.uid;
+    }
+
+    // ─── 1. NOTICE ATTACHMENTS: admins / chairman upload, members read ──────────
     match /notices/{noticeId}/{fileName} {
-      allow read: if isAuthenticated();
-      allow create, update: if isAdmin() && isValidDocument() && hasValidMetadata();
+      allow read: if isMember();
+      allow create, update: if isAdmin() && isValidDocument() && uploadedByMe();
       allow delete: if isAdmin();
     }
 
-    match /notices/{fileName} {
-      allow read: if isAuthenticated();
-      allow create, update: if isAdmin() && isValidDocument() && hasValidMetadata();
-      allow delete: if isAdmin();
-    }
-
-    // ─── 2. PROFILE AVATARS (User or Admin, Image only <= 5MB) ──────────────────────
+    // ─── 2. PROFILE PHOTOS: owner (or admin) uploads images; members read ───────
     match /avatars/{userId}/{fileName} {
-      allow read: if isAuthenticated();
-      allow create, update: if (isOwner(userId) || isAdmin()) && isValidImage() && hasValidMetadata();
-      allow delete: if isOwner(userId) || isAdmin();
+      allow read: if isMember();
+      allow create, update: if isMember() && (request.auth.uid == userId || isAdmin()) &&
+                               isValidImage() && uploadedByMe();
+      allow delete: if isMember() && (request.auth.uid == userId || isAdmin());
     }
 
-    // ─── 3. FEEDBACK ATTACHMENTS (Student/CR/Author upload, Authenticated read) ───────
-    // Security Fix (VULN-07): Support anonymous uploads with uploadedBy == 'ANONYMOUS'
-    // to prevent leaking student UID via storage metadata to reviewing professors.
-    match /feedback/{feedbackId}/attachments/{attachmentId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidDocument() && (
-        hasValidMetadata() ||
-        (request.resource.metadata != null && request.resource.metadata.uploadedBy == 'ANONYMOUS')
-      );
-      allow delete: if isAdmin() || (isAuthenticated() && resource.metadata.uploadedBy == request.auth.uid);
+    // ─── 3. FEEDBACK FILES FROM STUDENTS ────────────────────────────────────────
+    // Uploaded while the feedback is still a draft, so they can't be tied to a
+    // feedback record yet. Only the uploader (and admins) can read or delete
+    // them by path; the teacher sees them through the saved download URL.
+    match /feedback/{feedbackId}/attachments/{fileName} {
+      allow read: if isAdmin() || (isMember() && iUploaded());
+      allow create: if isStudent() && isValidDocument() && uploadedByMe();
+      allow delete: if isAdmin() || (isMember() && iUploaded());
     }
 
-    // ─── 4. FEEDBACK TEACHER REPLIES (Teacher or Admin upload) ───────────────────────
-    match /feedback/{feedbackId}/replies/{attachmentId} {
-      allow read: if isAuthenticated();
-      allow create: if (isTeacher() || isAdmin()) && isValidDocument() && hasValidMetadata();
-      allow delete: if isAdmin() || (isAuthenticated() && resource.metadata.uploadedBy == request.auth.uid);
+    // ─── 4. TEACHER REPLY FILES: only the teacher the feedback is about ─────────
+    match /feedback/{feedbackId}/replies/{fileName} {
+      function feedback() {
+        return firestore.get(/databases/(default)/documents/feedback/$(feedbackId)).data;
+      }
+      allow read: if isAdmin() || (isMember() && (
+        iUploaded() ||
+        feedback().get('teacherId', '') == request.auth.uid ||
+        feedback().get('studentId', '') == request.auth.uid
+      ));
+      allow create: if isTeacher() && isValidDocument() && uploadedByMe() &&
+                       (isAdmin() || feedback().get('teacherId', '') == request.auth.uid);
+      allow delete: if isAdmin() || (isMember() && iUploaded());
     }
 
-    // Legacy/generic feedback bucket path
-    match /feedback/{folderId}/{attachmentId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidDocument() && (
-        hasValidMetadata() ||
-        (request.resource.metadata != null && request.resource.metadata.uploadedBy == 'ANONYMOUS')
-      );
-      allow delete: if isAdmin() || (isAuthenticated() && resource.metadata.uploadedBy == request.auth.uid);
+    // ─── 5. COUNSELING FILES: only that booking's student and teacher ───────────
+    match /counseling/{bookingId}/{fileName} {
+      function booking() {
+        return firestore.get(/databases/(default)/documents/counselingBookings/$(bookingId)).data;
+      }
+      function inBooking() {
+        return isMember() && request.auth.uid in [
+          booking().get('studentId', ''), booking().get('teacherId', '')
+        ];
+      }
+      allow read: if isAdmin() || inBooking();
+      allow create: if inBooking() && isValidDocument() && uploadedByMe();
+      allow delete: if isAdmin() || (inBooking() && iUploaded());
     }
 
-    // ─── 5. COUNSELING ATTACHMENTS ──────────────────────────────────────────────────
-    match /counseling/{bookingId}/{attachmentId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidDocument() && hasValidMetadata();
-      allow delete: if isAdmin() || (isAuthenticated() && resource.metadata.uploadedBy == request.auth.uid);
-    }
-
-    match /counseling/{userId}/{attachmentId} {
-      allow read: if isAuthenticated();
-      allow create: if (isOwner(userId) || isAdmin()) && isValidDocument() && hasValidMetadata();
-      allow delete: if isOwner(userId) || isAdmin();
-    }
-
-    // ─── 6. DEFAULT DENY ALL OTHER ARBITRARY STORAGE PATHS ──────────────────────────
+    // ─── 6. EVERYTHING ELSE IS CLOSED ───────────────────────────────────────────
     match /{allPaths=**} {
       allow read, write: if false;
     }

@@ -11,6 +11,7 @@ import '../../../curriculum/domain/entities/class_change.dart';
 import '../../domain/entities/teacher_monitoring.dart';
 import '../../domain/repositories/teacher_monitoring_repository.dart';
 import '../widgets/admin_filter_dropdown.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 /// Persists the monitoring period start (usually the semester start date).
 class MonitoringPeriodPreference {
@@ -90,7 +91,7 @@ class _TeacherCourseMonitoringScreenState extends State<TeacherCourseMonitoringS
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _error = e.toString();
+        _error = friendlyError(e);
       });
     }
   }
@@ -356,6 +357,7 @@ class _TeacherCourseMonitoringScreenState extends State<TeacherCourseMonitoringS
                       const SizedBox(height: 2),
                       Text(
                         '${teacher.teacherName} • ${course.classesConducted} held'
+                        '${course.emptySessions.isNotEmpty ? ' • ${course.emptySessions.length} empty (0 present)' : ''}'
                         '${course.notTakenCount > 0 ? ' • ${course.notTakenCount} not taken' : ''}'
                         '${course.cancelledCount > 0 ? ' • ${course.cancelledCount} cancelled' : ''}'
                         '${course.extraCount > 0 ? ' • ${course.extraCount} extra' : ''}',
@@ -392,12 +394,13 @@ class _TeacherCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final role = UserRole.fromString(summary.role);
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF13263E) : Colors.white,
+    return Material(
+      color: isDark ? const Color(0xFF13263E) : Colors.white,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isDark ? Colors.white10 : const Color(0xFFE2E8F0)),
+        side: BorderSide(color: isDark ? Colors.white10 : const Color(0xFFE2E8F0)),
       ),
+      clipBehavior: Clip.antiAlias,
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
@@ -538,6 +541,12 @@ class _CourseRow extends StatelessWidget {
                         : 'No attendance yet'),
                 muted,
               ),
+              if (course.emptySessions.isNotEmpty)
+                _stat(
+                  Icons.warning_amber_rounded,
+                  '${course.emptySessions.length} empty (0 present)',
+                  const Color(0xFFD97706),
+                ),
               if (course.notTakenCount > 0)
                 _stat(
                   Icons.person_off_outlined,
@@ -596,6 +605,7 @@ class _ClassLogList extends StatelessWidget {
   Widget build(BuildContext context) {
     final entries = <_LogEntry>[
       for (final h in course.history) _LogEntry.held(h.date, h),
+      for (final h in course.emptySessions) _LogEntry.held(h.date, h),
       for (final c in course.changes) _LogEntry.change(c.date, c),
     ]..sort((a, b) => b.date.compareTo(a.date));
 
@@ -611,14 +621,32 @@ class _ClassLogList extends StatelessWidget {
         final when = date == null ? e.date : DateFormat('EEE, MMM d, yyyy').format(date);
         final h = e.held;
         if (h != null) {
+          final isZeroPresent = h.presentCount == 0;
+          final absentCount = (course.cohortSize - h.presentCount).clamp(0, course.cohortSize);
+          final countsLabel = course.cohortSize > 0
+              ? '${h.presentCount} Present · $absentCount Absent'
+              : '${h.presentCount} Present';
           return ListTile(
             dense: true,
-            leading: const Icon(Icons.check_circle_outline_rounded, color: Color(0xFF059669)),
+            leading: Icon(
+              isZeroPresent ? Icons.warning_amber_rounded : Icons.check_circle_outline_rounded,
+              color: isZeroPresent ? const Color(0xFFD97706) : const Color(0xFF059669),
+            ),
             title: Text(when),
-            subtitle: Text(h.sessionCount > 1 ? 'Held · ${h.sessionCount} sessions (re-launched)' : 'Held'),
+            subtitle: Text(
+              isZeroPresent
+                  ? '0 Present · Not counted as held'
+                  : (h.sessionCount > 1
+                      ? 'Held · ${h.sessionCount} sessions (re-launched)'
+                      : 'Held'),
+            ),
             trailing: Text(
-              course.cohortSize > 0 ? '${h.presentCount}/${course.cohortSize} present' : '${h.presentCount} present',
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+              countsLabel,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+                color: isZeroPresent ? const Color(0xFFD97706) : null,
+              ),
             ),
           );
         }

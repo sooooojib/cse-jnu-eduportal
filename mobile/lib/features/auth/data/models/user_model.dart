@@ -62,9 +62,13 @@ class UserModel extends User {
     String? authoritativeRole,
   }) {
     final data = doc.data() ?? {};
-    final effectiveRole = (authoritativeRole != null && authoritativeRole.isNotEmpty)
-        ? authoritativeRole
-        : (data['role'] as String? ?? 'STUDENT');
+    // The users record is the source of truth (the security rules use it too).
+    // A login-token role claim is only a fallback for a record without a role,
+    // so a stale claim can never override a demotion or a CR hand-over.
+    final recordRole = (data['role'] as String?)?.trim() ?? '';
+    final effectiveRole = recordRole.isNotEmpty
+        ? recordRole
+        : ((authoritativeRole != null && authoritativeRole.isNotEmpty) ? authoritativeRole : 'STUDENT');
     return UserModel.fromJson({
       'id': doc.id,
       ...data,

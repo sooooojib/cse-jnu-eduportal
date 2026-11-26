@@ -6,6 +6,7 @@ import '../../../../core/utils/class_time.dart';
 import '../../../auth/domain/entities/user.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../../data/repositories/exam_support_repository.dart';
+import '../../data/repositories/holiday_repository.dart';
 import '../../domain/entities/curriculum_entities.dart';
 import '../../domain/services/effective_schedule.dart';
 import '../../domain/services/exam_rules.dart';
@@ -113,6 +114,7 @@ class _ExamFormDialogState extends State<ExamFormDialog> {
     super.initState();
     _examsController = sl<ExamsController>();
     _support = sl.isRegistered<ExamSupportRepository>() ? sl<ExamSupportRepository>() : null;
+    _loadHolidays();
     _user = sl.isRegistered<AuthController>() ? sl<AuthController>().currentUser : null;
 
     final e = widget.existingExam;
@@ -195,6 +197,19 @@ class _ExamFormDialogState extends State<ExamFormDialog> {
     } catch (_) {}
   }
 
+  /// S2-13: department holidays, to warn when an exam falls on one.
+  Map<String, String> _holidays = const {};
+
+  Future<void> _loadHolidays() async {
+    if (!sl.isRegistered<HolidayRepository>()) return;
+    try {
+      final map = await sl<HolidayRepository>().holidayMap();
+      if (mounted) setState(() => _holidays = map);
+    } catch (_) {}
+  }
+
+  String? get _holidayTitle => _holidays[ClassTime.dateKey(_date)];
+
   Future<void> _loadDay() async {
     final s = _support;
     if (s == null) return;
@@ -232,8 +247,9 @@ class _ExamFormDialogState extends State<ExamFormDialog> {
       startTime: _start!,
       endTime: _end!,
       room: _room,
-      year: _year,
-      semester: _semester,
+      // Always the course's own semester (the rules require it).
+      year: c.year,
+      semester: c.semester,
       type: _type,
       instructions: _instructionsController.text.trim().isEmpty ? null : _instructionsController.text.trim(),
       invigilatorName: _invigilatorController.text.trim().isEmpty ? null : _invigilatorController.text.trim(),
@@ -319,8 +335,11 @@ class _ExamFormDialogState extends State<ExamFormDialog> {
     final s = _support;
     final u = _user;
     if (s != null && u != null) {
-      final msg = ExamSupportRepositoryImpl.message(draft, kind: _isEdit ? 'change' : 'new');
-      s.notifySemester(draft, title: msg.$1, body: msg.$2, sender: u);
+      // Use the saved exam (a new exam only gets its id when saved), so the
+      // notice points at the real exam (the security rules check this).
+      final saved = _isEdit ? draft : (_examsController.lastCreatedExam ?? draft);
+      final msg = ExamSupportRepositoryImpl.message(saved, kind: _isEdit ? 'change' : 'new');
+      if (saved.id.isNotEmpty) s.notifySemester(saved, title: msg.$1, body: msg.$2, sender: u);
     }
     Navigator.of(context).pop(true);
   }
@@ -483,6 +502,15 @@ class _ExamFormDialogState extends State<ExamFormDialog> {
                   ),
                 ),
               ),
+              if (_holidayTitle != null)
+                Padding(
+                  key: const ValueKey('exam_holiday_warning'),
+                  padding: const EdgeInsets.only(top: 6, left: 6),
+                  child: Text(
+                    'This day is a holiday (${_holidayTitle!}). You can still save, but students may not expect an exam.',
+                    style: const TextStyle(fontSize: 12, color: Color(0xFFB45309), fontWeight: FontWeight.w600),
+                  ),
+                ),
               const SizedBox(height: 14),
 
               // From / To

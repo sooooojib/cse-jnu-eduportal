@@ -142,23 +142,53 @@ When a start date is set, classes before it are excluded, so the view becomes "t
 
 ## 8. Attendance
 
-**Teacher** (Attendance tab, or **Start Attendance** on a class, which opens that exact course and class; blocked for a cancelled / not-taken class):
+**Teacher** (Attendance tab, or **Start Attendance** on a class, which opens that exact course and class):
+- Choose the course (all courses where you are the course teacher or assigned). If no class is scheduled today, it is a holiday, or today's class was cancelled, the app asks before starting an extra / makeup session. If a session is already open for the course, a **Resume** banner appears instead of starting a new one.
 - **Code** mode: a 6-character code that **changes every 20 seconds** (the previous one is still accepted briefly). Keep the screen open; if the screen stops rotating, codes stop working after ~45 s. **+5 min** extends.
 - **By hand** mode: no code; call the roll.
-- The roster shows only the course's semester (and enrolled students), updates **live** as students mark themselves, and each tap (**P / L / A**) **saves automatically**. A teacher's pending tap is never overwritten by a live update, and saving writes only the students the teacher changed.
+- The roster shows the course's semester plus retake students, updates **live** as students mark themselves (the present count on the session stays in sync), and each tap (**P / A**) **saves automatically**. A teacher's pending tap is never overwritten by a live update; saving writes only the students the teacher changed.
 - **Close & Save** records everyone not marked as **Absent**, saves the present count and closes.
 - **Recent Classes** (last 7 days): reopen a class to correct it; edits are logged (`editLog`).
-- **Course report**: each student's attended / late / held and %, students below 75% first, **Copy CSV** (paste into Excel / Sheets).
+- **Course report**: every student's present / absent per class date (P / A), totals and %, students below 75% first. **Export Excel** (department register layout: university, course, teacher, Sl / Roll / Name, one column per date) shares or downloads an `.xlsx`; **Copy CSV** for pasting.
+- Late marking was removed: every mark is Present or Absent (older Late records still count as attended).
 
-**Student** (Attendance tab): type the code → "You are marked present / late for …". Per course: attended ÷ held (held = class days of their semester, so missing a class always counts), the days missed, late count, and advice ("You can miss 2 more classes" / "Attend the next 4 classes in a row to reach 75%").
+**Student** (Attendance tab): pick the class under **Open now** (auto-picked when only one), type the code → "You are marked present for …". Per course: attended ÷ held, the days missed, and advice ("You can miss 2 more classes" / "Attend the next 4 classes in a row to reach 75%"). A day counts as **held** only if the class actually ran (a session with at least one student present), the same rule Teacher Monitoring uses.
+
+**Retakes** (Profile → Add Retake): a student can add a course from an **earlier** semester only. Retake classes, changes and exams then show on their dashboard and schedule, they can mark attendance there, and they appear on that course's roster and report. Their retake percentage counts only classes **from the day they enrolled**. Students can remove only their own retakes (with a confirmation); admin-made enrollments cannot be removed by students.
 
 **Data / rules** (`ClassAttendanceService`, no Cloud Functions):
-- `attendanceSessions/{id}`: no code; `mode` CODE / MANUAL, `lateAfter`, `slotId`, `targetYear/Semester`. Only the course teacher creates; only the session's teacher updates.
+- `attendanceSessions/{id}`: no code; `mode` CODE / MANUAL, `slotId`, `targetYear/Semester`. Only the course teacher creates; only the session's teacher updates.
 - `attendanceSessions/{id}/private/code`: `code`, `prevCode`, `issuedAt`; readable / writable only by the session's teacher (and admins).
-- `attendance/{sessionId}_{studentId}`: self-marks only by the student, for their own semester, with the current / previous code while it is fresh, PRESENT before `lateAfter` and LATE after; `markedBy` SELF / TEACHER. Teacher marks only for their own course. Students never edit or delete; only admins delete.
-- Rules tests: `firestore-rules-tests/attendance.test.js` (10 cases).
+- `attendance/{sessionId}_{studentId}`: self-marks only by the student, for their own semester or a retake enrollment, with the current / previous code while it is fresh, status PRESENT only; `markedBy` SELF / TEACHER. Teacher marks (PRESENT / ABSENT) only for their own course. Students never edit or delete; only admins delete.
+- `enrollments/{courseId}_{studentId}` with `type: RETAKE`: created / deleted by the student only for an earlier-semester course; otherwise admin-only.
+- Rules tests: `firestore-rules-tests/attendance.test.js`.
 
-## 9. Deployment Checklist
+## 9. Holidays
+
+- **Admin / Chairman → Holidays** marks department holidays (one per date with a reason). Everyone can read them.
+- On a holiday, the weekly routine is off everywhere (dashboards, Schedule tab, clash checks, exam clash check, Teacher Monitoring's expected classes). **Extra classes** added for that day still show and still count.
+- The **Change a Class** form shows the holiday and allows only **Extra** on that date (no cancel / move / not taken for classes that are not happening).
+- Rules: `match /holidays` (read: signed in; write: admin / chairman). Tests in `firestore-rules-tests/class_changes.test.js`.
+
+## 10. Schedule notices
+
+- When the CR or a teacher adds, cancels or moves a class for a day, the semester's students get an in-app **SCHEDULE_UPDATE** notification (sent in the background so saving stays fast). A CR can only notify their own semester. "Not taken" reports are not announced.
+
+## 11. Signup & Approval (free plan, no Cloud Functions)
+
+1. **Signup:** the person fills in the form **with a password**. Their login is created right away and a request is filed under their uid (`signupRequests/{uid}`, `status: PENDING`). They are signed out.
+2. **Before approval:** signing in shows "Your account is waiting for approval by a teacher or the admin." After a rejection: "Your signup was not approved: <reason>".
+3. **Who approves:**
+   - **Student / CR signups:** **any teacher**, the Chairman or the Admin. The reviewer picks the semester; the session comes from the signup.
+   - **Teacher signups:** Admin / Chairman only.
+   - Approving creates the account and marks the request approved in **one batch**; the rules check that the account matches the request exactly (role, email, chosen semester, session, active). A teacher can never overwrite an existing account or edit a request's details.
+4. **Semester requests:** any teacher, the Chairman or the Admin approves / rejects. Approving moves the student to exactly the requested semester in the same batch.
+5. Every decision records `reviewedBy`.
+6. **Where:** every teacher's dashboard has the **Faculty / Admin** switch; the teacher's Admin view lists pending Student / CR signups and semester requests. Teachers can open only those two admin pages. The old "signup committee" option is gone.
+7. Old requests from before this change (no login attached) can't be approved; the app asks the person to sign up again.
+8. Rules tests: `firestore-rules-tests/signup_approval.test.js`.
+
+## 12. Deployment Checklist
 
 1. `cd functions && npm run build && firebase deploy --only functions` (new: `updateUserRole`, `setAdminDelegate`; changed: approval, provisioning, all role checks).
 2. `firebase deploy --only firestore:rules`. Signup requests now **require** `session` for Student/CR, so older app builds can no longer submit student signups.

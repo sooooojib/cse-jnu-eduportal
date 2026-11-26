@@ -8,6 +8,7 @@ class SignupRequestUseCase {
   Future<String> execute({
     required String fullName,
     required String email,
+    required String password,
     required String role,
     String? studentId,
     String? phone,
@@ -16,6 +17,7 @@ class SignupRequestUseCase {
     return repository.submitSignupRequest(
       fullName: fullName,
       email: email,
+      password: password,
       role: role,
       studentId: studentId,
       phone: phone,

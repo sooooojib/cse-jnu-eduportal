@@ -14,6 +14,9 @@ import '../../../../core/utils/class_time.dart';
 import '../../../curriculum/data/repositories/class_change_repository.dart';
 import '../../../curriculum/domain/entities/class_change.dart';
 import '../../../curriculum/domain/services/effective_schedule.dart';
+import '../../../attendance/data/services/attendance_totals.dart';
+import '../../../../core/network/cache_first.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 abstract class CrRemoteDataSource {
   Future<CrDashboardData> getCrDashboardData({
@@ -39,7 +42,7 @@ class CrRemoteDataSourceImpl implements CrRemoteDataSource {
     DateTime? currentTime,
   }) async {
     try {
-      final now = currentTime ?? DateTime.now();
+      final now = currentTime ?? ClassTime.now();
       final bool isTomorrow = now.hour >= 17 || now.hour < 5;
       final String dayOfWeek = _dayOfWeekFromWeekday(now.weekday);
       final DateTime tomorrow = now.add(const Duration(days: 1));
@@ -52,24 +55,55 @@ class CrRemoteDataSourceImpl implements CrRemoteDataSource {
         'Loading CR Dashboard for ${crUser.fullName} (Year ${crUser.year}, Sem ${crUser.semester}, Day: $dayOfWeek)',
       );
 
-      // 1. Fetch Enrolled Semester Courses
-      final List<Course> enrolledCourses = await _fetchEnrolledCourses(crUser);
+      // 0. Fetch explicit enrollments once (course -> date counted from).
+      final Map<String, String?> enrolledSince = await _fetchEnrollments(crUser.id);
+      final Set<String> retakeCourseIds = enrolledSince.keys.toSet();
 
-      // 2. Fetch Personal Attendance for CR
-      final attendanceSummary = await _fetchPersonalAttendance(crUser, enrolledCourses);
+      // 1. Fetch Enrolled Semester + Retake Courses
+      final List<Course> enrolledCourses =
+          await _fetchEnrolledCourses(crUser, retakeCourseIds: retakeCourseIds);
 
-      // 3. Fetch Classes Today & Tomorrow
-      // Weekly routine + one-day changes (extra / cancelled / moved) per date.
-      final List<ScheduleSlot> todayClasses =
-          await _fetchClassesForDate(crUser, now, dayOfWeek);
-      final List<ScheduleSlot> tomorrowClasses =
-          await _fetchClassesForDate(crUser, tomorrow, tomorrowDayOfWeek);
+      // 2. Fetch Personal Attendance & Live Open Sessions (unified with ClassAttendanceService)
+      final attendanceSummary = await _fetchPersonalAttendance(
+        crUser,
+        enrolledCourses,
+        retakeCourseIds: retakeCourseIds,
+        enrolledSince: enrolledSince,
+        now: now,
+      );
+      final openAttendanceSessions = await _fetchOpenSessions(
+        crUser,
+        retakeCourseIds: retakeCourseIds,
+        now: now,
+      );
+
+      // 3. Fetch Classes Today & Tomorrow + holiday info
+      final todayHolidayTitle = await _fetchHolidayTitle(now);
+      final tomorrowHolidayTitle = await _fetchHolidayTitle(tomorrow);
+      final List<ScheduleSlot> todayClasses = await _fetchClassesForDate(
+        crUser,
+        now,
+        dayOfWeek,
+        retakeCourseIds: retakeCourseIds,
+        holidayTitle: todayHolidayTitle,
+      );
+      final List<ScheduleSlot> tomorrowClasses = await _fetchClassesForDate(
+        crUser,
+        tomorrow,
+        tomorrowDayOfWeek,
+        retakeCourseIds: retakeCourseIds,
+        holidayTitle: tomorrowHolidayTitle,
+      );
 
       // 4. Fetch Counseling Info (Available Faculty Slots & My Bookings)
       final counselingInfo = await _fetchCounselingInfo(crUser);
 
-      // 5. Fetch Upcoming Exams for this Year & Semester
-      final List<Exam> upcomingExams = await _fetchUpcomingExams(crUser, now);
+      // 5. Fetch Upcoming Exams for this Year & Semester + Retake Courses
+      final List<Exam> upcomingExams = await _fetchUpcomingExams(
+        crUser,
+        now,
+        retakeCourseIds: retakeCourseIds,
+      );
 
       // 6. Fetch latest semester status from user document if present
       String semesterStatus = crUser.semesterStatus ?? 'APPROVED';
@@ -110,11 +144,14 @@ class CrRemoteDataSourceImpl implements CrRemoteDataSource {
         dayOfWeek: dayOfWeek,
         tomorrowDateLabel: tomorrowDateLabel,
         isTomorrow: isTomorrow,
+        openAttendanceSessions: openAttendanceSessions,
+        todayHolidayTitle: todayHolidayTitle,
+        tomorrowHolidayTitle: tomorrowHolidayTitle,
       );
     } catch (e, stack) {
       AppLogger.e('Error fetching CR dashboard data', e, stack);
       if (e is ServerException) rethrow;
-      throw ServerException(message: 'Failed to load CR dashboard data: $e');
+      throw ServerException(message: 'Could not load the dashboard. ${friendlyError(e)}');
     }
   }
 
@@ -147,42 +184,153 @@ class CrRemoteDataSourceImpl implements CrRemoteDataSource {
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
-      // Atomic batch write to both 'schedules' and 'scheduleSlots' so:
-      // 1. Teachers see it on their dashboard and schedule screens (they query 'schedules')
-      // 2. Students see it on their timetable/schedule screens (they query 'schedules')
-      // 3. CR dashboard sees it in real time
-      final batch = _firestore.batch();
-      batch.set(docRef, slotMap);
-      batch.set(_firestore.collection('scheduleSlots').doc(docRef.id), slotMap);
-      await batch.commit();
+      await docRef.set(slotMap);
 
       AppLogger.i('CR added schedule slot: ${docRef.id} for ${slot.dayOfWeek}');
     } catch (e, stack) {
       AppLogger.e('Failed to add schedule slot', e, stack);
-      throw ServerException(message: 'Unable to schedule class slot: $e');
+      throw ServerException(message: 'Could not add the class. ${friendlyError(e)}');
     }
   }
 
-  Future<List<Course>> _fetchEnrolledCourses(User crUser) async {
+  /// The student's explicit enrollments (retakes etc.): courseId → the date
+  /// from which classes count ("yyyy-MM-dd": `enrolledOn`, else `createdAt`),
+  /// or null when unknown (count every class).
+  Future<Map<String, String?>> _fetchEnrollments(String uid) async {
     try {
       final snap = await _firestore
-          .collection('courses')
-          .where('year', isEqualTo: crUser.year ?? 1)
-          .where('semester', isEqualTo: crUser.semester ?? 1)
+          .collection('enrollments')
+          .where('studentId', isEqualTo: uid)
           .get();
+      final out = <String, String?>{};
+      for (final d in snap.docs) {
+        final data = d.data();
+        final cid = (data['courseId'] as String? ?? '').trim();
+        if (cid.isEmpty) continue;
+        out[cid] = enrolledSinceKey(data);
+      }
+      return out;
+    } catch (_) {
+      return const {};
+    }
+  }
 
-      if (snap.docs.isNotEmpty) {
-        return snap.docs.map((d) => CourseModel.fromFirestore(d)).toList();
+  /// "yyyy-MM-dd" from `enrolledOn`, else from `createdAt`, else null.
+  static String? enrolledSinceKey(Map<String, dynamic> data) {
+    final on = (data['enrolledOn'] as String?)?.trim() ?? '';
+    if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(on)) return on;
+    final created = data['createdAt'];
+    if (created is Timestamp) return ClassTime.dateKey(ClassTime.dhaka(created.toDate()));
+    if (created is String) {
+      final d = DateTime.tryParse(created);
+      if (d != null) return ClassTime.dateKey(d);
+    }
+    return null;
+  }
+
+  Future<String?> _fetchHolidayTitle(DateTime date) async {
+    try {
+      final dateKey = ClassTime.dateKey(date);
+      final hDoc = await _firestore.collection('holidays').doc(dateKey).get();
+      if (!hDoc.exists) return null;
+      return (hDoc.data()?['title'] as String? ?? 'University Holiday').trim();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<List<AttendanceSession>> _fetchOpenSessions(
+    User crUser, {
+    Set<String> retakeCourseIds = const {},
+    required DateTime now,
+  }) async {
+    try {
+      final byId = <String, AttendanceSession>{};
+      if (crUser.year != null && crUser.semester != null) {
+        final semSnap = await _firestore
+            .collection('attendanceSessions')
+            .where('targetYear', isEqualTo: crUser.year)
+            .where('targetSemester', isEqualTo: crUser.semester)
+            .where('isActive', isEqualTo: true)
+            .get();
+        for (final d in semSnap.docs) {
+          final s = AttendanceSessionModel.fromFirestore(d);
+          if (!s.isManualMode && (s.expiresAt?.isAfter(ClassTime.instant()) ?? false)) {
+            byId[s.id] = s;
+          }
+        }
+      }
+      if (retakeCourseIds.isNotEmpty) {
+        final list = retakeCourseIds.toList();
+        for (var i = 0; i < list.length; i += 10) {
+          final chunk = list.skip(i).take(10).toList();
+          final rSnap = await _firestore
+              .collection('attendanceSessions')
+              .where('courseId', whereIn: chunk)
+              .where('isActive', isEqualTo: true)
+              .get();
+          for (final d in rSnap.docs) {
+            final s = AttendanceSessionModel.fromFirestore(d);
+            if (!s.isManualMode && (s.expiresAt?.isAfter(ClassTime.instant()) ?? false)) {
+              byId[s.id] = s;
+            }
+          }
+        }
+      }
+      final list = byId.values.toList()
+        ..sort((a, b) => (a.expiresAt ?? ClassTime.instant()).compareTo(b.expiresAt ?? ClassTime.instant()));
+      return list;
+    } catch (e) {
+      AppLogger.w('Failed to load open attendance sessions for home banner: $e');
+      return const [];
+    }
+  }
+
+  Future<List<Course>> _fetchEnrolledCourses(
+    User crUser, {
+    Set<String> retakeCourseIds = const {},
+  }) async {
+    try {
+      final byId = <String, Course>{};
+      // No semester yet → no semester courses (only explicit enrollments).
+      if (crUser.year != null && crUser.semester != null) {
+        // Rarely changes: offline copy, server at most every 6 h (S2-11).
+        final snap = await CacheFirst.get(
+          _firestore
+              .collection('courses')
+              .where('year', isEqualTo: crUser.year)
+              .where('semester', isEqualTo: crUser.semester),
+          'courses_${crUser.year}_${crUser.semester}',
+        );
+
+        for (final d in snap.docs) {
+          final c = CourseModel.fromFirestore(d);
+          byId[c.id] = c;
+        }
+
+        if (byId.isEmpty) {
+          final allSnap = await _firestore.collection('courses').get();
+          for (final d in allSnap.docs) {
+            final c = CourseModel.fromFirestore(d);
+            if (c.year == crUser.year && c.semester == crUser.semester) {
+              byId[c.id] = c;
+            }
+          }
+        }
       }
 
-      // Fallback: search all courses
-      final allSnap = await _firestore.collection('courses').get();
-      final filtered = allSnap.docs
-          .map((d) => CourseModel.fromFirestore(d))
-          .where((c) => c.year == (crUser.year ?? 1) && c.semester == (crUser.semester ?? 1))
-          .toList();
+      for (final cid in retakeCourseIds) {
+        if (byId.containsKey(cid)) continue;
+        try {
+          final cDoc = await _firestore.collection('courses').doc(cid).get();
+          if (cDoc.exists) {
+            final c = CourseModel.fromFirestore(cDoc);
+            byId[c.id] = c;
+          }
+        } catch (_) {}
+      }
 
-      return filtered;
+      return byId.values.toList()..sort((a, b) => a.code.compareTo(b.code));
     } catch (e) {
       AppLogger.w('Failed to query courses for Year ${crUser.year} Sem ${crUser.semester}: $e');
       return [];
@@ -191,76 +339,27 @@ class CrRemoteDataSourceImpl implements CrRemoteDataSource {
 
   Future<AttendanceSummary> _fetchPersonalAttendance(
     User crUser,
-    List<Course> enrolledCourses,
-  ) async {
+    List<Course> enrolledCourses, {
+    Set<String> retakeCourseIds = const {},
+    Map<String, String?> enrolledSince = const {},
+    required DateTime now,
+  }) async {
     try {
-      final snapshot = await _firestore
-          .collection('attendance')
-          .where('studentId', isEqualTo: crUser.id)
-          .get();
-
-      final records = snapshot.docs.map((doc) {
-        final data = {'id': doc.id, ...doc.data()};
-        return AttendanceRecordModel.fromJson(data);
-      }).toList();
-
-      final Map<String, List<AttendanceRecordModel>> byCourse = {};
-      for (final r in records) {
-        byCourse.putIfAbsent(r.courseCode.toUpperCase(), () => []).add(r);
-      }
-
-      final List<CourseAttendance> courseSummaries = [];
-
-      for (final course in enrolledCourses) {
-        final cCode = course.code.toUpperCase();
-        final cRecords = byCourse[cCode] ?? [];
-        final total = cRecords.length;
-        final attended = cRecords.where((r) => r.status.toUpperCase() == 'PRESENT').length;
-        final pct = total > 0 ? (attended / total) * 100 : 0.0;
-
-        courseSummaries.add(
-          CourseAttendanceModel(
-            courseId: course.id,
-            courseCode: course.code,
-            courseTitle: course.title,
-            attendedClasses: attended,
-            totalClasses: total,
-            percentage: pct,
-            isEligible: pct >= 75.0,
-          ),
-        );
-      }
-
-      // Include courses in records not in enrolledCourses
-      for (final entry in byCourse.entries) {
-        if (!courseSummaries.any((c) => c.courseCode.toUpperCase() == entry.key)) {
-          final total = entry.value.length;
-          final attended = entry.value.where((r) => r.status.toUpperCase() == 'PRESENT').length;
-          final pct = total > 0 ? (attended / total) * 100 : 0.0;
-          courseSummaries.add(
-            CourseAttendanceModel(
-              courseId: entry.key,
-              courseCode: entry.key,
-              courseTitle: entry.value.first.courseTitle,
-              attendedClasses: attended,
-              totalClasses: total,
-              percentage: pct,
-              isEligible: pct >= 75.0,
-            ),
-          );
-        }
-      }
-
-      final totalAttended = records.where((r) => r.status.toUpperCase() == 'PRESENT').length;
-      final totalSessions = records.length;
-      final overallPct = totalSessions > 0 ? (totalAttended / totalSessions) * 100 : 0.0;
-
+      // S2-11 (free plan): a few small records instead of every session and
+      // mark of the semester; same numbers as the Attendance screen.
+      final summary = await AttendanceTotals(_firestore).summary(
+        uid: crUser.id,
+        courses: {for (final c in enrolledCourses) c.id: (c.code, c.title)},
+        since: enrolledSince,
+        today: ClassTime.dateKey(now),
+        withRecent: false, // the dashboard doesn't list recent marks
+      );
       return AttendanceSummary(
-        overallPercentage: double.parse(overallPct.toStringAsFixed(1)),
-        totalAttended: totalAttended,
-        totalSessions: totalSessions,
-        courseSummaries: courseSummaries,
-        recentRecords: records,
+        overallPercentage: double.parse(summary.overallPercentage.toStringAsFixed(1)),
+        totalAttended: summary.totalAttended,
+        totalSessions: summary.totalSessions,
+        courseSummaries: summary.courseSummaries,
+        recentRecords: summary.recentRecords,
       );
     } catch (e) {
       AppLogger.w('Attendance query failed for CR: $e');
@@ -287,37 +386,88 @@ class CrRemoteDataSourceImpl implements CrRemoteDataSource {
   }
 
   /// Effective classes for [date]: the routine for that weekday plus the
-  /// batch's one-day changes for that exact date.
-  Future<List<ScheduleSlot>> _fetchClassesForDate(User crUser, DateTime date, String targetDay) async {
-    final routine = await _fetchClassesForDay(crUser, targetDay);
-    List<ClassChange> changes = const [];
-    try {
-      final snap = await _firestore
-          .collection('classChanges')
-          .where('targetYear', isEqualTo: crUser.year ?? 1)
-          .where('targetSemester', isEqualTo: crUser.semester ?? 1)
-          .where('date', isEqualTo: ClassTime.dateKey(date))
-          .get();
-      changes = snap.docs.map(ClassChangeRepositoryImpl.fromDoc).toList();
-    } catch (e) {
-      AppLogger.w('Failed to load class changes for ${ClassTime.dateKey(date)}: $e');
+  /// batch's one-day changes for that exact date, respecting holidays.
+  Future<List<ScheduleSlot>> _fetchClassesForDate(
+    User crUser,
+    DateTime date,
+    String targetDay, {
+    Set<String> retakeCourseIds = const {},
+    String? holidayTitle,
+  }) async {
+    final dateKey = ClassTime.dateKey(date);
+
+    // On a holiday the routine doesn't run, but an extra class someone
+    // deliberately scheduled that day still does.
+    final routine = holidayTitle != null
+        ? const <ScheduleSlot>[]
+        : await _fetchClassesForDay(crUser, targetDay, retakeCourseIds: retakeCourseIds);
+
+    final byId = <String, ClassChange>{};
+    if (crUser.year != null && crUser.semester != null) {
+      try {
+        final snap = await _firestore
+            .collection('classChanges')
+            .where('targetYear', isEqualTo: crUser.year)
+            .where('targetSemester', isEqualTo: crUser.semester)
+            .where('date', isEqualTo: dateKey)
+            .get();
+        for (final d in snap.docs) {
+          final c = ClassChangeRepositoryImpl.fromDoc(d);
+          byId[c.id] = c;
+        }
+      } catch (e) {
+        AppLogger.w('Failed to load class changes for $dateKey: $e');
+      }
+    }
+    // Retake courses belong to another semester: load their changes too.
+    if (retakeCourseIds.isNotEmpty) {
+      final list = retakeCourseIds.toList();
+      for (var i = 0; i < list.length; i += 10) {
+        final chunk = list.skip(i).take(10).toList();
+        try {
+          final snap = await _firestore
+              .collection('classChanges')
+              .where('courseId', whereIn: chunk)
+              .where('date', isEqualTo: dateKey)
+              .get();
+          for (final d in snap.docs) {
+            final c = ClassChangeRepositoryImpl.fromDoc(d);
+            byId.putIfAbsent(c.id, () => c);
+          }
+        } catch (e) {
+          AppLogger.w('Failed to load retake class changes for $dateKey: $e');
+        }
+      }
+    }
+    var changes = byId.values.toList();
+    if (holidayTitle != null) {
+      changes = changes.where((c) => c.type == ClassChangeType.extra).toList();
     }
     return EffectiveSchedule.forDate(routine: routine, changes: changes, date: date);
   }
 
-  Future<List<ScheduleSlot>> _fetchClassesForDay(User crUser, String targetDay) async {
+  Future<List<ScheduleSlot>> _fetchClassesForDay(
+    User crUser,
+    String targetDay, {
+    Set<String> retakeCourseIds = const {},
+  }) async {
     try {
       final Map<String, ScheduleSlot> slotMap = {};
       final normDay = targetDay.trim().toUpperCase();
 
-      // 1. Query 'schedules' collection
+      // 1. Query 'schedules' collection for semester cohort
       try {
-        final schedulesSnap = await _firestore
-            .collection('schedules')
-            .where('targetYear', isEqualTo: crUser.year ?? 1)
-            .where('targetSemester', isEqualTo: crUser.semester ?? 1)
-            .where('dayOfWeek', isEqualTo: normDay)
-            .get();
+        if (crUser.year == null || crUser.semester == null) throw StateError('no semester');
+        // The weekly routine rarely changes: offline copy first (S2-11).
+        // One-day changes are always read live (below).
+        final schedulesSnap = await CacheFirst.get(
+          _firestore
+              .collection('schedules')
+              .where('targetYear', isEqualTo: crUser.year)
+              .where('targetSemester', isEqualTo: crUser.semester)
+              .where('dayOfWeek', isEqualTo: normDay),
+          'routine_${crUser.year}_${crUser.semester}_$normDay',
+        );
 
         for (final doc in schedulesSnap.docs) {
           final model = ScheduleSlotModel.fromFirestore(doc);
@@ -328,24 +478,26 @@ class CrRemoteDataSourceImpl implements CrRemoteDataSource {
         AppLogger.w('Failed to query schedules collection for $normDay: $e');
       }
 
-      // 2. Query 'scheduleSlots' collection
-      try {
-        final slotsSnap = await _firestore
-            .collection('scheduleSlots')
-            .where('targetYear', isEqualTo: crUser.year ?? 1)
-            .where('targetSemester', isEqualTo: crUser.semester ?? 1)
-            .where('dayOfWeek', isEqualTo: normDay)
-            .get();
-
-        for (final doc in slotsSnap.docs) {
-          final model = ScheduleSlotModel.fromFirestore(doc);
-          final key = model.id.isNotEmpty ? model.id : doc.id;
-          if (!slotMap.containsKey(key)) {
-            slotMap[key] = model;
+      // 2. Merge schedules for explicitly enrolled retake courses
+      if (retakeCourseIds.isNotEmpty) {
+        final list = retakeCourseIds.toList();
+        for (var i = 0; i < list.length; i += 10) {
+          final chunk = list.skip(i).take(10).toList();
+          try {
+            final retakeSnap = await _firestore
+                .collection('schedules')
+                .where('courseId', whereIn: chunk)
+                .where('dayOfWeek', isEqualTo: normDay)
+                .get();
+            for (final doc in retakeSnap.docs) {
+              final model = ScheduleSlotModel.fromFirestore(doc);
+              final key = model.id.isNotEmpty ? model.id : doc.id;
+              slotMap.putIfAbsent(key, () => model);
+            }
+          } catch (e) {
+            AppLogger.w('Failed to query retake schedules for $normDay: $e');
           }
         }
-      } catch (e) {
-        AppLogger.w('Failed to query scheduleSlots collection for $normDay: $e');
       }
 
       final results = slotMap.values.toList();
@@ -362,11 +514,13 @@ class CrRemoteDataSourceImpl implements CrRemoteDataSource {
     final List<CounselingBooking> myBookings = [];
 
     try {
-      final slotsSnap = await _firestore
+      // S2-11: a count query (1 read per 1,000 slots), not every slot.
+      final agg = await _firestore
           .collection('counselingSlots')
           .where('status', isEqualTo: 'AVAILABLE')
+          .count()
           .get();
-      availableSlotsCount = slotsSnap.docs.length;
+      availableSlotsCount = agg.count ?? 0;
     } catch (e) {
       AppLogger.w('Counseling slots fetch failed: $e');
     }
@@ -390,22 +544,50 @@ class CrRemoteDataSourceImpl implements CrRemoteDataSource {
     );
   }
 
-  Future<List<Exam>> _fetchUpcomingExams(User crUser, DateTime now) async {
+  Future<List<Exam>> _fetchUpcomingExams(
+    User crUser,
+    DateTime now, {
+    Set<String> retakeCourseIds = const {},
+  }) async {
     try {
-      final snap = await _firestore
-          .collection('exams')
-          .where('year', isEqualTo: crUser.year ?? 1)
-          .where('semester', isEqualTo: crUser.semester ?? 1)
-          .get();
-
-      // Upcoming only: today or later (past exams live in the Exam Schedule's Past tab).
       final todayKey = ClassTime.dateKey(now);
-      final List<Exam> exams = snap.docs
-          .map((d) => ExamModel.fromFirestore(d))
-          .where((e) => e.examDate.compareTo(todayKey) >= 0)
-          .toList();
+      final byId = <String, Exam>{};
 
-      exams.sort((a, b) => a.examDate.compareTo(b.examDate));
+      if (crUser.year != null && crUser.semester != null) {
+        // Only upcoming exams (S2-11; index year + semester + examDate).
+        final snap = await _firestore
+            .collection('exams')
+            .where('year', isEqualTo: crUser.year)
+            .where('semester', isEqualTo: crUser.semester)
+            .where('examDate', isGreaterThanOrEqualTo: todayKey)
+            .get();
+
+        for (final d in snap.docs) {
+          final ex = ExamModel.fromFirestore(d);
+          if (ex.examDate.compareTo(todayKey) >= 0) {
+            byId[ex.id] = ex;
+          }
+        }
+      }
+
+      if (retakeCourseIds.isNotEmpty) {
+        final list = retakeCourseIds.toList();
+        for (var i = 0; i < list.length; i += 10) {
+          final chunk = list.skip(i).take(10).toList();
+          final rSnap = await _firestore
+              .collection('exams')
+              .where('courseId', whereIn: chunk)
+              .get();
+          for (final d in rSnap.docs) {
+            final ex = ExamModel.fromFirestore(d);
+            if (ex.examDate.compareTo(todayKey) >= 0) {
+              byId.putIfAbsent(ex.id, () => ex);
+            }
+          }
+        }
+      }
+
+      final exams = byId.values.toList()..sort((a, b) => a.examDate.compareTo(b.examDate));
       return exams;
     } catch (e) {
       AppLogger.w('Failed to query exams for Year ${crUser.year} Sem ${crUser.semester}: $e');

@@ -10,6 +10,7 @@ import '../../domain/services/effective_schedule.dart';
 import '../../domain/services/exam_rules.dart';
 import '../models/curriculum_models.dart';
 import 'class_change_repository.dart';
+import 'holiday_repository.dart';
 
 /// Extra exam operations that work without Cloud Functions: data for the
 /// clash check, known rooms, cancelling, and telling the semester.
@@ -33,10 +34,15 @@ abstract class ExamSupportRepository {
 class ExamSupportRepositoryImpl implements ExamSupportRepository {
   final FirebaseFirestore _firestore;
   final ClassChangeRepository _classes;
+  final HolidayRepository? _holidays;
 
-  ExamSupportRepositoryImpl({required FirebaseFirestore firestore, required ClassChangeRepository classes})
-      : _firestore = firestore,
-        _classes = classes;
+  ExamSupportRepositoryImpl({
+    required FirebaseFirestore firestore,
+    required ClassChangeRepository classes,
+    HolidayRepository? holidays,
+  })  : _firestore = firestore,
+        _classes = classes,
+        _holidays = holidays;
 
   @override
   Future<List<Exam>> examsOn(String dateKey) async {
@@ -55,7 +61,8 @@ class ExamSupportRepositoryImpl implements ExamSupportRepository {
     try {
       changes = await _classes.changesOn(date);
     } catch (_) {}
-    return EffectiveSchedule.forDate(routine: routine, changes: changes, date: date);
+    final holidayMap = await (_holidays?.holidayMap() ?? Future.value(const <String, String>{}));
+    return EffectiveSchedule.forDate(routine: routine, changes: changes, date: date, holidays: holidayMap);
   }
 
   @override

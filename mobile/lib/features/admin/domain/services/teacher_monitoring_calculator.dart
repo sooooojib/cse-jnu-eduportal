@@ -3,6 +3,7 @@ import '../../../auth/domain/entities/user.dart';
 import '../../../curriculum/domain/entities/class_change.dart';
 import '../../../curriculum/domain/entities/curriculum_entities.dart';
 import '../entities/teacher_monitoring.dart';
+import '../../../attendance/domain/services/class_keys.dart';
 
 /// Pure aggregation of attendance sessions into per-teacher, per-course
 /// delivery statistics for the Chairman's monitoring dashboard.
@@ -37,6 +38,9 @@ class TeacherMonitoringCalculator {
     required List<AttendanceSession> sessions,
     required List<ScheduleSlot> routineSlots,
     List<ClassChange> classChanges = const [],
+    Set<String> holidayDates = const {},
+    /// courseId -> student ids retaking it (S2-06: counted in class size).
+    Map<String, Set<String>> retakeStudents = const {},
     DateTime? periodStart,
     DateTime? now,
   }) {
@@ -101,7 +105,9 @@ class TeacherMonitoringCalculator {
           .add(slot.dayOfWeek.toUpperCase());
     }
 
-    final dayCounts = start == null ? null : _weekdayOccurrences(start, today);
+    final dayCounts = start == null
+        ? null
+        : _weekdayOccurrences(start, today, holidayDates: holidayDates);
 
     // One-day changes inside the period (up to today). They form the class
     // log, and adjust what was expected: a cancelled class is no longer
@@ -117,7 +123,12 @@ class TeacherMonitoringCalculator {
       final k = '$teacherId|${c.courseId}';
       addPair(teacherId, c.courseId);
       changesByPair.putIfAbsent(k, () => []).add(c);
-      if (c.type == ClassChangeType.cancel) expectedDelta[k] = (expectedDelta[k] ?? 0) - 1;
+      // On a holiday the routine class is already not expected, so a
+      // cancellation must not subtract it a second time. Extra classes on a
+      // holiday still happen (EffectiveSchedule keeps them) and count +1.
+      if (c.type == ClassChangeType.cancel && !holidayDates.contains(c.date)) {
+        expectedDelta[k] = (expectedDelta[k] ?? 0) - 1;
+      }
       if (c.type == ClassChangeType.extra) expectedDelta[k] = (expectedDelta[k] ?? 0) + 1;
     }
     for (final list in changesByPair.values) {
@@ -134,22 +145,39 @@ class TeacherMonitoringCalculator {
         final pairSessions = sessionsByPair[key] ?? const <AttendanceSession>[];
         final course = coursesById[courseId];
 
-        // Merge sessions by day.
+        // Merge sessions by day. Rule (shared with the student summary): a day
+        // counts as a class HELD only if at least one student was present.
+        // Days whose sessions had 0 present are "empty sessions" (shown in the
+        // class log, not counted as held and not counted as an absence).
+        // S2-13 double periods: one class per (day, routine slot). Sessions
+        // without a slot on a day that has slot classes join the first one.
         final byDay = <String, List<AttendanceSession>>{};
         for (final s in pairSessions) {
-          byDay.putIfAbsent(_normalizeDateKey(s.sessionDate)!, () => []).add(s);
+          byDay.putIfAbsent(ClassKeys.of(_normalizeDateKey(s.sessionDate)!, s.slotId), () => []).add(s);
         }
-        final history = byDay.entries
-            .map((e) => DeliveredClass(
-                  date: e.key,
-                  sessionCount: e.value.length,
-                  presentCount: e.value.fold<int>(
-                    0,
-                    (m, s) => s.totalPresentCount > m ? s.totalPresentCount : m,
-                  ),
-                ))
-            .toList()
-          ..sort((a, b) => b.date.compareTo(a.date));
+        for (final plain in byDay.keys.where((k) => !k.contains('#')).toList()) {
+          final slotted = byDay.keys.where((k) => k.startsWith('$plain#')).toList()..sort();
+          if (slotted.isNotEmpty) byDay[slotted.first]!.addAll(byDay.remove(plain)!);
+        }
+        final history = <DeliveredClass>[];
+        final emptySessions = <DeliveredClass>[];
+        for (final e in byDay.entries) {
+          final delivered = DeliveredClass(
+            date: ClassKeys.dateOf(e.key),
+            sessionCount: e.value.length,
+            presentCount: e.value.fold<int>(
+              0,
+              (m, s) => s.totalPresentCount > m ? s.totalPresentCount : m,
+            ),
+          );
+          if (delivered.presentCount > 0) {
+            history.add(delivered);
+          } else {
+            emptySessions.add(delivered);
+          }
+        }
+        history.sort((a, b) => b.date.compareTo(a.date));
+        emptySessions.sort((a, b) => b.date.compareTo(a.date));
 
         final sample = pairSessions.isNotEmpty ? pairSessions.first : null;
         final year = course?.year ?? 0;
@@ -171,7 +199,7 @@ class TeacherMonitoringCalculator {
           targetClasses: course?.targetClasses,
           classesConducted: history.length,
           sessionCount: pairSessions.length,
-          cohortSize: cohortSizes['$year-$semester'] ?? 0,
+          cohortSize: (cohortSizes['$year-$semester'] ?? 0) + _activeRetakers(retakeStudents[courseId], usersById, year, semester),
           averagePresent: history.isEmpty
               ? null
               : history.fold<int>(0, (s, h) => s + h.presentCount) / history.length,
@@ -179,6 +207,7 @@ class TeacherMonitoringCalculator {
           expectedClassesSoFar: expected,
           lastClassDate: history.isEmpty ? null : history.first.date,
           history: history,
+          emptySessions: emptySessions,
           changes: changesByPair[key] ?? const [],
         ));
       }
@@ -208,8 +237,13 @@ class TeacherMonitoringCalculator {
     );
   }
 
-  /// How many times each weekday occurs between [from] and [to] inclusive.
-  static Map<String, int> _weekdayOccurrences(DateTime from, DateTime to) {
+  /// How many times each weekday occurs between [from] and [to] inclusive,
+  /// excluding official department [holidayDates] (`yyyy-MM-dd`).
+  static Map<String, int> _weekdayOccurrences(
+    DateTime from,
+    DateTime to, {
+    Set<String> holidayDates = const {},
+  }) {
     final counts = <String, int>{};
     if (to.isBefore(from)) return counts;
     final days = to.difference(from).inDays + 1;
@@ -223,7 +257,36 @@ class TeacherMonitoringCalculator {
       final name = _weekdayNames[d.weekday]!;
       counts[name] = counts[name]! + 1;
     }
+    if (holidayDates.isNotEmpty) {
+      final uniqueDays = <String>{};
+      for (final raw in holidayDates) {
+        final key = _normalizeDateKey(raw);
+        if (key == null || !uniqueDays.add(key)) continue;
+        final d = DateTime.tryParse(key);
+        if (d == null) continue;
+        final dayOnly = _dateOnly(d);
+        if (dayOnly.isBefore(from) || dayOnly.isAfter(to)) continue;
+        final name = _weekdayNames[dayOnly.weekday];
+        if (name != null && (counts[name] ?? 0) > 0) {
+          counts[name] = counts[name]! - 1;
+        }
+      }
+    }
     return counts;
+  }
+
+  /// Retake students of a course who are active and not already counted in
+  /// the course's own semester.
+  static int _activeRetakers(Set<String>? ids, Map<String, User> usersById, int year, int semester) {
+    if (ids == null || ids.isEmpty) return 0;
+    var n = 0;
+    for (final id in ids) {
+      final u = usersById[id];
+      if (u == null || !u.isActive || !u.role.isStudentSide) continue;
+      if (u.year == year && u.semester == semester) continue;
+      n++;
+    }
+    return n;
   }
 
   static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);

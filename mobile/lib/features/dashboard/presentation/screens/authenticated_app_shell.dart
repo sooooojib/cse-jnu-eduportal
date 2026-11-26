@@ -23,6 +23,7 @@ import '../../../counseling/presentation/screens/student_counseling_screen.dart'
 import '../../../cr/presentation/screens/cr_dashboard_screen.dart';
 import '../../../curriculum/presentation/screens/student_schedule_screen.dart';
 import '../../../feedback/presentation/screens/student_feedback_screen.dart';
+import '../../../notifications/presentation/controllers/notification_controller.dart';
 import '../../../notifications/presentation/screens/notification_list_screen.dart';
 import '../../../profile/presentation/screens/student_profile_screen.dart';
 import '../../../profile/presentation/widgets/student_profile_dialog.dart';
@@ -36,6 +37,7 @@ import '../../../../core/utils/avatar_image_resolver.dart';
 import '../../../../shared/widgets/states/app_minimal_launch_view.dart';
 import '../../../../shared/widgets/states/offline_connectivity_banner.dart';
 import 'student_dashboard_shell.dart';
+import 'package:cse_jnu_eduportal/core/utils/refresh_on_reopen.dart';
 
 /// Unified Authenticated Application Shell
 ///
@@ -69,10 +71,11 @@ class AuthenticatedAppShell extends StatefulWidget {
   State<AuthenticatedAppShell> createState() => _AuthenticatedAppShellState();
 }
 
-class _AuthenticatedAppShellState extends State<AuthenticatedAppShell> {
+class _AuthenticatedAppShellState extends State<AuthenticatedAppShell> with WidgetsBindingObserver {
   late int _currentIndex;
   late final AuthController _authController;
   late final ValueNotifier<ThemeMode> _themeModeNotifier;
+  NotificationController? _notificationController;
 
   @override
   void initState() {
@@ -84,6 +87,34 @@ class _AuthenticatedAppShellState extends State<AuthenticatedAppShell> {
       logoutUseCase: sl(),
     ));
     _themeModeNotifier = widget.themeModeNotifier ?? (sl.isRegistered<ThemeController>() ? sl<ThemeController>() : ValueNotifier(ThemeMode.system));
+    if (sl.isRegistered<NotificationController>()) {
+      try {
+        _notificationController = sl<NotificationController>()..fetchNotifications();
+      } catch (_) {}
+    }
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  /// Refresh the unread badge when the app comes back to the foreground.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshUnread();
+      RefreshBus.ping(); // S2-13: open screens reload if their data is old
+    }
+  }
+
+  void _refreshUnread() {
+    try {
+      _notificationController?.fetchNotifications();
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _notificationController?.dispose();
+    super.dispose();
   }
 
   @override
@@ -101,6 +132,9 @@ class _AuthenticatedAppShellState extends State<AuthenticatedAppShell> {
       setState(() {
         _currentIndex = index;
       });
+      // Switching tabs is a cheap moment to pick up new notifications.
+      _refreshUnread();
+      RefreshBus.ping();
     }
   }
 
@@ -438,17 +472,33 @@ class _AuthenticatedAppShellState extends State<AuthenticatedAppShell> {
           ),
           actions: [
             const ThemeToggleButton(showBackground: false),
-            IconButton(
-              tooltip: 'Notifications',
-              icon: const Icon(Icons.notifications_outlined),
-              onPressed: () {
-                if (role == UserRole.admin) {
-                  context.push(RouteNames.adminNotifications);
-                } else {
-                  context.push(RouteNames.notifications);
-                }
-              },
-            ),
+            if (_notificationController != null)
+              AnimatedBuilder(
+                animation: _notificationController!,
+                builder: (context, _) {
+                  final unread = _notificationController!.unreadCount;
+                  return IconButton(
+                    tooltip: 'Notifications',
+                    icon: Badge.count(
+                      count: unread,
+                      isLabelVisible: unread > 0,
+                      child: const Icon(Icons.notifications_outlined),
+                    ),
+                    // Everyone (admins too) opens their own inbox here, so the
+                    // badge clears; admins send notices from the dashboard.
+                    onPressed: () async {
+                      await context.push(RouteNames.notifications);
+                      _refreshUnread();
+                    },
+                  );
+                },
+              )
+            else
+              IconButton(
+                tooltip: 'Notifications',
+                icon: const Icon(Icons.notifications_outlined),
+                onPressed: () => context.push(RouteNames.notifications),
+              ),
             IconButton(
               tooltip: 'Sign Out',
               icon: const Icon(Icons.logout_rounded, color: Color(0xFFEF4444)),

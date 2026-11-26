@@ -82,6 +82,16 @@ void main() {
       expect(z.isExtraClass, isTrue);
       expect(z.date, fridayKey);
     });
+
+    test('returns empty list on official department holidays', () {
+      final r = EffectiveSchedule.forDate(
+        routine: routine,
+        changes: const [],
+        date: friday,
+        holidays: const {fridayKey: 'Victory Day'},
+      );
+      expect(r, isEmpty);
+    });
   });
 
   group('EffectiveSchedule.findClashes', () {
@@ -181,6 +191,34 @@ void main() {
         teacherId: 'tX',
         targetYear: 2,
         targetSemester: 1,
+      );
+      expect(clashes, isEmpty);
+    });
+  });
+
+  group('holidays', () {
+    test('a holiday drops the weekly routine but keeps one-day extra classes', () {
+      final list = EffectiveSchedule.forDate(
+        routine: [slot('a', 'FRIDAY', '09:00 AM', '10:30 AM', 'Room 302')],
+        changes: [change('x', ClassChangeType.extra, fridayKey, start: '11:00 AM', end: '12:00 PM')],
+        date: friday,
+        holidays: {fridayKey: 'Victory Day'},
+      );
+      expect(list.map((s) => s.id), ['change_x']);
+    });
+
+    test('routine classes do not clash on a holiday', () {
+      final clashes = EffectiveSchedule.findClashes(
+        routine: [slot('a', 'FRIDAY', '09:00 AM', '10:30 AM', 'Room 302')],
+        changes: const [],
+        date: friday,
+        startTime: '09:00 AM',
+        endTime: '10:00 AM',
+        room: 'Room 302',
+        teacherId: 't1',
+        targetYear: 3,
+        targetSemester: 1,
+        holidays: {fridayKey: 'Victory Day'},
       );
       expect(clashes, isEmpty);
     });

@@ -296,12 +296,12 @@ class AppRouter {
     }
   }
 
-  /// Admin & Chairman may open every `/admin/*` route. Faculty members who have
-  /// been granted admin-view delegation may only open the signup review queue.
+  /// Admin & Chairman may open every `/admin/*` route. Every teacher may open
+  /// the signup and semester request queues (approve / reject only).
   static bool _canAccessAdminRoute(User user, String path) {
     if (user.role.hasAdminAccess) return true;
-    if (user.role == UserRole.teacher && user.isAdminDelegate) {
-      return path == RouteNames.adminSignupRequests;
+    if (user.role == UserRole.teacher) {
+      return path == RouteNames.adminSignupRequests || path == RouteNames.adminSemesterRequests;
     }
     return false;
   }

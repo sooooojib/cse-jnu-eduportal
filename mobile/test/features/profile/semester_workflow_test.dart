@@ -502,7 +502,7 @@ void main() {
       expect(find.text('Current Standing'), findsOneWidget);
       expect(find.text('Requested Standing'), findsOneWidget);
       expect(find.text('Year 3, Semester 1'), findsOneWidget);
-      expect(find.text('Year 3, Semester 2'), findsOneWidget);
+      expect(find.text('Year 3 · Sem 2'), findsOneWidget);
       expect(find.text('Approve Promotion'), findsOneWidget);
       expect(find.text('Reject Petition'), findsOneWidget);
     });

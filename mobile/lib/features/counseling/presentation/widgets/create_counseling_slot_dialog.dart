@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../controllers/counseling_controller.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 class CreateCounselingSlotDialog extends StatefulWidget {
   final CounselingController controller;
@@ -147,7 +148,7 @@ class _CreateCounselingSlotDialogState extends State<CreateCounselingSlotDialog>
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _errorMessage = e.toString().replaceAll('Exception: ', '').replaceAll('ServerException: ', '');
+          _errorMessage = friendlyError(e);
         });
       }
     }

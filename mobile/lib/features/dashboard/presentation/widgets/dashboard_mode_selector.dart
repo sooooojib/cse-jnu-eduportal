@@ -30,7 +30,7 @@ class DashboardModeSelector extends StatelessWidget {
   final ValueChanged<DashboardMode> onModeChanged;
 
   /// Label for the admin segment, e.g. "Department Admin" for the Chairman or
-  /// "Signup Committee" for delegated faculty.
+  /// "Requests" for teachers (signups + semester requests).
   final String adminLabel;
 
   const DashboardModeSelector({
@@ -88,7 +88,7 @@ class DashboardModeSelector extends StatelessWidget {
                     context,
                     mode: DashboardMode.faculty,
                     icon: Icons.school_outlined,
-                    label: 'Faculty View',
+                    label: 'Faculty',
                     activeColor: const Color(0xFF1D4ED8),
                     isDark: isDark,
                   ),

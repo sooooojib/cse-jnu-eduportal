@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart' as fb;
 import '../../../../core/error/exceptions.dart';
 import '../models/auth_response_model.dart';
 import '../models/user_model.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 abstract class AuthRemoteDataSource {
   Future<AuthResponseModel> login({required String email, required String password});
@@ -13,6 +14,7 @@ abstract class AuthRemoteDataSource {
   Future<String> submitSignupRequest({
     required String fullName,
     required String email,
+    required String password,
     required String role,
     String? studentId,
     String? phone,
@@ -52,11 +54,19 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       // Fetch user profile from Firestore
       final doc = await _firestore.collection('users').doc(fbUser.uid).get();
       if (!doc.exists || doc.data() == null) {
-        // Sign out immediately if profile does not exist yet (unapproved account)
+        // No profile yet: tell them where their signup stands, then sign out.
+        var message = 'Your account is waiting for approval by a teacher or the admin.';
+        try {
+          final req = (await _firestore.collection('signupRequests').doc(fbUser.uid).get()).data();
+          if ((req?['status'] as String?) == 'REJECTED') {
+            final reason = (req?['rejectionReason'] as String? ?? '').trim();
+            message = reason.isEmpty
+                ? 'Your signup was not approved. Please contact the department.'
+                : 'Your signup was not approved: $reason';
+          }
+        } catch (_) {}
         await _auth.signOut();
-        throw const ServerException(
-          message: 'Account not yet approved by department administrator.',
-        );
+        throw ServerException(message: message);
       }
 
       final userData = doc.data()!;
@@ -93,7 +103,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       throw ServerException(message: _mapFirebaseError(e.code));
     } catch (e) {
       if (e is ServerException) rethrow;
-      throw ServerException(message: e.toString());
+      throw ServerException(message: friendlyError(e));
     }
   }
 
@@ -129,7 +139,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       throw ServerException(message: _mapFirebaseError(e.code));
     } catch (e) {
       if (e is ServerException) rethrow;
-      throw ServerException(message: e.toString());
+      throw ServerException(message: friendlyError(e));
     }
   }
 
@@ -140,7 +150,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     } on fb.FirebaseAuthException catch (e) {
       throw ServerException(message: _mapFirebaseError(e.code));
     } catch (e) {
-      throw ServerException(message: e.toString());
+      throw ServerException(message: friendlyError(e));
     }
   }
 
@@ -153,27 +163,48 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   Future<String> submitSignupRequest({
     required String fullName,
     required String email,
+    required String password,
     required String role,
     String? studentId,
     String? phone,
     String? session,
   }) async {
     try {
-      final docRef = await _firestore.collection('signupRequests').add({
-        'fullName': fullName.trim(),
-        'email': email.trim().toLowerCase(),
-        'role': role,
-        if (studentId != null && studentId.isNotEmpty) 'studentId': studentId.trim(),
-        if (phone != null && phone.isNotEmpty) 'phone': phone.trim(),
-        if (session != null && session.isNotEmpty) 'session': session.trim(),
-        'status': 'PENDING',
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+      // 1. The person's own login, created now (free plan: no server needed).
+      final normalizedEmail = email.trim().toLowerCase();
+      final cred = await _auth.createUserWithEmailAndPassword(email: normalizedEmail, password: password);
+      final uid = cred.user?.uid;
+      if (uid == null) throw const ServerException(message: 'Could not create your account. Please try again.');
 
-      return docRef.id;
+      // 2. The request, keyed by their uid, waiting for a teacher / admin.
+      try {
+        await _firestore.collection('signupRequests').doc(uid).set({
+          'userId': uid,
+          'fullName': fullName.trim(),
+          'email': normalizedEmail,
+          'role': role,
+          if (studentId != null && studentId.isNotEmpty) 'studentId': studentId.trim(),
+          if (phone != null && phone.isNotEmpty) 'phone': phone.trim(),
+          if (session != null && session.isNotEmpty) 'session': session.trim(),
+          'status': 'PENDING',
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      } catch (e) {
+        // Don't leave a login without a request behind.
+        try {
+          await cred.user?.delete();
+        } catch (_) {}
+        rethrow;
+      }
+
+      // 3. They can't use the app until approved.
+      await _auth.signOut();
+      return uid;
+    } on fb.FirebaseAuthException catch (e) {
+      throw ServerException(message: _mapFirebaseError(e.code));
     } catch (e) {
       if (e is ServerException) rethrow;
-      throw ServerException(message: 'Failed to submit registration request: ${e.toString()}');
+      throw ServerException(message: 'Could not send the request. ${friendlyError(e)}');
     }
   }
 
@@ -191,6 +222,10 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         return 'Too many login attempts. Please wait a moment and try again.';
       case 'invalid-credential':
         return 'Invalid email or password.';
+      case 'email-already-in-use':
+        return 'An account with this email already exists. Try signing in instead.';
+      case 'weak-password':
+        return 'Choose a stronger password (at least 6 characters).';
       default:
         return 'Authentication error: ';
     }

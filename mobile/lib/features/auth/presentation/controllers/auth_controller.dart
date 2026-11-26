@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import '../../../../core/utils/server_clock.dart';
 import '../../domain/entities/user.dart';
 import '../../domain/usecases/login_usecase.dart';
 import '../../domain/usecases/get_current_user_usecase.dart';
@@ -10,6 +12,7 @@ import '../../../../core/error/failures.dart';
 import '../../../../core/notifications/push_notification_service.dart';
 import '../../../../core/monitoring/crashlytics_service.dart';
 import 'auth_state.dart';
+import 'package:cse_jnu_eduportal/core/error/friendly_error.dart';
 
 class AuthController extends ChangeNotifier {
   final LoginUseCase loginUseCase;
@@ -61,7 +64,7 @@ class AuthController extends ChangeNotifier {
         }
       },
       onError: (e) {
-        _setState(AuthError(message: e.toString()));
+        _setState(AuthError(message: friendlyError(e)));
       },
     );
   }
@@ -90,9 +93,22 @@ class AuthController extends ChangeNotifier {
   }
 
   void _setState(AuthState newState) {
+    final wasSignedIn = _state is Authenticated;
     _state = newState;
     notifyListeners();
+    // S2-10: learn the server clock once per sign-in (for Bangladesh "today").
+    if (newState is Authenticated && !wasSignedIn && syncServerClock) {
+      final uid = newState.user.id;
+      unawaited(() async {
+        try {
+          await ServerClock.sync(firestore: FirebaseFirestore.instance, uid: uid);
+        } catch (_) {}
+      }());
+    }
   }
+
+  /// Off in tests (no Firebase).
+  static bool syncServerClock = true;
 
   Future<void> checkAuthStatus() async {
     _setState(const AuthLoading(message: 'Checking session...'));
@@ -141,7 +157,7 @@ class AuthController extends ChangeNotifier {
           _setState(AuthError(message: failure.message, code: failure.code));
         }
       } else {
-        _setState(AuthError(message: failure.toString()));
+        _setState(AuthError(message: friendlyError(failure)));
       }
       return false;
     }
@@ -156,7 +172,7 @@ class AuthController extends ChangeNotifier {
       if (failure is Failure) {
         _setState(AuthError(message: failure.message, code: failure.code));
       } else {
-        _setState(AuthError(message: failure.toString()));
+        _setState(AuthError(message: friendlyError(failure)));
       }
       return false;
     }

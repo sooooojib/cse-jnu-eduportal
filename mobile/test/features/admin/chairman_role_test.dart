@@ -81,8 +81,9 @@ void main() {
 
     test('dashboard switcher availability', () {
       expect(_user('c', UserRole.chairman).canSwitchToAdminView, isTrue);
-      expect(_user('t', UserRole.teacher).canSwitchToAdminView, isFalse);
-      expect(_user('t', UserRole.teacher).copyWith(isAdminDelegate: true).canSwitchToAdminView, isTrue);
+      // Every teacher gets the Admin view (signup + semester requests).
+      expect(_user('t', UserRole.teacher).canSwitchToAdminView, isTrue);
+      expect(_user('s', UserRole.student).canSwitchToAdminView, isFalse);
       expect(_user('a', UserRole.admin).copyWith(isAdminDelegate: true).canSwitchToAdminView, isFalse);
     });
 
@@ -173,7 +174,7 @@ void main() {
       _session('x2', 't1', 'CSE-3101', '2026-11-02', 1), // same-day re-launch
       _session('x3', 't1', 'CSE-3101', '2026-11-09T08:00:00.000', 2), // ISO date
       _session('x4', 't1', 'CSE-3101', '2026-11-30', 4), // future: ignored
-      _session('x5', 'c1', 'CSE-4101', '2026-11-10', 0),
+      _session('x5', 'c1', 'CSE-4101', '2026-11-10', 1),
     ];
     final slots = [
       _slot('r1', 't1', 'CSE-3101', 'SUNDAY'),
@@ -231,6 +232,21 @@ void main() {
       expect(report.teachers.map((t) => t.teacherId), isNot(contains('s1')));
     });
 
+    test('excludes official holiday dates from expected class counts', () {
+      final report = TeacherMonitoringCalculator.build(
+        users: users,
+        courses: courses,
+        assignments: assignments,
+        sessions: sessions,
+        routineSlots: slots,
+        holidayDates: const {'2026-11-08', '2026-11-17'}, // 1 Sunday + 1 Tuesday holiday
+        periodStart: DateTime(2026, 11, 1),
+        now: now,
+      );
+      final os = report.teachers.firstWhere((t) => t.teacherId == 't1').courses.first;
+      expect(os.expectedClassesSoFar, 6); // 8 - 2 holidays
+    });
+
     test('cancelled classes are not counted as missed; extra classes are expected', () {
       ClassChange ch(String id, ClassChangeType t, String date) => ClassChange(
             id: id, type: t, date: date, dayOfWeek: 'SUNDAY', courseId: 'CSE-3101', courseCode: 'CSE-3101',
@@ -256,6 +272,32 @@ void main() {
       final os = report.teachers.firstWhere((t) => t.teacherId == 't1').courses.first;
       expect(os.expectedClassesSoFar, 8 - 2 + 1);
       expect(os.missedClassesEstimate, 7 - 2);
+    });
+
+    test('a cancellation on a holiday is not subtracted twice; a holiday extra still counts', () {
+      ClassChange ch(String id, ClassChangeType t, String date) => ClassChange(
+            id: id, type: t, date: date, dayOfWeek: 'SUNDAY', courseId: 'CSE-3101', courseCode: 'CSE-3101',
+            courseTitle: 'OS', teacherId: 't1', teacherName: 'T', targetYear: 3, targetSemester: 1,
+            startTime: '09:00 AM', endTime: '10:30 AM', room: 'R', originalSlotId: 'r1',
+            createdBy: 'cr', createdByName: 'CR', createdByRole: 'CR',
+          );
+      final base = TeacherMonitoringCalculator.build(
+        users: users, courses: courses, assignments: assignments, sessions: sessions, routineSlots: slots,
+        periodStart: DateTime(2026, 11, 1), now: now,
+      ).teachers.firstWhere((t) => t.teacherId == 't1').courses.first.expectedClassesSoFar!;
+      final report = TeacherMonitoringCalculator.build(
+        users: users, courses: courses, assignments: assignments, sessions: sessions, routineSlots: slots,
+        classChanges: [
+          ch('c', ClassChangeType.cancel, '2026-11-08'), // Sunday, but a holiday
+          ch('x', ClassChangeType.extra, '2026-11-08'), // make-up class on the holiday
+        ],
+        holidayDates: {'2026-11-08'},
+        periodStart: DateTime(2026, 11, 1),
+        now: now,
+      );
+      final os = report.teachers.firstWhere((t) => t.teacherId == 't1').courses.first;
+      // Holiday removes one routine class (-1); the cancel is ignored; the extra adds +1.
+      expect(os.expectedClassesSoFar, base - 1 + 1);
     });
 
     test('not-taken reports stay expected, are counted, and appear in the class log', () {
@@ -304,6 +346,27 @@ void main() {
       expect(os.missedClassesEstimate, isNull);
       expect(report.periodStart, isNull);
     });
+
+    test('excludes 0-present sessions from classesConducted and flags them in emptySessions', () {
+      final report = TeacherMonitoringCalculator.build(
+        users: users,
+        courses: courses,
+        assignments: assignments,
+        sessions: [
+          ...sessions,
+          _session('z1', 't1', 'CSE-3101', '2026-11-18', 0), // 0 students present
+        ],
+        routineSlots: slots,
+        periodStart: DateTime(2026, 11, 1),
+        now: now,
+      );
+      final os = report.teachers.firstWhere((t) => t.teacherId == 't1').courses.first;
+      expect(os.classesConducted, 2); // still 2 confirmed held days
+      expect(os.averagePresent, 2.5); // 0-present session does not dilute average
+      expect(os.emptySessions.length, 1);
+      expect(os.emptySessions.single.date, '2026-11-18');
+      expect(os.emptySessions.single.presentCount, 0);
+    });
   });
 
   group('Dashboard mode selector', () {
@@ -319,7 +382,7 @@ void main() {
         ),
       ));
 
-      expect(find.text('Faculty View'), findsOneWidget);
+      expect(find.text('Faculty'), findsOneWidget);
       expect(find.text('Department Admin'), findsOneWidget);
 
       await tester.tap(find.byKey(const ValueKey('dashboard_mode_admin')));
